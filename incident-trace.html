@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<link rel="icon" href="data:,"/>
+<title>ADEPTIO Pulse &mdash; Incident Trace</title>
+<!-- markup + boot only. Tokens come from the dashboard stylesheet; everything
+     portal-specific is in assets/portal.css. Plain <link>/<script src> so this
+     opens straight off disk (file://). -->
+<link rel="stylesheet" href="assets/styles.css"/>
+<link rel="stylesheet" href="assets/portal.css"/>
+<!-- v2.0.2: full shell mount (worker S3) — replaces v2.0's top-only nav strip
+     with the real sidebar + topbar. tokens.css is deliberately NOT added:
+     assets/styles.css (already loaded above) is the exact file tokens.css was
+     copied from, and shell.css accepts either (see shell.css's own header
+     comment) — so there is no second, competing token source to reconcile
+     here the way flow-instrumentation.html needed one (see that page's own
+     <style> block for why). -->
+<link rel="stylesheet" href="assets/shell.css"/>
+
+<style>
+/* ============================================================================
+   v2.0.2 shell adoption (worker S3) — PAGE-LOCAL ONLY. assets/portal.css and
+   assets/styles.css stay byte-identical. Every rule below is scoped under
+   body.pshell-page (added by PULSE_SHELL's mount()/init() — see the guarded
+   call at the end of body), except the toolbar's base display:none, which is
+   unconditional on purpose (see rule 3).
+   ========================================================================= */
+
+/* 1 — shell topbar height (contract §4: "one continuous 56px band"). */
+.pshell-page{--ptrace-topbar:56px}
+
+/* 2 — the old top bar is replaced by the shell's sidebar + topbar. Its cross-
+   links ("Live dashboard" / "flow map") go with it — the sidebar covers both
+   destinations, and #themebtn goes with it too — the shell owns theme now
+   (assets/portal.js guards that binding). Markup stays; only #q / #createbtn
+   / #projchip are physically relocated (mount-time script, end of body) into
+   the new toolbar below, so portal.js's existing bindings on #q / #createbtn
+   survive untouched — see rule 3. */
+.pshell-page .p-top{display:none}
+
+/* 3 — new page-toolbar: holds the controls that used to live in .p-top.
+   display:none is UNCONDITIONAL (not scoped to .pshell-page) and .on is
+   added by the same script that does the relocation below, so the toolbar
+   can only ever become visible in the same step that actually populates it —
+   there is no state where it shows up sitting empty because the shell
+   mounted (rule 2 hid the original controls) but the relocation, for
+   whatever reason, did not run. */
+.ptrace-toolbar{display:none}
+.ptrace-toolbar.on{
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  padding:10px 14px;margin:0 0 10px;
+  background:var(--panel2);border:1px solid var(--line);border-radius:10px;
+}
+.ptrace-toolbar .ptrace-week{font-size:11px;font-weight:650;color:var(--muted);white-space:nowrap}
+.ptrace-toolbar .ptrace-sp{flex:1 1 auto;min-width:8px}
+/* the relocated #projchip / .p-search / #createbtn keep every rule they
+   already had from assets/portal.css (.p-proj / .p-search / .p-create) —
+   nothing here restyles them, this only lays out the row they now sit in. */
+
+/* 4 — .p-rail (Board/List + filter chips) stuck at top:53px, tuned to the
+   old .p-top's height (assets/portal.css). The new .ptrace-toolbar above it
+   is NOT sticky (it scrolls away, like every other page's toolbar row — see
+   e.g. menus/kpi-live.html's .toolbar), so .p-rail's stuck position only
+   needs to clear the shell topbar itself, nothing stacked in front of it. */
+.pshell-page .p-rail{top:var(--ptrace-topbar)}
+
+/* 5 — heading collision guard: body.pshell-page h1,h2,h3,h4,h5{margin:0;
+   font-weight:650} (assets/shell.css) is scoped no further than <body>, so
+   it also reaches the ticket-detail drawer's .p-h1 (assets/portal.js,
+   renderDetail()) — at (0,0,1,2) it outranks .p-h1's own single-class rule
+   (0,0,1,0: margin:0 0 12px; font-weight:680). The top margin and the "0"
+   half of the bottom margin already happen to agree, so only the bottom
+   margin visibly changes (12px -> 0, crowding the Description label right
+   under the heading); font-weight drifts 680 -> 650, barely perceptibly.
+   Literal values, not var()s (unlike flow-instrumentation.html's --chipink
+   case), so this restores them directly. Scoped with #detail (an ID, for
+   specificity) rather than #pulse-main: the detail drawer is a SIBLING of
+   #pulse-main, not a descendant of it — #detail / #createwrap sit outside
+   the shell's content host on purpose, same as index.html's overlay and
+   the docs/dev/_template.html pattern it follows, so a full-viewport dialog
+   isn't affected by the content sheet's own stacking/sizing context. No
+   equivalent anchor guard is needed on this page: body.pshell-page a{color:
+   var(--chipink)} (assets/shell.css) reaches .p-nodechip the same way, but
+   .p-nodechip's own rule already specifies color:var(--chipink) too
+   (assets/portal.css) — both sides agree, so there is nothing to restore. */
+.pshell-page #detail .p-h1{margin:0 0 12px;font-weight:680}
+</style>
+</head>
+<body>
+<!-- id=pulse-main: the hook PULSE_SHELL.mount()/.init() looks for (menus wrap
+     their content in the same id) — mount lifts this whole element, as-is,
+     into the shell's .pmain. Reuses the existing .p-shell wrapper rather than
+     adding a new one, the same way index.html's #pulse-main reuses .app. -->
+<div class="p-shell" id="pulse-main">
+
+  <header class="p-top">
+    <!-- shared ADEPTIO Pulse mark (see .pulsemark in assets/styles.css) -->
+    <svg class="pulsemark" width="26" height="26" viewBox="0 0 28 28" role="img" aria-label="ADEPTIO Pulse">
+      <rect class="pm-badge" x="1" y="1" width="26" height="26" rx="8"/>
+      <path class="pm-trace" d="M4.6 14.5H9.6L11.6 8L14.6 20.6L16.6 14.5H23.4"/>
+    </svg>
+    <div class="p-brand"><span class="p-word">adeptio<i>.</i></span><span class="p-pulse">Pulse</span></div>
+    <!-- v2.0.1: the demo week is WK34 of 2027 (Mon 23 - Sun 29 Aug). The year is
+         stated once per screen, here; day stamps below carry no year. -->
+    <div class="p-title">INCIDENT TRACE &middot; PORTAL &middot; Aug 23 &ndash; 29, 2027</div>
+    <div class="p-proj" id="projchip">INC</div>
+    <div class="p-sp"></div>
+    <div class="p-search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
+      <input id="q" placeholder="Search key or summary&hellip;" autocomplete="off" aria-label="Search tickets"/>
+    </div>
+    <button class="p-create" id="createbtn">Create</button>
+    <a class="p-link" href="index.html">&larr; Live dashboard</a>
+    <a class="p-link" href="flow-instrumentation.html">flow map &rarr;</a>
+    <button class="p-ghost" id="themebtn" title="Toggle light / dark">Light</button>
+  </header>
+
+  <!-- v2.0.2 page toolbar: search #q, Create #createbtn and the project chip
+       #projchip are MOVED here (not duplicated) from the now-hidden .p-top by
+       the mount-time script at the end of body, keeping their element ids so
+       assets/portal.js's existing bindings keep working untouched. The week-
+       range line is authored fresh here (it was embedded inside .p-title's
+       text, not its own element, in the old header) — see the <style> block
+       in <head> for why this starts hidden. -->
+  <div class="ptrace-toolbar" id="ptracetoolbar">
+    <span class="ptrace-week">Aug 23 &ndash; 29, 2027</span>
+    <span class="ptrace-sp"></span>
+  </div>
+
+  <div class="p-rail">
+    <div class="p-seg" role="tablist" aria-label="View">
+      <button id="vBoard" class="on" role="tab" aria-selected="true">Board</button>
+      <button id="vList" role="tab" aria-selected="false">List</button>
+    </div>
+    <span style="width:6px"></span>
+    <button class="p-chip on" data-f="all">All<span class="n" data-c="all"></span></button>
+    <button class="p-chip" data-f="open">Open<span class="n" data-c="open"></span></button>
+    <button class="p-chip" data-f="critical">Critical<span class="n" data-c="critical"></span></button>
+    <button class="p-chip" data-f="major">Major<span class="n" data-c="major"></span></button>
+    <button class="p-chip" data-f="incidents">Incidents<span class="n" data-c="incidents"></span></button>
+    <button class="p-chip" data-f="tasks">Tasks<span class="n" data-c="tasks"></span></button>
+    <div class="p-sp"></div>
+    <span class="p-count" id="shown"></span>
+    <button class="p-ghost" id="resetbtn" title="Discard local changes and restore the seeded board">&#8635; Reset board</button>
+  </div>
+
+  <main class="p-main" id="main"></main>
+
+  <footer class="p-foot">
+    <b>Mock data.</b> Every ticket, comment and owner on this board is illustrative, generated to match the
+    seven-day scenario the live dashboard replays. Dates are timeline indices rendered as Aug 23&ndash;29 mock
+    stamps, not real dates. Edits you make here are kept in this browser only (localStorage) and never leave
+    the page &mdash; <b>Reset board</b> restores the seeded state.
+    <span id="storenote"></span>
+  </footer>
+</div>
+
+<!-- ticket detail overlay -->
+<div class="p-scrim" id="detail" role="dialog" aria-modal="true" aria-label="Ticket detail">
+  <div class="p-modal" id="detailbox"></div>
+</div>
+
+<!-- create modal -->
+<div class="p-scrim" id="createwrap" role="dialog" aria-modal="true" aria-label="Create ticket">
+  <div class="p-modal sm" id="createbox"></div>
+</div>
+
+<!-- 1 · topology + incident windows (INC / INCMETA drive the dashboard deep links) -->
+<script src="data/manifest.js"></script>
+<!-- 2 · owner roster reused verbatim for assignees -->
+<script src="data/rcameta.js"></script>
+<!-- 3 · seeded tickets -->
+<script src="data/tickets.js"></script>
+<!-- 4 · portal -->
+<script src="assets/portal.js"></script>
+<!-- 5 · v2.0.2 shell: full mount (sidebar + topbar) + theme persistence
+     (adeptio_theme). Coded against the v2.0.2 shell CONTRACT (PULSE_SHELL.
+     mount / crumb — docs/SPEC-Shell-v2.0.2.md §4/§7), not necessarily the
+     shell.js this build ships today: the call is feature-detected with a
+     pre-contract fallback (.init(), the current shell.js's mount-equivalent)
+     and wrapped in try/catch, so this boots cleanly either way and never
+     throws. Matches the guard pattern in index.html's own mount script
+     (worker S2). -->
+<script src="assets/shell.js"></script>
+<script>
+(function () {
+  "use strict";
+  if (!window.PULSE_SHELL) return;
+  var S = window.PULSE_SHELL;
+
+  function whenReady(fn) {
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", fn);
+    else fn();
+  }
+
+  whenReady(function () {
+    var opts = {
+      title: "Incident Trace",
+      crumb: [
+        { label: "Pulse", path: "index.html" },
+        { label: "INVESTIGATE" },
+        { label: "Incident Trace" }
+      ]
+    };
+    var mounted = false;
+    try {
+      if (typeof S.mount === "function") { S.mount(opts); mounted = true; }
+      else if (typeof S.init === "function") { S.init(opts); mounted = true; }   /* pre-v2.0.2 shell.js */
+    } catch (e) { mounted = false; }
+    if (!mounted) return;   /* .p-top stays visible — see rule 2 in <head> */
+
+    /* PAGE TOOLBAR — relocate (never duplicate) the WORKING controls the now-
+       hidden .p-top can no longer host: search #q (inside its .p-search
+       wrapper), Create #createbtn and the project chip #projchip, keeping
+       their element ids so assets/portal.js's own bindings ("chrome wiring")
+       keep working untouched. The toolbar only becomes visible here, in the
+       same step that populates it — see rule 3 in <head>. */
+    var toolbar = document.getElementById("ptracetoolbar");
+    var weekEl = toolbar && toolbar.querySelector(".ptrace-week");
+    if (toolbar && weekEl) {
+      toolbar.className += " on";
+      var chip = document.getElementById("projchip");
+      var search = document.querySelector(".p-top .p-search");
+      var create = document.getElementById("createbtn");
+      if (chip) toolbar.insertBefore(chip, weekEl);
+      if (search) toolbar.appendChild(search);
+      if (create) toolbar.appendChild(create);
+    }
+  });
+})();
+</script>
+</body>
+</html>

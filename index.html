@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<link rel="icon" href="data:,"/>
+<title>ADEPTIO Pulse — Flow Inspection : Mobile Payment Module</title>
+<!-- markup + boot only. Styles, data and engine are separate files, all loaded
+     with plain <link>/<script src> so this opens straight off disk (file://). -->
+<link rel="stylesheet" href="assets/styles.css"/>
+<!-- v2.0.2: the platform shell frame (was v2.0's launcher-only include).
+     shell.css asks for "assets/tokens.css (or assets/styles.css)" for its
+     palette (see shell.css's own header comment) — this page already loads
+     styles.css, the exact file tokens.css was copied FROM, so tokens.css is
+     deliberately NOT added here. tokens.css re-tunes --muted and, in light
+     theme, all four status hues for the menu pages' smaller text; engine.js
+     reads those same custom properties straight off computed style to colour
+     every node/link/chip on the live map, so loading it here would silently
+     repaint the whole map. Stripped from the single-file build along with
+     the mount call it styles — that build ships alone, with no shell to
+     mount, and keeps its own standalone .topbar exactly as v1.2.1 shipped. -->
+<!--SF-STRIP-START--><link rel="stylesheet" href="assets/shell.css"/><!--SF-STRIP-END-->
+<!-- v2.0.1: the Timeframe A/B/C descriptors reuse .bsub, but styles.css scopes
+     the muted look to .bhead .bsub and .btbl-h is a sibling of .bhead — this
+     one page-local rule extends the same muted style to the frame headers,
+     keeping assets/styles.css byte-identical to the v1.2.1 base. -->
+<style>
+.btbl-h .bsub{color:var(--muted);font-weight:400;font-size:11.5px}
+
+/* ============================================================ v2.0.2 SHELL
+   Scoped to body.pshell-page (added only by a successful PULSE_SHELL mount —
+   see the SF-STRIP script at the end of body) so a build without shell.js,
+   or one whose mount() throws/is absent, falls straight back to the
+   untouched v1.2.1 standalone layout below: nothing in this block ever
+   matches unless the mount genuinely ran. .frontpage is a body class this
+   page adds itself (mount only APPENDS 'pshell-page', it does not clobber
+   what was already on <body>), kept purely so these rules read as this
+   page's own, not a rule any other shell page happens to share. */
+
+/* the shell owns the chrome now: hide (not remove) the legacy topbar so the
+   single-file build — which never links shell.css/shell.js and so never
+   gets body.pshell-page — still renders its own original top bar.
+   display:none would be simpler, but .app is frozen styles.css's own grid
+   (grid-template-rows:auto 1fr auto auto for topbar/stage/bottom/timeline)
+   and display:none removes an item from grid placement ENTIRELY — the three
+   remaining rows would auto-place into topbar's old "auto" track, stage's
+   old "1fr" track and bottom's old "auto" track instead, collapsing the map
+   to zero height. Collapsing the box instead keeps it a real (0-sized) grid
+   item, so stage/bottom/timeline stay in the tracks the template built for
+   them. visibility:hidden also drops it from the a11y tree and tab order,
+   same as display:none would. */
+.pshell-page .topbar{height:0;min-height:0;padding:0;margin:0;border:none;overflow:hidden;visibility:hidden}
+
+/* This page is a fixed, non-scrolling canvas (v1.2.1's own body{overflow:
+   hidden}), not a scrolling document like the menu pages. shell.css leaves
+   .pshell/.pcol at min-height:100vh — a floor, not a cap — which is right
+   for a page that scrolls but would let this one grow taller than the
+   viewport and turn on page scroll the moment .app's old 100vh/100vw stopped
+   matching its new, narrower box. Capping the chain to height:100vh and
+   letting #pulse-main (= .app, see the id on the .app div) fill exactly
+   what's left keeps the old zero-scroll, internally-scrolling-only feel.
+   This page has no lineage line to show, so the footer is dropped rather
+   than shown near-empty — full bleed means edge to edge, footer included. */
+.frontpage.pshell-page{overflow:hidden}
+.frontpage.pshell-page .pshell{height:100vh}
+.frontpage.pshell-page .pcol{height:100vh;min-height:0}
+.frontpage.pshell-page .pmain{padding:0;min-height:0;overflow:hidden}
+.frontpage.pshell-page .pfoot{display:none}
+.frontpage.pshell-page .app{height:100%;width:100%}
+
+/* MAP UTILITY CLUSTER — object search + the view buttons the hidden topbar
+   can no longer host, relocated (never duplicated) here at mount time by the
+   SF-STRIP script at the end of body. Reuses styles.css's own .search/.tbtn
+   look untouched — this only positions the new wrapper. No theme button:
+   the shell owns theme, and engine's own #theme stays behind in the hidden
+   legacy topbar (irrelevant for the stripped build, which never runs the
+   relocation script and keeps #theme in its one visible topbar). Sits above
+   the hovercard (z-index 30) so it's always reachable, below .colmenu (40)
+   so an open dropdown still wins. */
+.frontpage.pshell-page .mapctrl{position:absolute;top:14px;right:14px;z-index:32;
+  display:flex;align-items:center;gap:8px;max-width:calc(100% - 28px);
+  transition:right .2s ease}
+.frontpage.pshell-page .mapctrl .search{width:200px;min-width:0}
+/* keep the cluster clear of the right dock while it's open, the same way the
+   engine's own fit()/focusNode() already discount --dockW from usable width
+   (.dock-open is toggled by the same SF-STRIP script, via MutationObserver) */
+.frontpage.pshell-page .mapctrl.dock-open{right:calc(var(--dockW) + 14px)}
+@media (max-width:900px){ .frontpage.pshell-page .mapctrl .search{width:150px} }
+@media (max-width:680px){ .frontpage.pshell-page .mapctrl .search{display:none} }
+@media (prefers-reduced-motion:reduce){ .frontpage.pshell-page .mapctrl{transition:none} }
+html[data-motion="reduce"] .frontpage.pshell-page .mapctrl{transition:none}
+</style>
+</head>
+<body class="frontpage">
+<!-- id=pulse-main: the exact hook assets/shell.js's contentEl() looks for
+     first (menus wrap their content in the same id) — mount() lifts this
+     whole element, as-is, straight into the shell's .pmain. Nothing else
+     about .app changes; see the .frontpage.pshell-page .app rule above for
+     why it fills 100%/100% instead of 100vh/100vw once it's in there. -->
+<div class="app" id="pulse-main">
+  <div class="topbar">
+    <div class="brand">
+      <!-- ADEPTIO Pulse mark: rounded-square badge + ECG trace (flat → spike → flat).
+           Chrome only — stroked in the chrome/link accent, never a status colour. -->
+      <svg class="pulsemark" width="28" height="28" viewBox="0 0 28 28" role="img" aria-label="ADEPTIO Pulse">
+        <rect class="pm-badge" x="1" y="1" width="26" height="26" rx="8"/>
+        <path class="pm-trace" d="M4.6 14.5H9.6L11.6 8L14.6 20.6L16.6 14.5H23.4"/>
+      </svg>
+      <div><div class="t"><span class="wm">adeptio<i>.</i></span><span class="pulseword">Pulse</span></div><div class="s">Flow Inspection : Mobile Payment Module</div></div>
+    </div>
+    <div class="spacer"></div>
+    <div class="summary" id="summary"></div>
+    <div class="freshness"><span class="livedot" id="livedot"></span><span id="asof">as of —</span></div>
+    <div class="search" id="mapsearch"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg><input id="search" placeholder="Search objects… (Core, SMS)" autocomplete="off"/></div>
+    <div class="tools">
+      <button class="tbtn on" id="tabtoggle" title="Toggle live tables"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 10v10M15 10v10"/></svg></button>
+      <button class="tbtn" id="zoomout" title="Zoom out"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4M8 11h6"/></svg></button>
+      <button class="tbtn" id="zoomin" title="Zoom in"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4M11 8v6M8 11h6"/></svg></button>
+      <button class="tbtn" id="fit" title="Fit to screen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+      <button class="tbtn" id="theme" title="Toggle light / dark"><svg id="themeicon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1111.2 3 7 7 0 0021 12.8z"/></svg></button>
+    </div>
+  </div>
+
+  <div class="stage" id="stage">
+    <div class="grid-bg"></div>
+    <svg class="canvas" id="canvas"><g id="viewport"><g id="links"></g><g id="nodes"></g></g></svg>
+    <div class="hint" id="hint"><span class="x" id="hintx">✕</span><b>v2.0.2:</b> nodes snap to grid · drag canvas to pan · scroll to zoom · hover for status · click to open a pane · resize the right dock &amp; the bottom tables · ▶ replays a full week.</div>
+    <div class="hovercard" id="hovercard"></div>
+    <!-- BOTTOM-LEFT STACK — the scenario card sits directly on top of the status
+         legend (legend keeps its anchor; the card grows upward from it). The whole
+         stack slides right together when the RCA panel opens. -->
+    <div class="leftstack" id="leftstack">
+      <!-- minimised form: scenario glyph + a severity dot that still reports the
+           strongest currently-open incident window (colour = status, i.e. data). -->
+      <button class="scchip" id="scchip" type="button" aria-expanded="false" hidden>
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3.2v3.6M16 3.2v3.6"/>
+          <path d="M6.6 15.8h2.5l1.2-2.6 1.7 4.4 1.1-1.8h3.3"/>
+        </svg>
+        <span>Scenario</span><i class="sev" id="scchipdot"></i>
+      </button>
+      <div class="scenario" id="scenario">
+        <button class="sc-min" id="scmin" type="button" title="Minimise to icon" aria-label="Minimise the scenario card">−</button>
+        <div class="sc-body" id="scbody"></div>
+        <span class="sc-rz"  id="scrz"  title="Drag to resize width"></span>
+        <span class="sc-rzc" id="scrzc" title="Drag to resize width &amp; height"></span>
+      </div>
+      <div class="legend" id="legend"></div>
+    </div>
+    <!-- F3 · incident / RCA panel — left slide-in, mirrors the right dock.
+         Opened by clicking a row in the bottom tables; ✕ or Esc closes it. -->
+    <aside class="rcapanel" id="rcapanel" aria-hidden="true">
+      <div class="rca-h"><span class="t">Incident detail</span>
+        <button class="iconbtn" id="rcaclose" title="Close (Esc)">✕</button></div>
+      <div class="rca-body" id="rcabody"></div>
+    </aside>
+    <aside class="dock" id="dock">
+      <div class="dockresizer" id="dockresizer" title="Drag to resize"></div>
+      <div class="dock-h"><span class="t">Monitors Object Info</span><span class="c" id="dockcount"></span>
+        <div style="margin-left:auto;display:flex;gap:4px"><button class="iconbtn" id="closeall" title="Close all">✕</button></div>
+      </div>
+      <div class="dock-body" id="dockbody"><div class="empty">Click any object on the map to open its live detail here. Panels stack — pin the ones you want to keep watching. Drag the left edge to resize.</div></div>
+    </aside>
+  </div>
+
+  <!-- BOTTOM LIVE TABLES -->
+  <div class="bottom" id="bottom">
+    <div class="bhandle" id="bhandle" title="Drag to resize height"></div>
+    <div class="bhead">
+      <!-- the demo week's year appears exactly ONCE per screen, here: day-level
+           marks below (table stamps, timeline day labels) carry no year. -->
+      <span class="bt">Live synthesis</span><span class="bsub" id="bsub">updates with the timeline · 5-min resolution · Aug 23 &ndash; 29, 2027</span>
+      <div class="bacts">
+        <span class="bsub" id="brefresh"></span>
+        <button class="iconbtn" id="brefreshbtn" title="Refresh tables now"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 10-2.3 5.7M20 5v6h-6"/></svg></button>
+        <button class="iconbtn" id="bclose" title="Close tables">✕</button>
+      </div>
+    </div>
+    <div class="btables" id="btables">
+      <section class="btbl" id="tblA" style="width:34%">
+        <div class="btbl-h"><span class="tt">Timeframe A <span class="bsub">top errors</span> <span class="tag" id="aTag">7 days</span></span>
+          <div class="ctrls">
+            <select class="mini" id="aWin" title="Time frame"><option value="5m">5 min</option><option value="15m">15 min</option><option value="1h">1 hour</option><option value="3h">3 hours</option><option value="6h">6 hours</option><option value="12h">12 hours</option><option value="24h">24 hours</option><option value="2d">2 days</option><option value="7d" selected>7 days</option></select>
+            <select class="mini" id="aRank" title="Rank by"><option value="sev">Severity-weighted</option><option value="down">Downtime</option><option value="ev">Event count</option></select>
+          </div>
+        </div>
+        <div class="tblwrap" id="aWrap"></div>
+      </section>
+      <div class="vdiv" data-l="tblA" style="width:6px;cursor:col-resize;background:transparent"></div>
+      <section class="btbl" id="tblB" style="width:34%">
+        <div class="btbl-h"><span class="tt">Timeframe B <span class="bsub">recent errors · newest first</span> <span class="tag" id="bTag">5 min</span></span><div class="ctrls"><select class="mini" id="bWinSel" title="Time frame"><option value="5m" selected>5 min</option><option value="15m">15 min</option><option value="1h">1 hour</option><option value="3h">3 hours</option><option value="6h">6 hours</option><option value="12h">12 hours</option><option value="24h">24 hours</option><option value="2d">2 days</option><option value="7d">7 days</option></select></div></div>
+        <div class="tblwrap" id="bWrap"></div>
+      </section>
+      <div class="vdiv" data-l="tblB" style="width:6px;cursor:col-resize;background:transparent"></div>
+      <section class="btbl" id="tblC">
+        <div class="btbl-h"><span class="tt">Timeframe C <span class="bsub">custom</span> <span class="tag">configurable</span></span>
+          <div class="ctrls">
+            <button class="mini" id="cCols" title="Choose columns">Columns ▾</button>
+            <select class="mini" id="cWin" title="Time frame"><option value="5m">5 min</option><option value="15m">15 min</option><option value="1h" selected>1 hour</option><option value="3h">3 hours</option><option value="6h">6 hours</option><option value="12h">12 hours</option><option value="24h">24 hours</option><option value="2d">2 days</option><option value="7d">7 days</option></select>
+            <select class="mini" id="cSev" title="Severity"><option value="all">All sev</option><option value="crit">Critical</option><option value="warn">Warn+</option></select>
+            <select class="mini" id="cNode" title="Node"></select>
+          </div>
+        </div>
+        <div class="tblwrap" id="cWrap"></div>
+        <div class="colmenu" id="colmenu"></div>
+      </section>
+    </div>
+  </div>
+
+  <!-- TIMELINE -->
+  <div class="timeline">
+    <button class="play" id="playbtn" title="Play / pause 7-day replay"><svg id="playicon" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button>
+    <div class="tl-mid">
+      <div class="tl-top"><span id="tlstart">−24h</span><span class="cur" id="tlcur">now</span><span id="tlend">now</span></div>
+      <div class="track" id="track"><div id="bands"></div><div id="hticks"></div><div class="fill" id="fill"></div><div class="head" id="head"></div><div class="ghost" id="ghost"></div></div>
+    </div>
+    <div class="tl-right"><button class="speed" id="resetbtn" title="Reset all — restart from the beginning">⟲ Reset</button><button class="speed" id="speed" title="Playback speed">1×</button><button class="speed" id="nowbtn" title="Jump to now">Now</button></div>
+  </div>
+</div>
+
+<!-- 1 · topology + objective definitions (no series) -->
+<script src="data/manifest.js"></script>
+<!-- 1b · RCA metadata: per-object description / page / systems / owner, and the
+     first-checks + questions behind every "<nodeId>.<objective label>" key. -->
+<script src="data/rcameta.js"></script>
+<!-- 1c · Incident Trace tickets (page 3 seed). The dashboard only reads
+     byWindow + the matched ticket's header fields for the RCA trace card. -->
+<script src="data/tickets.js"></script>
+<!--ADEPTIO-LOGS-START
+     2 · materialised week (OPTIONAL). This site ships in SEEDED REPLAY mode: the
+     engine regenerates the identical canonical week from ADEPTIO_SEED, so no day
+     files are needed, nothing 404s over file:// and the banner tags itself
+     "· seeded replay". The seven tags below are therefore inert — they live
+     inside this one comment, which runs from ADEPTIO-LOGS-START to
+     ADEPTIO-LOGS-END. To switch to materialised mode, drop data/log_day1..7.js
+     into data/ and re-cut this comment in two so the tags fall outside it: close
+     it on the blank line below (a comment-close delimiter) and re-open it on the
+     blank line above ADEPTIO-LOGS-END (a comment-open delimiter). Nothing on
+     screen changes; the day files were dumped from this same seeded generator.
+     See data/README.md.
+
+<script src="data/log_day1.js"></script>
+<script src="data/log_day2.js"></script>
+<script src="data/log_day3.js"></script>
+<script src="data/log_day4.js"></script>
+<script src="data/log_day5.js"></script>
+<script src="data/log_day6.js"></script>
+<script src="data/log_day7.js"></script>
+
+ADEPTIO-LOGS-END-->
+<!-- 3 · engine: hydrate → render → interact -->
+<script src="assets/engine.js"></script>
+<!-- v2.0.2: mount the platform shell. Runs LAST, after engine.js has already
+     built the map and called its own first fit() — that first fit() used
+     .app's pre-mount, full-viewport size, so this block asks the engine to
+     fit() once more against the shell-adjusted stage; the resize listener
+     assets/engine.js adds for v2.0.2 covers every fit() after that (sidebar
+     toggles, live window resizes). Coded against the v2.0.2 shell CONTRACT
+     (PULSE_SHELL.mount / .status / .fresh — docs/SPEC-Shell-v2.0.2.md §7),
+     not necessarily the shell.js this build ships today: every call is
+     feature-detected with a pre-contract fallback (.init(), the current
+     shell.js's mount-equivalent) or skipped outright, so this boots cleanly
+     either way and never throws. Entirely inside SF-STRIP markers, so the
+     single-file build never sees any of it and keeps its own standalone
+     .topbar, search box and view buttons exactly as v1.2.1 shipped them. -->
+<!--SF-STRIP-START-->
+<script src="assets/shell.js"></script>
+<script>
+(function () {
+  "use strict";
+  if (!window.PULSE_SHELL) return;
+  var S = window.PULSE_SHELL;
+  var booted = false;   /* belt-and-braces: mount exactly once even if something
+                            re-fires DOMContentLoaded (bfcache restores do on some
+                            browsers) — mirrors the idempotency guard shell.js's
+                            own init() already carries (`if (S.root) return S;`),
+                            in case the v2.0.2 mount() this is coded against does
+                            not happen to keep the same guard. */
+
+  function whenReady(fn) {
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", fn);
+    else fn();
+  }
+
+  whenReady(function () {
+    if (booted) return;
+    booted = true;
+
+    var opts = { navDefault: "rail", title: "Front page", subtitle: "Aug 23 – 29, 2027" };
+    var mounted = false;
+    try {
+      if (typeof S.mount === "function") { S.mount(opts); mounted = true; }
+      else if (typeof S.init === "function") { S.init(opts); mounted = true; }   /* pre-v2.0.2 shell.js */
+    } catch (e) { mounted = false; }
+    if (!mounted) return;   /* .topbar stays visible — see the CSS guard above */
+
+    /* .app just moved from a 100vh/100vw body child into the shell's .pmain
+       (page-local CSS makes it fill that box instead) — ask the engine to
+       fit() again now that #stage has its real, shell-adjusted size. Also
+       re-paint(): the engine's OWN boot already ran paint() once, but that
+       was before this script's shell.js <script> tag (below engine.js's on
+       purpose — see the comment above) had even loaded, so PULSE_SHELL.status/
+       .fresh did not exist yet and the engine's first bridge calls were
+       silent no-ops. One more paint() now pushes the current, correct
+       status/freshness into the just-mounted shell instead of leaving it
+       blank until the reader's first interaction. */
+    if (typeof window.fit === "function") window.fit();
+    if (typeof window.paint === "function") window.paint();
+
+    /* MAP UTILITY CLUSTER — relocate (never duplicate) the object search box
+       and the grid/zoom-out/zoom-in/fit buttons the hidden legacy topbar can
+       no longer host, into a small floating toolbar over the top-right of
+       the map. #theme is left in the legacy topbar on purpose — the shell
+       owns theme now. */
+    var stage = document.getElementById("stage");
+    var searchWrap = document.getElementById("mapsearch");
+    if (stage && searchWrap && !document.getElementById("mapctrl")) {
+      var cluster = document.createElement("div");
+      cluster.className = "mapctrl";
+      cluster.id = "mapctrl";
+      cluster.appendChild(searchWrap);
+      var moveIds = ["tabtoggle", "zoomout", "zoomin", "fit"], i, b;
+      for (i = 0; i < moveIds.length; i++) {
+        b = document.getElementById(moveIds[i]);
+        if (b) cluster.appendChild(b);
+      }
+      stage.appendChild(cluster);
+
+      /* keep the cluster clear of the right dock while it is open, the same
+         way the engine's own fit()/focusNode() already discount --dockW */
+      var dockEl = document.getElementById("dock");
+      if (dockEl && window.MutationObserver) {
+        var syncDock = function () {
+          cluster.classList.toggle("dock-open", dockEl.classList.contains("open"));
+        };
+        syncDock();
+        new MutationObserver(syncDock).observe(dockEl, { attributes: true, attributeFilter: ["class"] });
+      }
+    }
+  });
+})();
+</script>
+<!--SF-STRIP-END-->
+</body>
+</html>

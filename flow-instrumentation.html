@@ -1,0 +1,1179 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" href="data:,"/>
+<title>ADEPTIO Pulse — Flow Inspection : Mobile Payment Module · Instrumentation Ledger</title>
+<link rel="stylesheet" href="assets/flow.css"/>
+
+<!-- v2.0.2: the platform shell frame (worker S3 — this page's frozen-original
+     status ends in v2.0.2; content stays untouched, chrome only). tokens.css +
+     shell.css are linked AFTER flow.css on purpose — see the load-order note
+     in the <style> block below. data-theme="dark" is added to <html> above so
+     tokens.css's html[data-theme] block paints the shell chrome correctly on
+     first paint, before shell.js's theme.apply() runs at the bottom of body. -->
+<link rel="stylesheet" href="assets/tokens.css"/>
+<link rel="stylesheet" href="assets/shell.css"/>
+
+<style>
+/* ============================================================================
+   v2.0.2 shell adoption (worker S3) — PAGE-LOCAL ONLY. assets/flow.css stays
+   byte-identical; every rule below is either scoped under body.pshell-page
+   (the class PULSE_SHELL's mount()/init() adds to <body> — see the guarded
+   call at the end of body) or, where noted, deliberately left unconditional.
+
+   Load-order note: tokens.css + shell.css are linked AFTER flow.css above
+   (the reverse of the usual menus/* page order). flow.css owns a complete,
+   independent :root palette and happens to reuse seven of tokens.css's
+   custom-property names (--bg --panel --ink --line --shadow --coral --font).
+   Six of the seven are set by tokens.css inside html[data-theme=...], which
+   already outranks flow.css's bare :root on specificity no matter which
+   stylesheet loads last — only --font is bare :root on both sides, so loading
+   tokens.css after flow.css is what lets the shell chrome win that one tie
+   too. Rule 3 below re-anchors all seven back to flow.css's own values for
+   the content area regardless of any of this.
+   ========================================================================= */
+
+/* 1 — shell topbar height (contract §4: "one continuous 56px band"). Single
+   source of truth for both sticky offsets in rule 5. */
+.pshell-page{--pflow-topbar:56px}
+
+/* 2 — the page's own header is replaced by the shell's sidebar + topbar.
+   Markup stays (frozen-original content, chrome-only change). Scoped to
+   #pulse-main specifically, NOT a bare ".pshell-page header" — the shell's
+   own topbar is ALSO a <header> element (assets/shell.js: el('header',
+   'ptop', ...)), a sibling of #pulse-main under .pcol, not a descendant of
+   it; a bare ".pshell-page header" selector would match — and hide — that
+   one too. */
+.pshell-page #pulse-main header{display:none}
+
+/* 3a — content-area palette re-anchor ("document-in-platform"), UNCONDITIONAL
+   on purpose: assets/tokens.css is linked unconditionally too (a <link>
+   cannot know whether PULSE_SHELL.mount()/.init() went on to throw — see the
+   try/catch guard in the script at the end of body), and html[data-theme]
+   above is already parsed before any script runs. If a mount ever fails,
+   .pshell-page never lands on <body>, the original header falls back to
+   visible (rule 2 stays inert) — and this page's own content still needs
+   protecting from tokens.css's palette regardless. The "sheet" chrome itself
+   (border/radius/shadow — rule 3b) stays conditional: it only makes sense
+   once there is an actual platform frame around the content to sit inside. */
+#pulse-main{
+  --bg:#FBFAF6; --panel:#ffffff; --ink:#14223F; --line:#E4E2DA; --coral:#C0392B;
+  --shadow:0 1px 3px rgba(20,34,63,.07),0 6px 22px rgba(20,34,63,.06);
+  --font:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,'Noto Sans Lao','Lao Sangam MN',Arial,sans-serif;
+  background:var(--bg);color:var(--ink);font-family:var(--font);
+  font-size:16px;line-height:1.5;
+  /* body.pshell-page a{color:var(--chipink)} (assets/shell.css) is scoped no
+     further than <body>, so it also matches every plain <a> in this page's
+     own content — and, at (0,0,1,2), it outranks flow.css's own single-class
+     link rules like .chapnav a (0,0,1,1) regardless of link order. Redirect
+     the VARIABLE it reads instead of fighting that specificity: flow.css
+     never defines or reads --chipink itself, so this only ever affects the
+     shell's own fallback declaration, restoring flow.css's actual default
+     link colour (var(--purple)) for any link that has no more specific
+     flow.css rule of its own. Anchors that DO have a more specific rule
+     (.chapnav a, a.tlink, etc.) are completely unaffected either way — they
+     never read --chipink to begin with. */
+  --chipink:var(--purple);
+}
+
+/* 3b — the "sheet": a white document sitting inside the platform frame. Keeps
+   the ledger's own light navy-on-white palette (re-anchored above) instead of
+   restyling a single one of its internals. */
+.pshell-page #pulse-main{
+  border:1px solid var(--line);border-radius:var(--radius-lg);
+  box-shadow:var(--shadow-lift);
+}
+
+/* 4 — .pulsemark collision guard: flow.css styles .pulsemark/.pm-badge/
+   .pm-trace with bare selectors (this page's own, now-hidden header mark).
+   The shell's sidebar brand mark reuses the same class names (spec §3) — this
+   re-asserts shell.css's own intended var()s at higher specificity so the
+   sidebar mark can never inherit the ledger's purple palette. References the
+   shared --chip* tokens, not literal colours, so it tracks whatever
+   shell.css/tokens.css ship rather than freezing today's hex values. Matches
+   nothing at all unless the shell actually built a sidebar (.pnav-brand only
+   exists once mounted), so no extra guard is needed here. */
+.pshell-page .pnav-brand .pulsemark .pm-badge{fill:var(--chipbg);stroke:var(--chipline)}
+.pshell-page .pnav-brand .pulsemark .pm-trace{fill:none;stroke:var(--chipink);stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+
+/* 5 — sticky offsets that assumed the old stand-alone header. chapnav
+   (assets/flow.css: position:sticky;top:0) used to be the topmost sticky
+   element on the page; the shell topbar now sticks above it. #ch1 .c1-hdr
+   (this page's own inline <style>, section 1) stuck at top:54px — chapnav's
+   own rendered height — to sit right under a stuck chapnav; it now needs the
+   shell topbar's height stacked in front of that same 54px. */
+.pshell-page .chapnav{top:var(--pflow-topbar)}
+.pshell-page #ch1 .c1-hdr{top:calc(var(--pflow-topbar) + 54px)}
+
+/* 6 — heading collision guard: body.pshell-page h1,h2,h3,h4,h5{margin:0;
+   font-weight:650} (assets/shell.css) is, like rule 4's .pulsemark case,
+   scoped no further than <body> — so at (0,0,1,2) it also outranks every
+   single-class heading rule in flow.css (.c2b-h etc. are (0,0,1,0); .hero h1
+   is (0,0,1,1)). Unlike the anchor case, these are literal values, not
+   var()s, so there is no variable to redirect — this restores the exact
+   margin/font-weight flow.css already gives each one (verified against
+   flow.css's own rules for each class below), scoped with #pulse-main
+   (an ID) for enough specificity to win. Every OTHER property these rules
+   set (font-size, line-height, letter-spacing, color) is untouched by
+   shell's rule and was never at risk. #ch1 h2 is unaffected already — its
+   own #ch1-scoped rule is ID-specific and already wins. */
+.pshell-page #pulse-main .hero h1,
+.pshell-page #pulse-main .c2b-h,
+.pshell-page #pulse-main .c2b-ph,
+.pshell-page #pulse-main .c3b-h,
+.pshell-page #pulse-main .c4b-h,
+.pshell-page #pulse-main .c5b-h{font-weight:760}
+.pshell-page #pulse-main .hero h1{margin:10px 0 14px}
+.pshell-page #pulse-main .c2b-h,
+.pshell-page #pulse-main .c3b-h,
+.pshell-page #pulse-main .c4b-h,
+.pshell-page #pulse-main .c5b-h{margin:11px 0 10px}
+.pshell-page #pulse-main .c2b-ph{margin:34px 0 5px}
+</style>
+</head>
+<body>
+
+<!-- id=pulse-main: the hook PULSE_SHELL.mount()/.init() looks for (menus wrap
+     their content in the same id) — mount lifts this whole element, as-is,
+     into the shell's .pmain. Wraps the page's full original body content
+     (header included, hidden by rule 2 above) untouched: chrome only. -->
+<div id="pulse-main">
+
+<header>
+  <div class="pagewrap" style="display:flex;align-items:center;justify-content:space-between;gap:16px;padding-top:20px;padding-bottom:6px;flex-wrap:wrap">
+    <div style="display:flex;align-items:center;gap:12px">
+      <!-- shared ADEPTIO Pulse mark (see .pulsemark in assets/flow.css) -->
+      <svg class="pulsemark" width="28" height="28" viewBox="0 0 28 28" role="img" aria-label="ADEPTIO Pulse">
+        <rect class="pm-badge" x="1" y="1" width="26" height="26" rx="8"/>
+        <path class="pm-trace" d="M4.6 14.5H9.6L11.6 8L14.6 20.6L16.6 14.5H23.4"/>
+      </svg>
+      <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">
+        <div style="font-size:23px;font-weight:800;color:var(--ink)">adeptio<span style="color:var(--coral)">.</span></div>
+        <span class="pulseword">Pulse</span>
+        <div style="font-size:11px;letter-spacing:.16em;font-weight:700;color:var(--slate);margin-left:6px">FLOW INSPECTION : MOBILE PAYMENT MODULE</div>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <a href="index.html" style="font-size:11.5px;font-weight:650;color:var(--purple-ink);background:var(--purple-soft);border:1px solid var(--purple-line);border-radius:999px;padding:6px 13px;text-decoration:none">&larr; Live dashboard</a>
+      <a href="incident-trace.html" style="font-size:11.5px;font-weight:650;color:var(--purple-ink);background:var(--purple-soft);border:1px solid var(--purple-line);border-radius:999px;padding:6px 13px;text-decoration:none">Incident Trace &middot; Portal &rarr;</a>
+      <div style="font-size:11.5px;font-weight:650;color:var(--slate);border:1px dashed var(--slate3);border-radius:999px;padding:6px 13px">{BANK} · Myanmar commercial-bank template</div>
+      <div style="font-size:11.5px;font-weight:650;color:var(--purple-ink);background:var(--purple-soft);border-radius:999px;padding:6px 13px">Companion to the E2E Visibility Map</div>
+    </div>
+  </div>
+</header>
+
+<div class="pagewrap">
+  <section class="hero">
+    <div class="kicker" style="color:var(--purple-ink);font-size:11px;font-weight:750;letter-spacing:.16em">ONE FOCUSED USE-CASE · MOBILE PAYMENT MODULE · TOP TO BOTTOM</div>
+    <h1>Flow Inspection : Mobile Payment Module — one flow, both stacks, every check</h1>
+    <p class="stand">Ma Thida's 45,000 MMK electricity bill again — this time as an engineering ledger. The flow runs <strong>top to bottom exactly as it executes</strong>, and three columns run beside it: the <strong>software</strong> each step crosses, the <strong>hardware</strong> it rides, and the <strong>health checks</strong> — availability and quality — that watch both. Then: what normal looks like, how fingerprints name a root cause, and the twelve platform functions that let our system do all of it alone.</p>
+    <div class="objrow">
+      <span class="obj">Objective 1 — full-flow health check, software and hardware</span>
+      <span class="obj">Objective 2 — quality defined for normal operation</span>
+      <span class="obj">Objective 3 — root cause locatable in abnormal behaviour</span>
+    </div>
+    <div class="tilerow">
+      <div class="tile"><div class="big">14 <span class="accent">steps</span></div><div class="lbl">top-to-bottom flow — the customer touches two of them</div></div>
+      <div class="tile"><div class="big">52 <span class="accent">checks</span></div><div class="lbl">17 availability · 26 quality · 9 business-logic assertions — all read-only</div></div>
+      <div class="tile"><div class="big">12 <span class="accent">functions</span></div><div class="lbl">platform capabilities that run every check with no customer tooling required</div></div>
+      <div class="tile"><div class="big">5 <span class="accent">fingerprints</span></div><div class="lbl">fault signatures that turn check patterns into a routed, prioritised ticket</div></div>
+    </div>
+  </section>
+</div>
+
+<nav class="chapnav"><div class="in">
+  <span class="brandmini">adeptio<span class="dot">.</span></span><span class="pulseword" style="margin-right:10px">Pulse</span>
+  <a href="#ch1">01 · Instrumented flow</a>
+  <a href="#ch2">02 · What normal looks like</a>
+  <a href="#ch3">03 · Root cause</a>
+  <a href="#ch4">04 · Platform functions</a>
+  <a href="#ch5">05 · Operating model</a>
+  <a href="#notes">Notes</a>
+</div></nav>
+
+<div class="pagewrap">
+
+<section id="ch1" class="chapter">
+<style>
+/* ---- section head ---- */
+#ch1 .c1-k{color:var(--purple-ink);font-size:11px;font-weight:750;letter-spacing:.16em;margin:0}
+#ch1 h2{font-size:29px;line-height:1.14;font-weight:760;letter-spacing:-.3px;color:var(--ink);margin:11px 0 10px}
+#ch1 .c1-stand{font-size:15.5px;line-height:1.62;color:var(--slate);max-width:880px;margin:0 0 4px}
+#ch1 .c1-stand strong{color:var(--ink)}
+#ch1 .legend{font-size:11.5px;margin:14px 0 0}
+#ch1 .legend .li{gap:7px}
+#ch1 .c1-lg{display:inline-block;width:24px;height:0;border-top:2px solid var(--navy);flex:none}
+#ch1 .c1-lg.c1-dsh{border-top-style:dashed}
+#ch1 .c1-lgv{display:inline-flex;align-items:center;gap:3px;color:var(--navy);font-size:11px;font-weight:800;flex:none}
+
+/* ---- ledger frame ---- */
+#ch1 .c1-ledger{margin-top:13px;border:1px solid var(--line);border-radius:12px;background:#fff;
+  box-shadow:0 1px 3px rgba(20,34,63,.06),0 6px 22px rgba(20,34,63,.05)}
+#ch1 .c1-hdr,#ch1 .c1-row{display:grid;grid-template-columns:25% 21% 19% 35%}
+#ch1 .c1-hdr{position:sticky;top:54px;z-index:40;background:var(--navy);border-radius:11px 11px 0 0}
+#ch1 .c1-h{padding:11px 15px;font-size:11px;font-weight:800;letter-spacing:.9px;text-transform:uppercase;
+  color:#fff;line-height:1.4}
+#ch1 .c1-h:first-child{padding-left:18px}
+#ch1 .c1-h+.c1-h{border-left:1px solid rgba(255,255,255,.17)}
+#ch1 .c1-h i{display:block;margin-top:3px;font-style:normal;font-weight:650;font-size:10.5px;
+  letter-spacing:.2px;text-transform:none;color:rgba(255,255,255,.68)}
+
+/* ---- phase band ---- */
+#ch1 .c1-band{position:relative;border-top:1px solid var(--line);background:var(--navy-soft);color:var(--navy);
+  font-size:10.5px;font-weight:800;letter-spacing:.85px;text-transform:uppercase;padding:9px 18px 9px 56px}
+#ch1 .c1-band .c1-bl{position:absolute;left:31px;top:0;bottom:0;border-left:2px solid var(--navy)}
+#ch1 .c1-band em{font-style:normal;color:var(--slate);font-weight:750;letter-spacing:.6px}
+
+/* ---- rows + cells ---- */
+#ch1 .c1-row{--rbg:#fff;background:var(--rbg);border-top:1px solid var(--line)}
+#ch1 .c1-row.c1-alt{--rbg:var(--bg)}
+#ch1 .c1-row:last-child{border-radius:0 0 11px 11px}
+#ch1 .c1-cell{padding:15px}
+#ch1 .c1-cell+.c1-cell{border-left:1px solid var(--line)}
+#ch1 .c1-ckcell{padding:15px 15px 15px 7px}
+
+/* ---- flow column ---- */
+#ch1 .c1-flow{position:relative;padding:15px 13px 15px 18px;--chipc:28px}
+#ch1 .c1-lin{position:absolute;left:31px;top:0;height:var(--chipc);border-left:2px solid var(--navy)}
+#ch1 .c1-lout{position:absolute;left:31px;top:var(--chipc);bottom:0;border-left:2px solid var(--navy)}
+#ch1 .c1-lin.c1-dsh,#ch1 .c1-lout.c1-dsh{border-left-style:dashed}
+#ch1 .c1-chev{position:absolute;left:32px;bottom:3px;transform:translateX(-50%);font-size:12px;line-height:1;
+  color:var(--navy);background:var(--rbg);padding:1px 2px 0}
+#ch1 .c1-fhead{position:relative;display:flex;gap:10px;align-items:flex-start}
+#ch1 .c1-step{flex:none;width:28px;height:26px;border-radius:7px;background:var(--navy);color:#fff;
+  font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center}
+#ch1 .c1-ftxt{min-width:0}
+#ch1 .c1-ttl{font-size:13.5px;font-weight:650;line-height:1.34;color:var(--ink)}
+#ch1 .c1-plain{font-size:12px;line-height:1.48;color:var(--slate);margin-top:5px}
+#ch1 .c1-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+#ch1 .c1-proto{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:10.5px;color:var(--slate);background:var(--panel-warm);
+  border:1px solid var(--line);border-radius:5px;padding:2px 7px;line-height:1.5}
+#ch1 .c1-loop{font-size:10px;font-weight:700;color:var(--green-ink);background:var(--green-soft);
+  border:1px solid var(--green-line);border-radius:999px;padding:2px 9px;line-height:1.6}
+#ch1 .c1-nd{position:relative;margin:0 0 7px 44px;display:inline-block;font-size:9.5px;font-weight:750;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--slate);background:var(--panel-warm);
+  border:1px dashed var(--slate3);border-radius:999px;padding:2px 9px;line-height:1.5}
+
+/* ---- software / hardware columns ---- */
+#ch1 .c1-li{position:relative;font-size:12.5px;line-height:1.45;color:var(--slate);padding-left:13px;margin-bottom:7px}
+#ch1 .c1-li:last-child{margin-bottom:0}
+#ch1 .c1-li::before{content:"";position:absolute;left:0;top:6px;width:5px;height:5px;border-radius:1px;
+  background:var(--navy-line)}
+#ch1 .c1-hwcell .c1-li::before{background:var(--slate3)}
+#ch1 code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;color:var(--ink);background:rgba(20,34,63,.05);
+  border-radius:3px;padding:1px 3px;white-space:nowrap}
+
+/* ---- checks column ---- */
+#ch1 .c1-ckline{display:grid;grid-template-columns:auto 1fr;align-items:start;font-size:12.5px;line-height:1.5;
+  color:var(--slate);padding-left:9px;border-left:2px solid transparent;margin-bottom:9px}
+#ch1 .c1-ckline:last-child{margin-bottom:0}
+#ch1 .c1-ckline.c1-l3{border-left-color:var(--purple)}
+#ch1 .c1-ckline .tagchip{margin-top:2px}
+#ch1 .c1-cad{font-size:10.5px;font-weight:650;color:var(--slate2);white-space:nowrap}
+#ch1 .c1-cknote{font-size:11.5px;font-style:italic;line-height:1.5;color:var(--slate2);margin-top:11px;padding-left:11px}
+
+/* ---- totals strip ---- */
+#ch1 .c1-totals{display:flex;flex-wrap:wrap;align-items:center;gap:9px;margin-top:16px;padding:14px 16px;
+  background:#fff;border:1px solid var(--line);border-left:4px solid var(--navy);border-radius:11px;
+  box-shadow:0 1px 3px rgba(20,34,63,.05)}
+#ch1 .c1-tot{font-size:12.5px;font-weight:650;color:var(--ink);background:var(--panel-warm);
+  border:1px solid var(--line);border-radius:8px;padding:7px 12px}
+#ch1 .c1-tot b{font-size:15px;font-weight:800;margin-right:4px}
+#ch1 .c1-tot.c1-tav{background:var(--green-soft);border-color:var(--green-line);color:var(--green-ink)}
+#ch1 .c1-tot.c1-tql{background:var(--cyan-soft);border-color:var(--cyan-line);color:var(--cyan-ink)}
+#ch1 .c1-tot.c1-tl3{background:var(--purple-soft);border-color:var(--purple-line);color:var(--purple-ink)}
+#ch1 .c1-totnote{font-size:12px;color:var(--slate);margin-left:auto;max-width:340px;line-height:1.45}
+#ch1 .c1-totnote b{color:var(--ink);font-weight:700}
+
+@media (max-width:1220px){
+  #ch1 .c1-totnote{margin-left:0;max-width:none;flex-basis:100%;margin-top:2px}
+}
+
+/* ---- responsive: stack cells under each flow cell ---- */
+#ch1 .c1-lbl{display:none;font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--slate2);margin-bottom:9px}
+@media (max-width:999px){
+  #ch1 .c1-hdr{display:none}
+  #ch1 .c1-row{grid-template-columns:1fr}
+  #ch1 .c1-cell+.c1-cell{border-left:0;border-top:1px dashed var(--line)}
+  #ch1 .c1-lbl{display:block}
+  #ch1 .c1-lin,#ch1 .c1-lout,#ch1 .c1-chev,#ch1 .c1-band .c1-bl{display:none}
+  #ch1 .c1-band{padding-left:18px}
+  #ch1 .c1-nd{margin-left:0}
+  #ch1 .c1-ckcell{padding-left:15px}
+  #ch1 .c1-totnote{margin-left:0}
+}
+@media (max-width:900px){#ch1 h2{font-size:24px}}
+@media print{
+  #ch1 .c1-hdr{position:static}
+  #ch1 .c1-row,#ch1 .c1-band{break-inside:avoid}
+}
+</style>
+<p class="c1-k">SECTION 01 &middot; THE INSTRUMENTED FLOW</p>
+<h2>Fourteen steps, three columns, every check</h2>
+<p class="c1-stand">The Mobile Payment Module flow top-to-bottom, exactly as it runs &mdash; and beside every step, the software it crosses, the hardware it rides, and the checks that watch both. <strong>Every check is read-only; none sits in the payment path.</strong></p>
+<div class="legend"><span class="li"><span class="tagchip tag-av">AV</span> availability &mdash; is it up</span><span class="li"><span class="tagchip tag-ql">QL</span> quality &mdash; is it good</span><span class="li"><span class="tagchip tag-l3">L3</span> business-logic assertion &mdash; did the money move correctly</span><span class="li"><span class="c1-lg"></span> flow, step to step</span><span class="li"><span class="c1-lg c1-dsh"></span> dashed = next-day (T+1), not inferred</span><span class="li"><span class="c1-lgv">&#9662;</span> order of execution &middot; cadence = probe interval</span><span class="li"><span class="flag-ill">ILLUSTRATIVE</span> cadences and thresholds are calibration seeds</span></div>
+<div class="c1-ledger">
+<div class="c1-hdr"><div class="c1-h">The flow <i>top &rarr; bottom</i></div><div class="c1-h">Software <i>front-end &rarr; back-end</i></div><div class="c1-h">Hardware <i>front-end &rarr; back-end</i></div><div class="c1-h">Health checks <i>availability + quality</i></div></div>
+<div class="c1-band"><span class="c1-bl"></span>Phase A &mdash; FRONT-END &amp; ACCESS <em>&middot; S01&ndash;S04</em></div>
+<div class="c1-row">
+<div class="c1-cell c1-flow"><span class="c1-lout"></span><span class="c1-chev">&#9662;</span><div class="c1-fhead"><span class="c1-step">S01</span><div class="c1-ftxt"><div class="c1-ttl">Customer taps Pay Bill</div><div class="c1-plain">UI event in the mobile app; local validation; feature flags fetched</div><div class="c1-chips"><span class="c1-proto">in-app</span></div></div></div></div>
+<div class="c1-cell"><div class="c1-lbl">Software</div><div class="c1-li">Mobile banking app (release vX.Y)</div><div class="c1-li">UI screen + input validation</div><div class="c1-li">Config / feature-flag fetch</div></div>
+<div class="c1-cell c1-hwcell"><div class="c1-lbl">Hardware</div><div class="c1-li">Customer handset (iOS / Android)</div></div>
+<div class="c1-cell c1-ckcell"><div class="c1-lbl">Health checks</div><div class="c1-ckline"><span class="tagchip tag-ql">QL</span><span>Crash-free sessions % by app version (store / crash feed — zero-touch) <span class="c1-cad">&middot; daily</span></span></div><div class="c1-ckline"><span class="tagchip tag-ql">QL</span><span>Version adoption % — regression risk concentrates in the newest build <span class="c1-cad">&middot; daily</span></span></div><div class="c1-ckline"><span class="tagchip tag-ql">QL</span><span>Store-review error signal (login / payment complaint spike, tagged by version) <span class="c1-cad">&middot; daily</span></span></div><div class="c1-cknote">No direct availability probe exists client-side — coverage comes from the synthetic journey (S02–S12) + release health.</div></div>
+</div>
+<div class="c1-row c1-alt">
+<div class="c1-cell c1-flow"><span class="c1-lin"></span><span class="c1-lout"></span><span class="c1-chev">&#9662;</span><div class="c1-fhead"><span class="c1-step">S02</span><div class="c1-ftxt"><div class="c1-ttl">DNS · TLS · transport</div><div class="c1-plain">App resolves the API host and opens TLS over telco data</div><div class="c1-chips"><span class="c1-proto">DNS · TCP 443 · TLS 1.2+</span></div></div></div></div>
+<div class="c1-cell"><div class="c1-lbl">Software</div><div class="c1-li">DNS record (<code>api.{bank}.example</code>)</div><div class="c1-li">TLS certificate chain</div><div class="c1-li">HTTP/2 client stack</div></div>
+<div class="c1-cell c1-hwcell"><div class="c1-lbl">Hardware</div><div class="c1-li">Handset radio → cell tower</div><div class="c1-li">Telco core / APN</div><div class="c1-li">Internet transit</div><div class="c1-li">Bank border router · firewall</div></div>
+<div class="c1-cell c1-ckcell"><div class="c1-lbl">Health checks</div><div class="c1-ckline"><span class="tagchip tag-av">AV</span><span>DNS resolve probe from 2+ vantage points (in-country + regional; 2-of-3 agreement before declaring outage) <span class="c1-cad">&middot; 1m</span></span></div><div class="c1-ckline"><span class="tagchip tag-av">AV</span><span>TCP 443 connect probe (TCP-connect preferred over ICMP — firewalls deprioritise ping) <span class="c1-cad">&middot; 30s</span></span></div><div class="c1-ckline"><span class="tagchip tag-ql">QL</span><span>Hop timing split via curl -w: time_namelookup · time_connect · time_appconnect · time_starttransfer · time_total — isolates DNS vs network vs TLS vs server <span class="c1-cad">&middot; 1m</span></span></div><div class="c1-ckline"><span class="tagchip tag-ql">QL</span><span>Certificate days-left (openssl x509 -checkend; alert &lt;30d) <span class="c1-cad">&middot; daily</span></span></div></div>
+</div>
+<div class="c1-row">
+<div class="c1-cell c1-flow"><span class="c1-lin"></span><span class="c1-lout"></span><span class="c1-chev">&#9662;</span><div class="c1-fhead"><span class="c1-step">S03</span><div class="c1-ftxt"><div class="c1-ttl">Edge — firewall · WAF · load balancer</div><div class="c1-plain">TLS terminates; WAF filters; LB picks a healthy gateway node</div><div class="c1-chips"><span class="c1-proto">HTTPS</span></div></div></div></div>
+<div class="c1-cell"><div class="c1-lbl">Software</div><div class="c1-li">WAF ruleset (version)</div><div class="c1-li">LB pool + health-check config</div><div class="c1-li">Rate-limit policy</div></div>
+<div class="c1-cell c1-hwcell"><div class="c1-lbl">Hardware</div><div class="c1-li">Firewall appliance</div><div class="c1-li">LB pair (VIP)</div><div class="c1-li">DMZ core switch</div></div>
+<div class="c1-cell c1-ckcell"><div class="c1-lbl">Health checks</div><div class="c1-ckline"><span class="tagchip tag-av">AV</span><span>HTTP GET /edge-health via the public VIP <span class="c1-cad">&middot; 30s</span></span></div><div class="c1-ckline"><span class="tagchip tag-av">AV</span><span>LB pool members up (SNMP ltmPoolMbrStatusAvailState-class OID / LB API) — alert on 2-of-4 <span class="c1-cad">&middot; 1m</span></span></div><div class="c1-ckline"><span class="tagchip tag-ql">QL</span><span>Interface health: ifOperStatus paired with ifAdminStatus (separates failed from planned-down) + ifInErrors / ifHCInOctets trend <span class="c1-cad">&middot; 1m</span></span></div><div class="c1-ckline"><span class="tagchip tag-ql">QL</span><span>WAF block-rate vs baseline from edge logs — false-positive storms block real customers <span class="c1-cad">&middot; stream</span></span></div></div>
+</div>
+<div class="c1-row c1-alt">
+<div class="c1-cell c1-flow"><span class="c1-lin"></span><span class="c1-lout"></span><span class="c1-chev">&#9662;</span><div class="c1-fhead"><span class="c1-step">S04</span><div class="c1-ftxt"><div class="c1-ttl">API Gateway routes the request</div><div class="c1-plain">AuthN plugin, rate limits, route to bill-pay service</div><div class="c1-chips"><span class="c1-proto">POST /v1/bills/pay · JSON</span></div></div></div></div>
+<div class="c1-cell"><div class="c1-lbl">Software</div><div class="c1-li">Gateway route table</div><div class="c1-li">Auth plugin (JWT/OAuth2)</div><div class="c1-li"><code>POST /v1/bills/pay</code> contract (JSON schema)</div><div class="c1-li">Access log (per-route)</div></div>
+<div class="c1-cell c1-hwcell"><div class="c1-lbl">Hardware</div><div class="c1-li">Gateway / ingress nodes (VM · K8s)</div></div>
+<div class="c1-cell c1-ckcell"><div class="c1-lbl">Health checks</div><div class="c1-ckline"><span class="tagchip tag-av">AV</span><span>GET /gateway/health (liveness) + /ready (drain-aware) — the two answer different questions <span class="c1-cad">&middot; 30s</span></span></div><div class="c1-ckline"><span class="tagchip tag-ql">QL</span><span>Per-route p95 latency + 5xx rate from access-log stream (1-min rollup) <span class="c1-cad">&middot; stream</span></span></div><div class="c1-ckline"><span class="tagchip tag-ql">QL</span><span>429 / rate-limit hit rate — retry storms self-amplify <span class="c1-cad">&middot; stream</span></span></div><div class="c1-ckline"><span class="tagchip tag-ql">QL</span><span>Contract-drift probe after each deploy: synthetic POST asserts response schema fields, not just status <span class="c1-cad">&middot; on deploy</span></span></div></div>
+</div>
+<div class="c1-band"><span class="c1-bl"></span>Phase B &mdash; SERVICE ORCHESTRATION <em>&middot; S05&ndash;S09</em></div>
+<div class="c1-row">
+<div class="c1-cell c1-flow"><span class="c1-lin"></span><span class="c1-lout"></span><span class="c1-chev">&#9662;</span><div class="c1-fhead"><span class="c1-step">S05</span><div class="c1-ftxt"><div class="c1-ttl">Auth &amp; session validate</div><div class="c1-plain">Token validated; session loaded from cache</div><div class="c1-chips"><span class="c1-proto">gRPC / REST internal</span></div></div></div></div>
+<div class="c1-cell"><div class="c1-lbl">Software</div><div class="c1-li">Auth service</div><div class="c1-li">Token store (cache)</div><div class="c1-li">Session policy</div></div>
+<div class="c1-cell c1-hwcell"><div class="c1-lbl">Hardware</div><div class="c1-li">App server node</div><div class="c1-li">Cache server (in-memory)</div></div>
+<div class="c1-cell c1-ckcell"><div class="c1-lbl">Health checks</div><div class="c1-ckline"><span class="tagchip tag-av">AV</span><span>/auth/health probe <span class="c1-cad">&middot; 30s</span></span></div><div class="c1-ckline"><span class="tagchip tag-av">AV</span><span>Cache PING + hit-ratio read (read-only) <span class="c1-cad">&middot; 30s</span></span></div><div class="c1-ckline"><span class="tagchip tag-ql">QL</span><span>Auth p95 + token-refresh failure rate from service logs <span class="c1-cad">&middot; stream</span></span></div><div class="c1-ckline"><span class="tagchip tag-av">AV</span><span>Synthetic login with seeded account — the only check that proves the whole front door <span class="c1-cad">&middot; 5m</span></span></div></div>
+</div>
+<div class="c1-row c1-alt">
+<div class="c1-cell c1-flow"><span class="c1-lin"></span><span class="c1-lout"></span><span class="c1-chev">&#9662;</span><div class="c1-fhead"><span class="c1-step">S06</span><div class="c1-ftxt"><div class="c1-ttl">OTP challenge → customer approves</div><div class="c1-plain">OTP generated, sent via SMS gateway over telco; customer types it back</div><div class="c1-chips"><span class="c1-proto">SMPP / partner REST · SMS</span><span class="c1-loop">customer enters OTP &#8617;</span></div></div></div></div>
+<div class="c1-cell"><div class="c1-lbl">Software</div><div class="c1-li">OTP service (generate · verify · expiry)</div><div class="c1-li">SMS gateway API + DLR webhook</div><div class="c1-li">Message template</div></div>
+<div class="c1-cell c1-hwcell"><div class="c1-lbl">Hardware</div><div class="c1-li">SMS gateway server (partner)</div><div class="c1-li">Telco SMSC</div><div class="c1-li">Customer handset</div></div>
+<div class="c1-cell c1-ckcell"><div class="c1-lbl">Health checks</div><div class="c1-ckline"><span class="tagchip tag-av">AV</span><span>SMPP enquire_link keepalive / partner API echo <span class="c1-cad">&middot; 1m</span></span></div><div class="c1-ckline"><span class="tagchip tag-ql">QL</span><span>DLR delivery rate per carrier (never blended) + time-to-deliver p90 <span class="c1-cad">&middot; stream</span></span></div><div class="c1-ckline"><span class="tagchip tag-ql">QL</span><span>OTP entry success rate + expiry-before-entry rate from service logs <span class="c1-cad">&middot; stream</span></span></div><div class="c1-ckline c1-l3"><span class="tagchip tag-l3">L3</span><span>End-to-end OTP loop with test MSISDN: request → receive → verify, asserting the code actually arrives and validates <span class="c1-cad">&middot; 15m</span></span></div></div>
+</div>
+<div class="c1-row">
+<div class="c1-cell c1-flow"><span class="c1-lin"></span><span class="c1-lout"></span><span class="c1-chev">&#9662;</span><div class="c1-fhead"><span class="c1-step">S07</span><div class="c1-ftxt"><div class="c1-ttl">Bill inquiry at the biller</div><div class="c1-plain">Orchestrator validates bill ref + amount due with the biller</div><div class="c1-chips"><span class="c1-proto">REST / SOAP &middot; VPN / leased</span></div></div></div></div>
+<div class="c1-cell"><div class="c1-lbl">Software</div><div class="c1-li">Payment orchestrator</div><div class="c1-li">Biller adapter (per-biller mapping)</div><div class="c1-li">Bill-ref validation rules</div></div>
+<div class="c1-cell c1-hwcell"><div class="c1-lbl">Hardware</div><div class="c1-li">App server</div><div class="c1-li">Egress firewall</div><div class="c1-li">Partner link (IPsec VPN · leased)</div></div>
+<div class="c1-cell c1-ckcell"><div class="c1-lbl">Health checks</div><div class="c1-ckline"><span class="tagchip tag-av">AV</span><span>Biller echo / heartbeat endpoint (5s timeout budget) <span class="c1-cad">&middot; 1m</span></span></div><div class="c1-ckline"><span class="tagchip tag-av">AV</span><span>VPN tunnel status via SNMP (cipSecTunStatus-class on Cisco; vendor MIB varies — confirm per device) <span class="c1-cad">&middot; 1m</span></span></div><div class="c1-ckline"><span class="tagchip tag-ql">QL</span><span>Inquiry p95 + biller error mix + timeout rate <span class="c1-cad">&middot; stream</span></span></div><div class="c1-ckline c1-l3"><span class="tagchip tag-l3">L3</span><span>Seeded test bill returns the known amount — asserts the answer, not the connection <span class="c1-cad">&middot; 15m</span></span></div></div>
+</div>
+<div class="c1-row c1-alt">
+<div class="c1-cell c1-flow"><span class="c1-lin"></span><span class="c1-lout"></span><span class="c1-chev">&#9662;</span><div class="c1-fhead"><span class="c1-step">S08</span><div class="c1-ftxt"><div class="c1-ttl">Fraud &amp; limit checks</div><div class="c1-plain">Rules and velocity counters approve the payment</div><div class="c1-chips"><span class="c1-proto">internal</span></div></div></div></div>
+<div class="c1-cell"><div class="c1-lbl">Software</div><div class="c1-li">Rules engine + rule version</div><div class="c1-li">Velocity counters</div><div class="c1-li">Limit config</div></div>
+<div class="c1-cell c1-hwcell"><div class="c1-lbl">Hardware</div><div class="c1-li">App server</div><div class="c1-li">Counter store (cache)</div></div>
+<div class="c1-cell c1-ckcell"><div class="c1-lbl">Health checks</div><div class="c1-ckline"><span class="tagchip tag-av">AV</span><span>/fraud/health probe <span class="c1-cad">&middot; 30s</span></span></div><div class="c1-ckline"><span class="tagchip tag-ql">QL</span><span>Decision latency p95 <span class="c1-cad">&middot; stream</span></span></div><div class="c1-ckline"><span class="tagchip tag-ql">QL</span><span>Block-rate vs baseline, annotated with rule-version deploy markers — a spike after a rule push is a misfire, not fraud <span class="c1-cad">&middot; stream</span></span></div></div>
+</div>
+<div class="c1-row">
+<div class="c1-cell c1-flow"><span class="c1-lin"></span><span class="c1-lout"></span><span class="c1-chev">&#9662;</span><div class="c1-fhead"><span class="c1-step">S09</span><div class="c1-ftxt"><div class="c1-ttl">Balance read</div><div class="c1-plain">Accounts service reads available balance (replica)</div><div class="c1-chips"><span class="c1-proto">SQL / core API read</span></div></div></div></div>
+<div class="c1-cell"><div class="c1-lbl">Software</div><div class="c1-li">Accounts &amp; balance service</div><div class="c1-li">Core read adapter / replica query</div></div>
+<div class="c1-cell c1-hwcell"><div class="c1-lbl">Hardware</div><div class="c1-li">App server</div><div class="c1-li">DB replica server</div><div class="c1-li">SAN / storage</div></div>
+<div class="c1-cell c1-ckcell"><div class="c1-lbl">Health checks</div><div class="c1-ckline"><span class="tagchip tag-av">AV</span><span>Canary query on a seeded row (deeper than SELECT 1 — proves data, not just the listener) <span class="c1-cad">&middot; 30s</span></span></div><div class="c1-ckline"><span class="tagchip tag-ql">QL</span><span>Replication lag (Seconds_Behind_Source / pg_stat_replication) — caveat: can read 0 while stalled; corroborate with heartbeat-table timestamp <span class="c1-cad">&middot; 1m</span></span></div><div class="c1-ckline"><span class="tagchip tag-ql">QL</span><span>Read p95 + connection-pool saturation <span class="c1-cad">&middot; stream</span></span></div><div class="c1-ckline c1-l3"><span class="tagchip tag-l3">L3</span><span>Balance assertion: seeded funded account must read its known balance — the guard against silent false 'insufficient funds' <span class="c1-cad">&middot; 5m</span></span></div></div>
+</div>
+<div class="c1-band"><span class="c1-bl"></span>Phase C &mdash; MONEY MOVEMENT <em>&middot; S10&ndash;S12</em></div>
+<div class="c1-row c1-alt">
+<div class="c1-cell c1-flow"><span class="c1-lin"></span><span class="c1-lout"></span><span class="c1-chev">&#9662;</span><div class="c1-fhead"><span class="c1-step">S10</span><div class="c1-ftxt"><div class="c1-ttl">Core posts the debit</div><div class="c1-plain">Core banking writes the debit; journal + GL entries</div><div class="c1-chips"><span class="c1-proto">core API / MQ</span></div></div></div></div>
+<div class="c1-cell"><div class="c1-lbl">Software</div><div class="c1-li">Core posting interface</div><div class="c1-li">Transaction journal</div><div class="c1-li">GL entry rules</div><div class="c1-li">EOD / batch scheduler</div></div>
+<div class="c1-cell c1-hwcell"><div class="c1-lbl">Hardware</div><div class="c1-li">Core app server</div><div class="c1-li">Core DB server</div><div class="c1-li">SAN (disk latency · IOPS)</div></div>
+<div class="c1-cell c1-ckcell"><div class="c1-lbl">Health checks</div><div class="c1-ckline"><span class="tagchip tag-av">AV</span><span>Core interface heartbeat transaction (read-only echo) <span class="c1-cad">&middot; 1m</span></span></div><div class="c1-ckline"><span class="tagchip tag-ql">QL</span><span>EOD / batch window marker feed — context that separates 'planned window' from 'incident' <span class="c1-cad">&middot; event</span></span></div><div class="c1-ckline"><span class="tagchip tag-ql">QL</span><span>Posting p95 + posting error codes <span class="c1-cad">&middot; stream</span></span></div><div class="c1-ckline"><span class="tagchip tag-ql">QL</span><span>Storage health: disk latency / IOPS via storage API or vendor MIB (no standard MIB — per-array) <span class="c1-cad">&middot; 5m</span></span></div><div class="c1-ckline c1-l3"><span class="tagchip tag-l3">L3</span><span>Debit-visible assertion: synthetic payment's debit appears in the journal within N seconds <span class="c1-cad">&middot; 5m</span></span></div></div>
+</div>
+<div class="c1-row">
+<div class="c1-cell c1-flow"><span class="c1-lin"></span><span class="c1-lout"></span><span class="c1-chev">&#9662;</span><div class="c1-fhead"><span class="c1-step">S11</span><div class="c1-ftxt"><div class="c1-ttl">Biller payment leg + confirmation</div><div class="c1-plain">Biller credited / notified; callback confirms; retries are idempotent</div><div class="c1-chips"><span class="c1-proto">REST · idempotency key · webhook</span></div></div></div></div>
+<div class="c1-cell"><div class="c1-lbl">Software</div><div class="c1-li">Biller payment API call</div><div class="c1-li">Idempotency-key handling</div><div class="c1-li">Retry policy</div><div class="c1-li">Callback receiver</div></div>
+<div class="c1-cell c1-hwcell"><div class="c1-lbl">Hardware</div><div class="c1-li">Egress path (as S07)</div><div class="c1-li">Partner infrastructure</div></div>
+<div class="c1-cell c1-ckcell"><div class="c1-lbl">Health checks</div><div class="c1-ckline"><span class="tagchip tag-ql">QL</span><span>Payment-leg success rate + callback arrival p90 <span class="c1-cad">&middot; stream</span></span></div><div class="c1-ckline c1-l3"><span class="tagchip tag-l3">L3</span><span>Idempotency replay assertion: same key twice → one debit — the double-debit guard <span class="c1-cad">&middot; daily</span></span></div><div class="c1-ckline c1-l3"><span class="tagchip tag-l3">L3</span><span>Orphaned-debit sweep: debit posted with no biller ACK within T → BUSINESS_FAIL (15–30 min narrow window + daily deep sweep) <span class="c1-cad">&middot; 15m</span></span></div></div>
+</div>
+<div class="c1-row c1-alt">
+<div class="c1-cell c1-flow"><span class="c1-lin"></span><span class="c1-lout"></span><span class="c1-chev">&#9662;</span><div class="c1-fhead"><span class="c1-step">S12</span><div class="c1-ftxt"><div class="c1-ttl">Receipt &amp; notification</div><div class="c1-plain">Push / SMS receipt; app shows success; customer leaves</div><div class="c1-chips"><span class="c1-proto">push (FCM/APNs) · SMS fallback</span></div></div></div></div>
+<div class="c1-cell"><div class="c1-lbl">Software</div><div class="c1-li">Notification service</div><div class="c1-li">Push provider API</div><div class="c1-li">SMS fallback route</div><div class="c1-li">Receipt template</div></div>
+<div class="c1-cell c1-hwcell"><div class="c1-lbl">Hardware</div><div class="c1-li">App server</div><div class="c1-li">Internet egress</div><div class="c1-li">Push provider infra</div><div class="c1-li">Customer handset</div></div>
+<div class="c1-cell c1-ckcell"><div class="c1-lbl">Health checks</div><div class="c1-ckline"><span class="tagchip tag-av">AV</span><span>Push-provider API status probe <span class="c1-cad">&middot; 5m</span></span></div><div class="c1-ckline"><span class="tagchip tag-ql">QL</span><span>Notification delivery rate + p90 delay (provider receipts + queue metrics) <span class="c1-cad">&middot; stream</span></span></div><div class="c1-ckline c1-l3"><span class="tagchip tag-l3">L3</span><span>Receipt-content assertion on the synthetic run: confirmation amount matches the posted amount <span class="c1-cad">&middot; per run</span></span></div></div>
+</div>
+<div class="c1-band"><span class="c1-bl"></span>Phase D &mdash; AFTER THE PAYMENT <em>&middot; S13&ndash;S14</em></div>
+<div class="c1-row">
+<div class="c1-cell c1-flow"><span class="c1-lin"></span><span class="c1-lout c1-dsh"></span><span class="c1-chev">&#9662;</span><div class="c1-fhead"><span class="c1-step">S13</span><div class="c1-ftxt"><div class="c1-ttl">Statement &amp; history update (async)</div><div class="c1-plain">Queue consumer writes history; app history syncs</div><div class="c1-chips"><span class="c1-proto">MQ topic</span></div></div></div></div>
+<div class="c1-cell"><div class="c1-lbl">Software</div><div class="c1-li">Message topic</div><div class="c1-li">History consumer service</div><div class="c1-li">History store write</div></div>
+<div class="c1-cell c1-hwcell"><div class="c1-lbl">Hardware</div><div class="c1-li">Queue broker server</div><div class="c1-li">DB primary</div><div class="c1-li">Storage</div></div>
+<div class="c1-cell c1-ckcell"><div class="c1-lbl">Health checks</div><div class="c1-ckline"><span class="tagchip tag-av">AV</span><span>Broker health probe <span class="c1-cad">&middot; 30s</span></span></div><div class="c1-ckline"><span class="tagchip tag-ql">QL</span><span>Consumer lag + oldest-message age (age alarms better than depth) <span class="c1-cad">&middot; 1m</span></span></div><div class="c1-ckline c1-l3"><span class="tagchip tag-l3">L3</span><span>History-visible assertion: synthetic payment appears in statement API within 15 min — guards 'history not syncing' complaints <span class="c1-cad">&middot; 15m</span></span></div></div>
+</div>
+<div class="c1-row c1-alt">
+<div class="c1-cell c1-flow c1-s14"><span class="c1-lin c1-dsh"></span><div class="c1-nd">next day</div><div class="c1-fhead"><span class="c1-step">S14</span><div class="c1-ftxt"><div class="c1-ttl">T+1 reconciliation</div><div class="c1-plain">Settlement files matched: gateway ↔ core ↔ biller (once · amount · order · window)</div><div class="c1-chips"><span class="c1-proto">SFTP files · batch</span></div></div></div></div>
+<div class="c1-cell"><div class="c1-lbl">Software</div><div class="c1-li">Recon engine + match rules</div><div class="c1-li">Settlement file ingest</div><div class="c1-li">Exception queue</div></div>
+<div class="c1-cell c1-hwcell"><div class="c1-lbl">Hardware</div><div class="c1-li">SFTP / file server</div><div class="c1-li">Recon server</div><div class="c1-li">Archive storage</div></div>
+<div class="c1-cell c1-ckcell"><div class="c1-lbl">Health checks</div><div class="c1-ckline"><span class="tagchip tag-av">AV</span><span>File-arrival-by-deadline check, size-stable across two polls (arrived ≠ finished writing) <span class="c1-cad">&middot; daily</span></span></div><div class="c1-ckline"><span class="tagchip tag-ql">QL</span><span>Match rate % + exception count and exception age trend <span class="c1-cad">&middot; daily</span></span></div><div class="c1-ckline"><span class="tagchip tag-ql">QL</span><span>Unmatched-value at risk (sum of unmatched debits) <span class="c1-cad">&middot; daily</span></span></div><div class="c1-ckline c1-l3"><span class="tagchip tag-l3">L3</span><span>Closure assertion: every synthetic payment from S04 appears matched next morning — the loop that proves the whole ledger <span class="c1-cad">&middot; daily</span></span></div></div>
+</div>
+</div>
+<div class="c1-totals"><span class="c1-tot"><b>14</b> steps</span><span class="c1-tot"><b>52</b> checks</span><span class="c1-tot c1-tav"><b>17</b> AV &middot; availability</span><span class="c1-tot c1-tql"><b>26</b> QL &middot; quality</span><span class="c1-tot c1-tl3"><b>9</b> L3 &middot; assertions</span><span class="c1-totnote">A read-only overlay over the tools you already run. <b>No agents in the payment path.</b> Reversible by design.</span></div>
+<div class="note-card"><b>Reading the ledger:</b> the columns run front-end to back-end exactly as the request travels &mdash; the software each step crosses, the hardware it rides, and the checks that watch both. The checks column is the platform&rsquo;s work order: <b>availability</b> answers <i>is it up</i>, <b>quality</b> answers <i>is it good</i>, and <b>L3 assertions</b> answer <i>did the money move correctly</i> &mdash; the layer where a 200 OK can still be a failed payment. All three objectives sit in one table: a full-flow health check across software <i>and</i> hardware; quality defined per segment, which Section 02 turns into bands; and a root cause locatable when behaviour turns abnormal, which Section 03 reads as a fingerprint. Every check here is read-only &mdash; probes from outside, log and receipt reads, canary queries on read replicas, file checks. Beside your stack, never in the transaction path.</div>
+</section>
+
+  <div class="bridge"><strong>A check is only half a sentence.</strong> "Gateway p95 is 480 ms" means nothing until you know the band it should live in. Section 02 gives every segment its numbers — the floor for availability, the band for quality, and the line where someone gets paged.</div>
+
+<section id="ch2" class="chapter">
+<style>
+.c2b-k{color:var(--purple-ink);font-size:11px;font-weight:750;letter-spacing:.16em}
+.c2b-h{font-size:29px;line-height:1.14;font-weight:760;letter-spacing:-.3px;color:var(--ink);margin:11px 0 10px}
+.c2b-stand{font-size:15.5px;color:var(--slate);max-width:880px;line-height:1.62;margin:0 0 22px}
+.c2b-stand strong{color:var(--ink)}
+.c2b-cap{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:11.5px;font-weight:700;
+  letter-spacing:.06em;text-transform:uppercase;color:var(--slate2);margin:0 0 9px}
+.c2b-cap .sub{font-size:11.5px;font-weight:600;letter-spacing:0;text-transform:none;color:var(--slate2)}
+.c2b-scroll{overflow-x:auto;border-radius:12px;box-shadow:0 1px 3px rgba(20,34,63,.07),0 6px 22px rgba(20,34,63,.05)}
+.c2b-tbl{width:100%;min-width:900px;border-collapse:collapse;background:#fff;border:1px solid var(--line);
+  border-radius:12px;overflow:hidden}
+.c2b-tbl th{background:var(--navy);color:#fff;text-align:left;font-size:10.5px;font-weight:750;
+  letter-spacing:.08em;text-transform:uppercase;padding:11px 13px;vertical-align:bottom;line-height:1.35}
+.c2b-tbl th .sq{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:7px;vertical-align:0}
+.c2b-tbl td{padding:11px 13px;border-top:1px solid var(--line);font-size:12.5px;color:var(--slate);
+  vertical-align:top;line-height:1.5}
+.c2b-tbl tr:nth-child(even) td{background:var(--panel-alt)}
+.c2b-seg{display:flex;gap:8px;align-items:flex-start;font-weight:700;color:var(--ink);font-size:13px}
+.c2b-seg small{display:block;font-weight:600;color:var(--slate2);font-size:11px;margin-top:2px;letter-spacing:.02em}
+.c2b-n{display:flex;align-items:center;justify-content:center;width:19px;height:19px;border-radius:5px;
+  background:var(--navy);color:#fff;font-size:10.5px;font-weight:750;flex:none;margin-top:1px}
+.c2b-av{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11.5px;color:var(--green-ink)}
+.c2b-ql{color:var(--slate)}
+.c2b-deg{color:var(--amber-ink)}
+.c2b-pg{color:var(--coral-ink)}
+.c2b-guard{display:inline-block;font-size:9.5px;font-weight:750;letter-spacing:.05em;text-transform:uppercase;
+  color:var(--purple-ink);background:var(--purple-soft);border:1px solid #D9CDEA;border-radius:4px;
+  padding:1px 6px;margin-left:5px;white-space:nowrap}
+.c2b-ph{font-size:17px;font-weight:760;color:var(--ink);margin:34px 0 5px}
+.c2b-pl{font-size:13.5px;color:var(--slate);max-width:900px;line-height:1.6;margin:0 0 15px}
+.c2b-pl code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;color:var(--purple-ink)}
+.c2b-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}
+.c2b-card{display:flex;flex-direction:column;background:#fff;border:1px solid var(--line);border-radius:12px;
+  padding:13px 14px;box-shadow:0 1px 2px rgba(20,34,63,.05)}
+.c2b-card .monocard{flex:1}
+.c2b-ch{display:flex;align-items:center;gap:9px;margin-bottom:9px}
+.c2b-tag{font-size:10px;font-weight:750;letter-spacing:.06em;color:#fff;background:var(--purple);
+  border-radius:4px;padding:2px 7px}
+.c2b-ct{font-size:13px;font-weight:700;color:var(--ink)}
+.c2b-pre{white-space:pre-wrap;overflow-wrap:break-word;overflow-x:visible}
+@media (max-width:900px){.c2b-grid{grid-template-columns:1fr}.c2b-h{font-size:24px}}
+</style>
+  <div class="c2b-k">SECTION 02 · QUALITY DURING NORMAL OPERATION</div>
+  <h2 class="c2b-h">Numbers that mean &ldquo;healthy&rdquo;</h2>
+  <p class="c2b-stand">A check without a normal band is a light without a meaning. <strong>Nine segments, each with an availability floor and quality bands</strong> — green, degraded, page. All bands are ILLUSTRATIVE seeds for discovery.</p>
+  <div class="c2b-cap"><span>Table 02 · Normal bands, by segment</span><span class="flag-ill">ILLUSTRATIVE</span><span class="sub">availability floor · quality band · degraded · page</span></div>
+  <div class="c2b-scroll">
+  <table class="c2b-tbl">
+    <colgroup><col style="width:17%"><col style="width:15%"><col style="width:24%"><col style="width:20%"><col style="width:24%"></colgroup>
+    <thead><tr>
+      <th>Segment</th>
+      <th><span class="sq" style="background:#5FA88F"></span>Availability floor</th>
+      <th><span class="sq" style="background:#5AA7C2"></span>Quality — normal band</th>
+      <th><span class="sq" style="background:#D2A44E"></span>Degraded when</th>
+      <th><span class="sq" style="background:#D8776A"></span>Page (red) when</th>
+    </tr></thead>
+    <tbody>
+      <tr>
+        <td><span class="c2b-seg"><span class="c2b-n">1</span><span>Edge reachability<small>DNS·TLS·VIP</small></span></span></td>
+        <td><span class="c2b-av">probe success ≥99.95%</span></td>
+        <td class="c2b-ql">time_connect p95 &lt;150ms in-country · cert ≥30d</td>
+        <td class="c2b-deg">connect p95 &gt;300ms or vantage split</td>
+        <td class="c2b-pg">2-of-3 vantages fail ×3 consecutive</td>
+      </tr>
+      <tr>
+        <td><span class="c2b-seg"><span class="c2b-n">2</span><span>API gateway</span></span></td>
+        <td><span class="c2b-av">/health ≥99.95%</span></td>
+        <td class="c2b-ql">route p95 &lt;500ms · 5xx &lt;0.1% · 429 ≈0</td>
+        <td class="c2b-deg">p95 500–800ms or 5xx 0.1–1%</td>
+        <td class="c2b-pg">5xx &gt;1% or /health fail ×3</td>
+      </tr>
+      <tr>
+        <td><span class="c2b-seg"><span class="c2b-n">3</span><span>Auth + session</span></span></td>
+        <td><span class="c2b-av">login synthetic ≥99.5% pass</span></td>
+        <td class="c2b-ql">auth p95 &lt;400ms · refresh-fail &lt;0.5%</td>
+        <td class="c2b-deg">funnel −2pts vs baseline</td>
+        <td class="c2b-pg">login synthetic fail ×2</td>
+      </tr>
+      <tr>
+        <td><span class="c2b-seg"><span class="c2b-n">4</span><span>OTP loop</span></span></td>
+        <td><span class="c2b-av">partner echo ≥99.9%</span></td>
+        <td class="c2b-ql">DLR ≥97% in 30s per carrier · deliver p90 &lt;15s</td>
+        <td class="c2b-deg">DLR 90–97%</td>
+        <td class="c2b-pg">DLR &lt;90% or OTP synthetic stuck ×2</td>
+      </tr>
+      <tr>
+        <td><span class="c2b-seg"><span class="c2b-n">5</span><span>Biller link</span></span></td>
+        <td><span class="c2b-av">echo ≥99.9%</span></td>
+        <td class="c2b-ql">inquiry p95 &lt;2s · timeout &lt;0.5%</td>
+        <td class="c2b-deg">p95 2–5s</td>
+        <td class="c2b-pg">echo fail ×3 or timeout &gt;2%</td>
+      </tr>
+      <tr>
+        <td><span class="c2b-seg"><span class="c2b-n">6</span><span>Balance &amp; replica</span></span></td>
+        <td><span class="c2b-av">canary query ok</span></td>
+        <td class="c2b-ql">lag &lt;5s · read p95 &lt;300ms</td>
+        <td class="c2b-deg">lag 5–30s</td>
+        <td class="c2b-pg">lag &gt;30s or balance assertion FAIL <span class="c2b-guard">silent-failure guard</span></td>
+      </tr>
+      <tr>
+        <td><span class="c2b-seg"><span class="c2b-n">7</span><span>Core posting</span></span></td>
+        <td><span class="c2b-av">heartbeat ok in window</span></td>
+        <td class="c2b-ql">posting p95 &lt;1.5s · pending-age p95 &lt;60s</td>
+        <td class="c2b-deg">p95 &gt;3s or pending-age rising ×3 intervals</td>
+        <td class="c2b-pg">heartbeat fail or debit-visible assertion FAIL</td>
+      </tr>
+      <tr>
+        <td><span class="c2b-seg"><span class="c2b-n">8</span><span>Notify &amp; receipt</span></span></td>
+        <td><span class="c2b-av">provider probe ok</span></td>
+        <td class="c2b-ql">delivery ≥98% in 60s · queue lag &lt;1min</td>
+        <td class="c2b-deg">delay p90 &gt;5min</td>
+        <td class="c2b-pg">provider down AND fallback failing</td>
+      </tr>
+      <tr>
+        <td><span class="c2b-seg"><span class="c2b-n">9</span><span>Recon T+1</span></span></td>
+        <td><span class="c2b-av">files by 07:00, size-stable</span></td>
+        <td class="c2b-ql">match ≥99.5% · exceptions flat</td>
+        <td class="c2b-deg">match 98–99.5%</td>
+        <td class="c2b-pg">file misses deadline or synthetic unmatched</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+  <h3 class="c2b-ph">Probing normal, by hand or by monitor</h3>
+  <p class="c2b-pl">Any of these imports straight into a monitor — <code>Import-from-cURL</code> auto-fills; the full 25-probe suite lives in the cURL addendum.</p>
+  <div class="c2b-grid">
+    <div class="c2b-card">
+      <div class="c2b-ch"><span class="c2b-tag">P1</span><span class="c2b-ct">Path timing</span></div>
+      <div class="monocard c2b-pre">curl -s -o /dev/null \
+  -w 'dns:%{time_namelookup} tcp:%{time_connect} tls:%{time_appconnect} ttfb:%{time_starttransfer} total:%{time_total}\n' \
+  https://api.{bank}.example/health</div>
+    </div>
+    <div class="c2b-card">
+      <div class="c2b-ch"><span class="c2b-tag">P2</span><span class="c2b-ct">Contract + business assertion</span></div>
+      <div class="monocard c2b-pre">curl -s -X POST https://api.{bank}.example/v1/bills/pay \
+  -H 'Authorization: Bearer $SEEDED' -d @seeded_bill.json \
+  | jq -e '.status=="ACCEPTED" and .amount==45000'</div>
+    </div>
+    <div class="c2b-card">
+      <div class="c2b-ch"><span class="c2b-tag">P3</span><span class="c2b-ct">Cert days-left</span></div>
+      <div class="monocard c2b-pre">echo | openssl s_client -connect api.{bank}.example:443 \
+  -servername api.{bank}.example 2&gt;/dev/null \
+  | openssl x509 -noout -checkend 2592000</div>
+    </div>
+    <div class="c2b-card">
+      <div class="c2b-ch"><span class="c2b-tag">P4</span><span class="c2b-ct">Biller echo</span></div>
+      <div class="monocard c2b-pre">curl -s -m 5 https://biller-gw.example/echo \
+  -w 'code:%{http_code} total:%{time_total}\n'</div>
+    </div>
+  </div>
+  <div class="note-card"><span><b>Reading the bands:</b> these are calibration outputs of the first two observation weeks per bank, not promises — the floor is what the segment must clear to count as up, the band is what it looks like when nobody notices, and the page line is where a human is woken. Quality, in one sentence, is <b>the band the customer never notices</b>. <b>Section 03 is what the same checks say when something is wrong.</b></span></div>
+</section>
+
+
+  <div class="bridge"><strong>Normal is the baseline; the payoff is abnormal.</strong> When behaviour turns strange, the same checks read top-to-bottom become a fingerprint — and the fingerprint, not a war-room, names the layer and the team.</div>
+
+<section id="ch3" class="chapter">
+<style>
+.c3b-k{color:var(--purple-ink);font-size:11px;font-weight:750;letter-spacing:.16em}
+.c3b-h{font-size:29px;line-height:1.14;font-weight:760;letter-spacing:-.3px;color:var(--ink);margin:11px 0 10px}
+.c3b-stand{font-size:15.5px;color:var(--slate);max-width:880px;line-height:1.62;margin:0 0 16px}
+.c3b-stand strong{color:var(--ink)}
+.c3b-leg{display:flex;gap:16px;flex-wrap:wrap;align-items:center;background:#fff;border:1px solid var(--line);
+  border-radius:10px;padding:9px 14px;font-size:12px;color:var(--slate);margin:0 0 14px}
+.c3b-leg .li{display:flex;align-items:center;gap:7px}
+.c3b-leg .sym-ok,.c3b-leg .sym-fail{font-size:14px;line-height:1}
+.c3b-leg .sym-deg{font-size:18px;line-height:1}
+.c3b-leg .sil{width:13px;height:13px;border-radius:3px;background:var(--navy);border:1.5px solid var(--coral)}
+.c3b-frame{border:2px solid var(--purple);border-radius:16px;background:#fff;padding:10px;
+  box-shadow:0 8px 30px rgba(91,44,145,.10)}
+.c3b-scroll{overflow-x:auto;border-radius:9px}
+.c3b-tbl{border-collapse:separate;border-spacing:0;width:100%;min-width:1130px;background:#fff}
+.c3b-tbl th,.c3b-tbl td{text-align:left;vertical-align:top}
+.c3b-tbl thead th{background:var(--navy);color:#fff;padding:10px 12px;font-size:11.5px;font-weight:750;
+  line-height:1.35;border-bottom:2px solid var(--navy)}
+.c3b-tbl thead th.rowhead{font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:#B9C4DA;
+  width:236px;min-width:236px;position:sticky;left:0;z-index:5}
+.c3b-tbl thead th .ltr{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;
+  border-radius:5px;background:rgba(255,255,255,.16);font-size:11px;font-weight:800;margin-right:8px}
+.c3b-tbl thead th.sil{background:var(--navy);box-shadow:inset 0 0 0 1.5px var(--coral)}
+.c3b-tbl thead th .tag{display:inline-block;margin:6px 0 0 8px;font-size:9.5px;font-weight:750;
+  letter-spacing:.07em;color:#FBEBE8;border:1px solid var(--coral);border-radius:4px;padding:1px 6px}
+.c3b-tbl tbody td{padding:9px 12px;border-bottom:1px solid var(--line);font-size:12.5px;color:var(--slate)}
+.c3b-tbl tbody tr:nth-child(even) td{background:var(--panel-alt)}
+.c3b-tbl tbody td.rk{position:sticky;left:0;z-index:3;background:#fff;border-right:1px solid var(--line)}
+.c3b-tbl tbody tr:nth-child(even) td.rk{background:var(--panel-alt)}
+.c3b-rw{display:flex;gap:8px;align-items:flex-start}
+.c3b-rn{display:flex;align-items:center;justify-content:center;width:19px;height:19px;border-radius:5px;
+  background:var(--navy-soft);color:var(--navy);font-size:10.5px;font-weight:750;flex:none;margin-top:1px}
+.c3b-rt{font-weight:650;color:var(--ink);font-size:12.5px;line-height:1.4}
+.c3b-rs{display:block;margin-top:2px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:10px;color:var(--slate2);letter-spacing:.02em}
+.c3b-tbl tbody td.c3b-cell{text-align:center}
+.c3b-sym{font-size:20px;line-height:1.05;display:block}
+.c3b-sym.s-deg{font-size:26px}      /* U+25D0 inks only its left half — size it up to match ● */
+.c3b-sym.s-fail{font-size:18px}
+.c3b-sl{color:var(--slate2);font-weight:700;font-size:15px;margin:0 1px;vertical-align:2px}
+.c3b-nt{display:block;font-size:10.5px;line-height:1.4;color:var(--slate2);margin-top:2px}
+.c3b-d{background:var(--navy-soft)!important;border-left:1.5px solid var(--coral);border-right:1.5px solid var(--coral)}
+.c3b-d .c3b-nt{color:#3E4E6E}
+.c3b-first{display:inline-block;border:1.5px solid var(--coral);border-radius:999px;padding:0 8px;
+  background:rgba(255,255,255,.55)}
+.c3b-sum td{border-top:1px solid var(--navy-line);background:#F4F6FB!important;padding:10px 12px;font-size:12px;
+  color:var(--ink)}
+.c3b-sum.top td{border-top:2.5px solid var(--navy)}
+.c3b-sum td.rk{position:sticky;left:0;z-index:3;background:#EAEDF4!important;border-right:1px solid var(--navy-line)}
+.c3b-sl2{font-size:10px;font-weight:750;letter-spacing:.08em;text-transform:uppercase;color:var(--navy)}
+.c3b-sl2 small{display:block;font-weight:600;letter-spacing:.02em;text-transform:none;font-size:10.5px;
+  color:var(--slate);margin-top:3px}
+.c3b-p1,.c3b-p2{display:inline-block;font-size:10px;font-weight:750;letter-spacing:.06em;border-radius:4px;
+  padding:1px 6px;margin-right:5px}
+.c3b-p1{color:var(--coral-ink);background:var(--coral-soft);border:1px solid var(--coral-line)}
+.c3b-p2{color:var(--amber-ink);background:var(--amber-soft);border:1px solid var(--amber-line)}
+.c3b-mini{display:block;font-size:10.5px;color:var(--slate);margin-top:2px}
+.c3b-live{display:inline-block;font-size:11px;font-weight:650;color:var(--purple-ink);
+  text-decoration:none;border-bottom:1px dotted var(--purple-line)}
+.c3b-live:hover{color:var(--purple);border-bottom-style:solid}
+.c3b-ev{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin-top:13px}
+.c3b-evc{background:#fff;border:1px solid var(--line);border-top:3px solid var(--cyan);border-radius:10px;
+  padding:10px 12px;font-size:11.5px;color:var(--slate);line-height:1.5}
+.c3b-evc b{display:block;font-size:10px;font-weight:750;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--cyan-ink);margin-bottom:4px}
+.c3b-evh{font-size:10.5px;font-weight:750;letter-spacing:.09em;text-transform:uppercase;color:var(--slate2);
+  margin:20px 0 0}
+.c3b-hint{display:none;font-size:11px;color:var(--slate2);margin:0 0 8px;font-style:italic}
+@media (max-width:1230px){.c3b-hint{display:block}}
+@media (max-width:900px){.c3b-ev{grid-template-columns:repeat(2,minmax(0,1fr))}.c3b-h{font-size:24px}}
+</style>
+  <div class="c3b-k">SECTION 03 · ROOT CAUSE DURING ABNORMAL BEHAVIOUR</div>
+  <h2 class="c3b-h">Five failures, five fingerprints</h2>
+  <p class="c3b-stand">Run the same checks top-to-bottom. Row 1 says <strong>something is wrong</strong>; the <strong>first failing component check beneath it</strong> says where. The pattern of pass / degraded / fail is a fingerprint; the fingerprint names the layer, and the layer names the team.</p>
+  <div class="c3b-leg">
+    <span class="li"><span class="sym-ok">●</span> pass</span>
+    <span class="li"><span class="sym-deg">◐</span> degraded</span>
+    <span class="li"><span class="sym-fail">✕</span> fail</span>
+    <span class="li"><span class="c3b-first">first failing component check</span></span>
+    <span class="li"><span class="sil"></span> silent failure — the rails answer 200 while the business outcome is wrong</span>
+    <span class="li"><span class="flag-ill">ILLUSTRATIVE</span> worked examples, not measured incidents</span>
+  </div>
+  <p class="c3b-hint">Wide table — scroll sideways for scenarios D and E; the check column stays put.</p>
+  <div class="c3b-frame">
+  <div class="c3b-scroll">
+  <table class="c3b-tbl">
+    <colgroup><col style="width:236px"><col span="5" style="width:17.8%"></colgroup>
+    <thead><tr>
+      <th class="rowhead">Check · read top &rarr; bottom</th>
+      <th class=""><span class="ltr">A</span>Regional telco data outage</th>
+      <th class=""><span class="ltr">B</span>LB pool degradation</th>
+      <th class=""><span class="ltr">C</span>OTP provider degraded</th>
+      <th class="sil"><span class="ltr">D</span>Replica lag → silent false declines<span class="tag">200-GREEN</span></th>
+      <th class=""><span class="ltr">E</span>EOD batch overrun</th>
+    </tr></thead>
+    <tbody>
+      <tr>
+        <td class="rk"><span class="c3b-rw"><span class="c3b-rn">1</span><span class="c3b-rt">E2E Pay-Bill synthetic<span class="c3b-rs">S02–S12</span></span></span></td>
+        <td class="c3b-cell"><span class="c3b-sym s-deg"><span class="sym-deg">◐</span></span><span class="c3b-nt">in-country vantage fails, regional passes</span></td>
+        <td class="c3b-cell"><span class="c3b-sym s-deg"><span class="sym-deg">◐</span></span><span class="c3b-nt">intermittent</span></td>
+        <td class="c3b-cell"><span class="c3b-sym s-fail"><span class="sym-fail">✕</span></span><span class="c3b-nt">stuck at S06</span></td>
+        <td class="c3b-cell c3b-d"><span class="c3b-sym s-ok"><span class="sym-ok">●</span></span></td>
+        <td class="c3b-cell"><span class="c3b-sym s-deg"><span class="sym-deg">◐</span></span><span class="c3b-nt">slow</span></td>
+      </tr>
+      <tr>
+        <td class="rk"><span class="c3b-rw"><span class="c3b-rn">2</span><span class="c3b-rt">DNS / TCP / TLS vantage probes<span class="c3b-rs">S02</span></span></span></td>
+        <td class="c3b-cell"><span class="c3b-sym s-fail"><span class="c3b-first"><span class="sym-fail">✕</span><span class="c3b-sl">/</span><span class="sym-ok">●</span></span></span><span class="c3b-nt">vantage split</span></td>
+        <td class="c3b-cell"><span class="c3b-sym s-ok"><span class="sym-ok">●</span></span></td>
+        <td class="c3b-cell"><span class="c3b-sym s-ok"><span class="sym-ok">●</span></span></td>
+        <td class="c3b-cell c3b-d"><span class="c3b-sym s-ok"><span class="sym-ok">●</span></span></td>
+        <td class="c3b-cell"><span class="c3b-sym s-ok"><span class="sym-ok">●</span></span></td>
+      </tr>
+      <tr>
+        <td class="rk"><span class="c3b-rw"><span class="c3b-rn">3</span><span class="c3b-rt">Edge VIP /health + pool members<span class="c3b-rs">S03</span></span></span></td>
+        <td class="c3b-cell"><span class="c3b-sym s-ok"><span class="sym-ok">●</span></span></td>
+        <td class="c3b-cell"><span class="c3b-sym s-fail"><span class="c3b-first"><span class="sym-fail">✕</span></span></span><span class="c3b-nt">2-of-4 members down</span></td>
+        <td class="c3b-cell"><span class="c3b-sym s-ok"><span class="sym-ok">●</span></span></td>
+        <td class="c3b-cell c3b-d"><span class="c3b-sym s-ok"><span class="sym-ok">●</span></span></td>
+        <td class="c3b-cell"><span class="c3b-sym s-ok"><span class="sym-ok">●</span></span></td>
+      </tr>
+      <tr>
+        <td class="rk"><span class="c3b-rw"><span class="c3b-rn">4</span><span class="c3b-rt">GW route p95 / 5xx<span class="c3b-rs">S04</span></span></span></td>
+        <td class="c3b-cell"><span class="c3b-sym s-ok"><span class="sym-ok">●</span></span></td>
+        <td class="c3b-cell"><span class="c3b-sym s-deg"><span class="sym-deg">◐</span></span><span class="c3b-nt">5xx elevated</span></td>
+        <td class="c3b-cell"><span class="c3b-sym s-ok"><span class="sym-ok">●</span></span></td>
+        <td class="c3b-cell c3b-d"><span class="c3b-sym s-ok"><span class="sym-ok">●</span></span></td>
+        <td class="c3b-cell"><span class="c3b-sym s-deg"><span class="sym-deg">◐</span></span><span class="c3b-nt">p95 up</span></td>
+      </tr>
+      <tr>
+        <td class="rk"><span class="c3b-rw"><span class="c3b-rn">5</span><span class="c3b-rt">Login synthetic<span class="c3b-rs">S05</span></span></span></td>
+        <td class="c3b-cell"><span class="c3b-sym s-ok"><span class="sym-ok">●</span></span></td>
+        <td class="c3b-cell"><span class="c3b-sym s-ok"><span class="sym-ok">●</span></span></td>
+        <td class="c3b-cell"><span class="c3b-sym s-deg"><span class="sym-deg">◐</span></span><span class="c3b-nt">slow at the OTP step</span></td>
+        <td class="c3b-cell c3b-d"><span class="c3b-sym s-ok"><span class="sym-ok">●</span></span></td>
+        <td class="c3b-cell"><span class="c3b-sym s-ok"><span class="sym-ok">●</span></span></td>
+      </tr>
+      <tr>
+        <td class="rk"><span class="c3b-rw"><span class="c3b-rn">6</span><span class="c3b-rt">OTP DLR rate per carrier<span class="c3b-rs">S06</span></span></span></td>
+        <td class="c3b-cell"><span class="c3b-sym s-ok"><span class="sym-ok">●</span></span></td>
+        <td class="c3b-cell"><span class="c3b-sym s-ok"><span class="sym-ok">●</span></span></td>
+        <td class="c3b-cell"><span class="c3b-sym s-fail"><span class="c3b-first"><span class="sym-fail">✕</span></span></span><span class="c3b-nt">DLR 71% one carrier</span></td>
+        <td class="c3b-cell c3b-d"><span class="c3b-sym s-ok"><span class="sym-ok">●</span></span></td>
+        <td class="c3b-cell"><span class="c3b-sym s-ok"><span class="sym-ok">●</span></span></td>
+      </tr>
+      <tr>
+        <td class="rk"><span class="c3b-rw"><span class="c3b-rn">7</span><span class="c3b-rt">Biller echo + inquiry p95<span class="c3b-rs">S07</span></span></span></td>
+        <td class="c3b-cell"><span class="c3b-sym s-ok"><span class="sym-ok">●</span></span></td>
+        <td class="c3b-cell"><span class="c3b-sym s-ok"><span class="sym-ok">●</span></span></td>
+        <td class="c3b-cell"><span class="c3b-sym s-ok"><span class="sym-ok">●</span></span></td>
+        <td class="c3b-cell c3b-d"><span class="c3b-sym s-ok"><span class="sym-ok">●</span></span></td>
+        <td class="c3b-cell"><span class="c3b-sym s-ok"><span class="sym-ok">●</span></span></td>
+      </tr>
+      <tr>
+        <td class="rk"><span class="c3b-rw"><span class="c3b-rn">8</span><span class="c3b-rt">Replica lag + balance assertion<span class="c3b-rs">S09</span></span></span></td>
+        <td class="c3b-cell"><span class="c3b-sym s-ok"><span class="sym-ok">●</span></span></td>
+        <td class="c3b-cell"><span class="c3b-sym s-ok"><span class="sym-ok">●</span></span></td>
+        <td class="c3b-cell"><span class="c3b-sym s-ok"><span class="sym-ok">●</span></span></td>
+        <td class="c3b-cell c3b-d"><span class="c3b-sym s-fail"><span class="c3b-first"><span class="sym-fail">✕</span></span></span><span class="c3b-nt">lag 240s + balance assertion FAIL</span></td>
+        <td class="c3b-cell"><span class="c3b-sym s-ok"><span class="sym-ok">●</span></span></td>
+      </tr>
+      <tr>
+        <td class="rk"><span class="c3b-rw"><span class="c3b-rn">9</span><span class="c3b-rt">Core heartbeat + pending-age<span class="c3b-rs">S10</span></span></span></td>
+        <td class="c3b-cell"><span class="c3b-sym s-ok"><span class="sym-ok">●</span></span></td>
+        <td class="c3b-cell"><span class="c3b-sym s-ok"><span class="sym-ok">●</span></span></td>
+        <td class="c3b-cell"><span class="c3b-sym s-ok"><span class="sym-ok">●</span></span></td>
+        <td class="c3b-cell c3b-d"><span class="c3b-sym s-ok"><span class="sym-ok">●</span></span></td>
+        <td class="c3b-cell"><span class="c3b-sym s-fail"><span class="c3b-first"><span class="sym-fail">✕</span></span></span><span class="c3b-nt">window active past schedule + pending-age climbing</span></td>
+      </tr>
+      <tr>
+        <td class="rk"><span class="c3b-rw"><span class="c3b-rn">10</span><span class="c3b-rt">L3 sweeps: orphaned debit / recon closure<span class="c3b-rs">S11 / S14</span></span></span></td>
+        <td class="c3b-cell"><span class="c3b-sym s-ok"><span class="sym-ok">●</span></span></td>
+        <td class="c3b-cell"><span class="c3b-sym s-ok"><span class="sym-ok">●</span></span></td>
+        <td class="c3b-cell"><span class="c3b-sym s-ok"><span class="sym-ok">●</span></span></td>
+        <td class="c3b-cell c3b-d"><span class="c3b-sym s-deg"><span class="sym-deg">◐</span></span><span class="c3b-nt">declines skew</span></td>
+        <td class="c3b-cell"><span class="c3b-sym s-ok"><span class="sym-ok">●</span></span></td>
+      </tr>
+      <tr class="c3b-sum top">
+        <td class="rk"><span class="c3b-sl2">FIRST FAILING COMPONENT CHECK</span></td>
+        <td><b>r2</b> — DNS / TCP / TLS vantage probes</td>
+        <td><b>r3</b> — Edge VIP /health + pool members</td>
+        <td><b>r6</b> — OTP DLR rate per carrier</td>
+        <td class="c3b-d"><b>r8</b> — Replica lag + balance assertion</td>
+        <td><b>r9</b> — Core heartbeat + pending-age</td>
+      </tr>
+      <tr class="c3b-sum">
+        <td class="rk"><span class="c3b-sl2">ROOT CAUSE</span></td>
+        <td>Last-mile connectivity — not the bank</td>
+        <td>Edge / LB capacity</td>
+        <td>SMS provider, single carrier</td>
+        <td class="c3b-d">Stale reads at the data layer — <b>every dashboard green</b></td>
+        <td>Core batch window overrun</td>
+      </tr>
+      <tr class="c3b-sum">
+        <td class="rk"><span class="c3b-sl2">TICKET ROUTES TO</span></td>
+        <td>NetOps + telco liaison</td>
+        <td>NetOps / platform</td>
+        <td>Vendor escalation</td>
+        <td class="c3b-d">Core / App squad</td>
+        <td>Core team <span class="c3b-mini">planned-window context attached</span></td>
+      </tr>
+      <tr class="c3b-sum">
+        <td class="rk"><span class="c3b-sl2">PRIORITY<small>Impact = fail% × volume × service tier</small></span></td>
+        <td><span class="c3b-p1">P1</span> if &gt;1 region, else <span class="c3b-p2">P2</span></td>
+        <td><span class="c3b-p2">P2</span></td>
+        <td><span class="c3b-p1">P1</span> login + payment both bleed</td>
+        <td class="c3b-d"><span class="c3b-p1">P1</span></td>
+        <td><span class="c3b-p2">P2</span> pre-dawn — escalate if it reaches peak</td>
+      </tr>
+      <tr class="c3b-sum">
+        <td class="rk"><span class="c3b-sl2">SEE IT LIVE<small>same moment on the dashboard</small></span></td>
+        <td><a class="c3b-live" href="index.html#t=684">view live &rarr;</a></td>
+        <td><a class="c3b-live" href="index.html#t=1614">view live &rarr;</a></td>
+        <td><a class="c3b-live" href="index.html#t=66">view live &rarr;</a></td>
+        <td class="c3b-d"><a class="c3b-live" href="index.html#t=428">view live &rarr;</a></td>
+        <td><a class="c3b-live" href="index.html#t=1710">view live &rarr;</a></td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+  </div>
+  <p class="c3b-evh">Evidence bundle attached to the ticket</p>
+  <div class="c3b-ev">
+    <div class="c3b-evc"><b>A · Regional telco data outage</b>vantage comparison · timing split</div>
+    <div class="c3b-evc"><b>B · LB pool degradation</b>pool-member SNMP + 5xx trend</div>
+    <div class="c3b-evc"><b>C · OTP provider degraded</b>per-carrier DLR + affected-count</div>
+    <div class="c3b-evc"><b>D · Replica lag → silent false declines</b>seeded-assertion log line + lag graph + decline-rate 8× baseline</div>
+    <div class="c3b-evc"><b>E · EOD batch overrun</b>batch marker + pending-age curve</div>
+  </div>
+  <div class="note-card"><span><b>The matrix is executable, not illustrative.</b> It is the platform&rsquo;s correlation rule-set in table form — the same patterns the engine matches when checks change state, which is why the first failing component check is the answer rather than the start of a war-room. Every new incident that doesn&rsquo;t match a fingerprint becomes a new row or a new column in config. <b>Section 04 lists the machinery that runs these checks unattended.</b></span></div>
+</section>
+
+
+  <div class="bridge"><strong>None of this can depend on tooling the bank may not have.</strong> Section 04 is the build list: twelve platform functions that execute every check in this page by themselves — with honest have / partial / build status.</div>
+
+<section id="ch4" class="chapter">
+<style>
+.c4b-k{color:var(--purple-ink);font-size:11px;font-weight:750;letter-spacing:.16em}
+.c4b-h{font-size:29px;line-height:1.14;font-weight:760;letter-spacing:-.3px;color:var(--ink);margin:11px 0 10px}
+.c4b-stand{font-size:15.5px;color:var(--slate);max-width:880px;line-height:1.62;margin:0 0 16px}
+.c4b-stand strong{color:var(--ink)}
+.c4b-leg{display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:11.5px;color:var(--slate2);
+  margin:0 0 12px}
+.c4b-scroll{overflow-x:auto;border-radius:12px;box-shadow:0 1px 3px rgba(20,34,63,.07),0 6px 22px rgba(20,34,63,.05)}
+.c4b-tbl{width:100%;min-width:940px;border-collapse:collapse;background:#fff;border:1px solid var(--line);
+  border-radius:12px;overflow:hidden}
+.c4b-tbl th{background:var(--navy);color:#fff;text-align:left;font-size:10.5px;font-weight:750;
+  letter-spacing:.08em;text-transform:uppercase;padding:11px 13px}
+.c4b-tbl td{padding:11px 13px;border-top:1px solid var(--line);font-size:12.5px;color:var(--slate);
+  vertical-align:top;line-height:1.5}
+.c4b-tbl tr:nth-child(even) td{background:var(--panel-alt)}
+.c4b-id{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11.5px;font-weight:700;
+  color:var(--navy)}
+.c4b-fn{font-weight:700;color:var(--ink);font-size:13px}
+.c4b-cov{display:flex;flex-wrap:wrap;gap:4px}
+.c4b-s{display:inline-block;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:10px;
+  font-weight:700;color:var(--cyan-ink);background:var(--cyan-soft);border:1px solid #BBD9E4;border-radius:4px;
+  padding:2px 6px;white-space:nowrap}
+.c4b-t{display:inline-block;font-size:10.5px;color:var(--slate);padding:2px 2px}
+.c4b-st{display:inline-block;font-size:10.5px;font-weight:750;letter-spacing:.05em;border-radius:5px;
+  padding:2px 8px;margin:0 5px 4px 0;white-space:nowrap}
+.c4b-have{color:var(--green-ink);background:var(--green-soft);border:1px solid #BFDCD2}
+.c4b-part{color:var(--amber-ink);background:var(--amber-soft);border:1px solid var(--amber-line)}
+.c4b-build{color:var(--navy);background:var(--navy-soft);border:1px solid var(--navy-line)}
+.c4b-q{font-size:10.5px;font-weight:600;color:var(--slate);letter-spacing:0}
+.c4b-note{display:block;font-size:11px;color:var(--slate);margin-top:2px;line-height:1.45}
+.c4b-wedge tr,.c4b-wedge td{background:var(--purple-soft)!important}
+.c4b-wedge td{border-top:1.5px solid var(--purple-line);border-bottom:1.5px solid var(--purple-line);
+  color:var(--purple-ink)}
+.c4b-wedge td:first-child{border-left:3px solid var(--purple)}
+.c4b-wedge .c4b-id,.c4b-wedge .c4b-fn{color:var(--purple)}
+.c4b-wtag{display:inline-block;font-size:9.5px;font-weight:800;letter-spacing:.1em;color:#fff;
+  background:var(--purple);border-radius:4px;padding:2px 7px;margin-left:7px;vertical-align:1px}
+.c4b-honest{margin-top:16px;background:#fff;border:1px solid var(--line);border-left:4px solid var(--navy);
+  border-radius:10px;padding:14px 18px;font-size:13px;color:var(--slate);line-height:1.62;max-width:1010px}
+.c4b-honest b{color:var(--ink)}
+@media (max-width:900px){.c4b-h{font-size:24px}}
+</style>
+  <div class="c4b-k">SECTION 04 · REQUIRED PLATFORM FUNCTIONS</div>
+  <h2 class="c4b-h">Twelve functions, self-sufficient by design</h2>
+  <p class="c4b-stand">Design rule: <strong>every check in Section 01 must be executable by these twelve functions alone</strong> — no dependency on customer-owned tooling. Where a bank already runs an APM or a SIEM, we read it as an accelerator, never as a prerequisite.</p>
+  <div class="c4b-leg">
+    <span><span class="c4b-st c4b-have">Have</span> running today</span>
+    <span><span class="c4b-st c4b-part">Partial</span> partly built</span>
+    <span><span class="c4b-st c4b-build">Build</span> on the roadmap</span>
+    <span><span class="c4b-s">S0n</span> step covered in the Section 01 ledger</span>
+  </div>
+  <div class="c4b-scroll">
+  <table class="c4b-tbl">
+    <thead><tr>
+      <th style="width:52px">#</th>
+      <th style="width:19%">Function</th>
+      <th style="width:36%">What it must do</th>
+      <th style="width:17%">Covers</th>
+      <th style="width:20%">Today</th>
+    </tr></thead>
+    <tbody>
+      <tr>
+        <td><span class="c4b-id">F1</span></td>
+        <td><span class="c4b-fn">Synthetic journey runner</span></td>
+        <td>Stateful multi-step journeys on seeded accounts (login → OTP → pay → verify)</td>
+        <td><span class="c4b-cov"><span class="c4b-s">S02–S12</span><span class="c4b-t">E2E</span></span></td>
+        <td><span class="c4b-st c4b-part">Partial</span><span class="c4b-note">poller live; stateful journeys building</span></td>
+      </tr>
+      <tr>
+        <td><span class="c4b-id">F2</span></td>
+        <td><span class="c4b-fn">HTTP / cURL prober</span></td>
+        <td>Single-shot probes with status · latency · payload assertions; Import-from-cURL</td>
+        <td><span class="c4b-cov"><span class="c4b-s">S02–S07</span><span class="c4b-s">S12</span></span></td>
+        <td><span class="c4b-st c4b-have">Have</span></td>
+      </tr>
+      <tr>
+        <td><span class="c4b-id">F3</span></td>
+        <td><span class="c4b-fn">Network &amp; SNMP poller</span></td>
+        <td>TCP / ICMP, ifOper / ifAdmin, pool members, tunnel status, sysUpTime</td>
+        <td><span class="c4b-cov"><span class="c4b-s">S02</span><span class="c4b-s">S03</span><span class="c4b-s">S07</span><span class="c4b-s">S10</span><span class="c4b-t">hw</span></span></td>
+        <td><span class="c4b-st c4b-build">Build</span></td>
+      </tr>
+      <tr>
+        <td><span class="c4b-id">F4</span></td>
+        <td><span class="c4b-fn">DNS · TLS · cert checker</span></td>
+        <td>Resolve probes, handshake timing, days-left</td>
+        <td><span class="c4b-cov"><span class="c4b-s">S02</span></span></td>
+        <td><span class="c4b-st c4b-have">Have <span class="c4b-q">probe timing</span></span><span class="c4b-st c4b-part">Partial <span class="c4b-q">fleet cert inventory</span></span></td>
+      </tr>
+      <tr>
+        <td><span class="c4b-id">F5</span></td>
+        <td><span class="c4b-fn">Log &amp; syslog ingester</span></td>
+        <td>Gateway / service / WAF / switch log streams &rarr; per-route metrics</td>
+        <td><span class="c4b-cov"><span class="c4b-s">S03–S06</span><span class="c4b-s">S08–S11</span></span></td>
+        <td><span class="c4b-st c4b-have">Have</span></td>
+      </tr>
+      <tr>
+        <td><span class="c4b-id">F6</span></td>
+        <td><span class="c4b-fn">DB &amp; queue prober</span></td>
+        <td>Canary queries, replica lag, pool saturation, consumer lag, oldest-age (read-only creds)</td>
+        <td><span class="c4b-cov"><span class="c4b-s">S09</span><span class="c4b-s">S10</span><span class="c4b-s">S13</span></span></td>
+        <td><span class="c4b-st c4b-part">Partial</span></td>
+      </tr>
+      <tr>
+        <td><span class="c4b-id">F7</span></td>
+        <td><span class="c4b-fn">Receipt &amp; DLR reader</span></td>
+        <td>SMS DLR + push receipts per carrier / provider</td>
+        <td><span class="c4b-cov"><span class="c4b-s">S06</span><span class="c4b-s">S12</span></span></td>
+        <td><span class="c4b-st c4b-build">Build</span></td>
+      </tr>
+      <tr class="c4b-wedge">
+        <td><span class="c4b-id">F8</span></td>
+        <td><span class="c4b-fn">Assertion &amp; reconciliation engine</span><span class="c4b-wtag">THE WEDGE</span></td>
+        <td>Seeded-state assertions + cross-system sweeps (once · amount · order · window)</td>
+        <td><span class="c4b-cov"><span class="c4b-t">all L3 rows</span><span class="c4b-s">S06</span><span class="c4b-s">S07</span><span class="c4b-s">S09–S14</span></span></td>
+        <td><span class="c4b-st c4b-build">Build</span><span class="c4b-note">the layer nobody else owns</span></td>
+      </tr>
+      <tr>
+        <td><span class="c4b-id">F9</span></td>
+        <td><span class="c4b-fn">Correlation &amp; impact scoring</span></td>
+        <td>Stitch one transaction across hops on keys; business-fail vs technical-fail; Impact = fail% × volume × tier</td>
+        <td><span class="c4b-cov"><span class="c4b-t">feeds the Section 03 matrix</span></span></td>
+        <td><span class="c4b-st c4b-part">Partial</span></td>
+      </tr>
+      <tr>
+        <td><span class="c4b-id">F10</span></td>
+        <td><span class="c4b-fn">Ticket engine</span></td>
+        <td>Auto-open on business-fail, evidence bundle, route by fingerprint, SLA clock, webhook to existing ITSM</td>
+        <td><span class="c4b-cov"><span class="c4b-t">Section 03 outputs</span></span></td>
+        <td><span class="c4b-st c4b-have">Have <span class="c4b-q">ops board</span></span><span class="c4b-st c4b-part">Partial <span class="c4b-q">webhook routing</span></span></td>
+      </tr>
+      <tr>
+        <td><span class="c4b-id">F11</span></td>
+        <td><span class="c4b-fn">Persona dashboards</span></td>
+        <td>Ops ledger-live · Manager ticket board · CTO quick view</td>
+        <td><span class="c4b-cov"><span class="c4b-t">Section 05</span></span></td>
+        <td><span class="c4b-st c4b-have">Have</span><span class="c4b-st c4b-part">Partial <span class="c4b-q">CTO quick view</span></span></td>
+      </tr>
+      <tr>
+        <td><span class="c4b-id">F12</span></td>
+        <td><span class="c4b-fn">Evidence &amp; report export</span></td>
+        <td>Monthly KPI · error · incident packs, audit-ready timelines</td>
+        <td><span class="c4b-cov"><span class="c4b-t">Section 02 bands</span><span class="c4b-t">Section 03 evidence</span></span></td>
+        <td><span class="c4b-st c4b-have">Have</span></td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="c4b-honest"><b>Have / Partial / Build is our internal truth as of Aug 2027</b> — shown because roadmaps sell better than pretenses. The Build items are not a wish-list: they are exactly the L3 and FLOW gaps named in the gap blueprint — assertion and reconciliation (F8), SNMP and flow coverage of the hardware path (F3), and receipt / DLR reading at the carrier edge (F7). <b>F8 is the wedge</b>: business-logic integrity is the layer nobody else owns, and it is the layer that catches the silent failure in Section 03, scenario D.</div>
+</section>
+
+
+  <div class="bridge"><strong>Machinery needs seats.</strong> The same incident has to answer three different questions — for the engineer fixing it, the manager routing it, and the CTO proving the promise held.</div>
+
+<section id="ch5" class="chapter">
+<style>
+.c5b-k{color:var(--purple-ink);font-size:11px;font-weight:750;letter-spacing:.16em}
+.c5b-h{font-size:29px;line-height:1.14;font-weight:760;letter-spacing:-.3px;color:var(--ink);margin:11px 0 10px}
+.c5b-stand{font-size:15.5px;color:var(--slate);max-width:880px;line-height:1.62;margin:0 0 20px}
+.c5b-stand strong{color:var(--ink)}
+.c5b-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;align-items:stretch}
+.c5b-card{display:flex;flex-direction:column;background:#fff;border:1px solid var(--line);
+  border-top:3px solid var(--navy);border-radius:12px;padding:15px 16px 16px;
+  box-shadow:0 1px 3px rgba(20,34,63,.07),0 6px 22px rgba(20,34,63,.05)}
+/* subgrid keeps SEES / DOES / mock / footer bands level across the three seats */
+@supports (grid-template-rows:subgrid){
+  @media (min-width:1081px){
+    .c5b-grid{grid-template-rows:repeat(9,auto)}
+    .c5b-card{display:grid;grid-row:span 9;grid-template-rows:subgrid;row-gap:0}
+  }
+}
+.c5b-seat{font-size:9.5px;font-weight:750;letter-spacing:.12em;color:var(--slate2)}
+.c5b-role{font-size:17px;font-weight:760;color:var(--ink);margin:5px 0 4px;letter-spacing:-.2px}
+.c5b-q{font-size:12.5px;font-style:italic;color:var(--purple-ink);line-height:1.5;margin:0 0 12px}
+.c5b-lbl{font-size:9.5px;font-weight:750;letter-spacing:.12em;color:var(--slate2);margin:0 0 5px}
+.c5b-ul{margin:0 0 12px;padding-left:15px}
+.c5b-ul li{font-size:12px;color:var(--slate);line-height:1.5;margin:0 0 5px}
+.c5b-ul li b{color:var(--ink);font-weight:700}
+.c5b-mock{background:var(--panel-warm);border:1px solid var(--line);border-radius:9px;padding:9px 10px;
+  margin:2px 0 12px;align-self:start;width:100%}
+.c5b-mock .sym-ok,.c5b-mock .sym-fail{font-size:14px;line-height:1}
+.c5b-mock .sym-deg{font-size:18px;line-height:1}
+.c5b-mh{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:9.5px;font-weight:750;
+  letter-spacing:.06em;text-transform:uppercase;color:var(--slate);margin-bottom:7px}
+.c5b-row{display:flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--line);border-radius:6px;
+  padding:6px 9px;margin-bottom:5px;font-size:11px;color:var(--slate)}
+.c5b-row.bad{border-color:var(--coral-line);background:var(--coral-soft)}
+.c5b-st{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:9.5px;font-weight:700;
+  color:#fff;background:var(--navy);border-radius:3px;padding:2px 5px;flex:none}
+.c5b-rn{flex:1;color:var(--ink);font-weight:600;line-height:1.35;min-width:0}
+.c5b-rn small{display:block;font-weight:600;color:var(--slate2);font-size:9.5px;margin-top:1px}
+.c5b-fl{font-size:8.5px;font-weight:800;letter-spacing:.07em;color:#fff;background:var(--coral);
+  border-radius:3px;padding:2px 5px;flex:none}
+.c5b-pr{font-size:9.5px;font-weight:800;letter-spacing:.05em;border-radius:3px;padding:2px 6px;flex:none}
+.c5b-pr.p1{color:#fff;background:var(--coral)}
+.c5b-pr.p2{color:var(--amber-ink);background:var(--amber-soft);border:1px solid var(--amber-line)}
+.c5b-pr.p3{color:var(--slate);background:#EDEBE4;border:1px solid var(--line)}
+.c5b-clk{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:9.5px;color:var(--slate);
+  background:#F4F3EE;border-radius:3px;padding:2px 5px;flex:none}
+.c5b-btn{display:inline-block;font-size:9.5px;font-weight:750;letter-spacing:.08em;color:#fff;
+  background:var(--navy);border-radius:5px;padding:5px 11px;margin-top:2px}
+.c5b-tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.c5b-tile{background:#fff;border:1px solid var(--line);border-radius:7px;padding:8px 9px}
+.c5b-tile .v{font-size:15px;font-weight:760;color:var(--ink);line-height:1.15}
+.c5b-tile .l{font-size:9.5px;color:var(--slate2);line-height:1.35;margin-top:3px}
+.c5b-foot{margin-top:auto;padding-top:4px}
+.c5b-frow{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:8px}
+.c5b-fl2{font-size:9.5px;font-weight:750;letter-spacing:.1em;color:var(--slate2);margin-right:2px}
+.c5b-f{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:10px;font-weight:700;
+  color:var(--purple-ink);background:var(--purple-soft);border:1px solid #D9CDEA;border-radius:4px;padding:2px 6px}
+.c5b-kpi{font-size:10.5px;font-weight:650;color:var(--navy);background:var(--navy-soft);
+  border:1px solid var(--navy-line);border-radius:4px;padding:2px 7px}
+.c5b-kpi i{font-style:normal;color:var(--slate);font-weight:600}
+@media (max-width:1080px){.c5b-grid{grid-template-columns:1fr}.c5b-h{font-size:24px}
+  .c5b-mock{max-width:620px}.c5b-card{padding-bottom:14px}}
+</style>
+  <div class="c5b-k">SECTION 05 · OPERATING MODEL</div>
+  <h2 class="c5b-h">Three seats, one incident, three views</h2>
+  <p class="c5b-stand">The same detection serves three different questions: <strong>what broke</strong> (Ops), <strong>who&rsquo;s on it and how bad</strong> (Manager), and <strong>are we keeping our promise</strong> (CTO / CIO).</p>
+  <div class="c5b-grid">
+    <div class="c5b-card">
+      <div class="c5b-seat">SEAT 01</div>
+      <div class="c5b-role">IT-Operations</div>
+      <p class="c5b-q">&ldquo;What broke, where, and what&rsquo;s the evidence?&rdquo;</p>
+      <div class="c5b-lbl">SEES</div>
+      <ul class="c5b-ul">
+        <li>Live 14-step ledger with the <b>first-failing-check</b> flagged</li>
+        <li>Fingerprint match from Section 03 — layer and team already named</li>
+        <li>Evidence bundle auto-attached: probe timeline, log line, assertion diff</li>
+      </ul>
+      <div class="c5b-lbl">DOES</div>
+      <ul class="c5b-ul">
+        <li>Confirm or adjust the root cause</li>
+        <li>One-click ticket — pre-filled INC with route + evidence</li>
+        <li>Track the fix, close with an RCA note</li>
+      </ul>
+      <div class="c5b-mock">
+      <div class="c5b-mh">Ops · live Pay-Bill ledger <span class="flag-ill">ILLUSTRATIVE</span></div>
+      <div class="c5b-row bad"><span class="c5b-st">S09</span><span class="c5b-rn">Balance read</span>
+        <span class="sym-fail">✕</span><span class="c5b-fl">FIRST FAIL</span></div>
+      <div class="c5b-row"><span class="c5b-st">S10</span><span class="c5b-rn">Core posts the debit</span>
+        <span class="sym-deg">◐</span></div>
+      <div class="c5b-row"><span class="c5b-st">S11</span><span class="c5b-rn">Biller leg + confirmation</span>
+        <span class="sym-ok">●</span></div>
+      <div class="c5b-btn">OPEN TICKET</div>
+      </div>
+      <div class="c5b-foot">
+        <div class="c5b-frow"><span class="c5b-fl2">USES</span><span class="c5b-f">F1–F9</span><span class="c5b-f">F10</span></div>
+        <div class="c5b-frow"><span class="c5b-fl2">KPI</span><span class="c5b-kpi">MTTD &lt;1 min <i>target · illustrative</i></span><span class="c5b-kpi">diagnose-to-ticket minutes</span></div>
+      </div>
+    </div>
+    <div class="c5b-card">
+      <div class="c5b-seat">SEAT 02</div>
+      <div class="c5b-role">IT-Manager</div>
+      <p class="c5b-q">&ldquo;Who owns it, how bad is it, is it aging?&rdquo;</p>
+      <div class="c5b-lbl">SEES</div>
+      <ul class="c5b-ul">
+        <li>Ticket board ranked by impact score — P1 / P2 / P3</li>
+        <li>SLA clocks and aging on every open incident</li>
+        <li>Team workload across squads and vendors</li>
+      </ul>
+      <div class="c5b-lbl">DOES</div>
+      <ul class="c5b-ul">
+        <li>Confirm or override the priority; reassign</li>
+        <li>Escalate vendor cases (the C-type fingerprints)</li>
+        <li>Weekly trend review — what keeps coming back</li>
+      </ul>
+      <div class="c5b-mock">
+      <div class="c5b-mh">Manager · board by impact <span class="flag-ill">ILLUSTRATIVE</span></div>
+      <div class="c5b-row"><span class="c5b-pr p1">P1</span><span class="c5b-rn">Replica lag &rarr; silent declines
+        <small>Core / App squad</small></span><span class="c5b-clk">SLA 00:19</span></div>
+      <div class="c5b-row"><span class="c5b-pr p2">P2</span><span class="c5b-rn">LB pool — 2-of-4 members
+        <small>NetOps / platform</small></span><span class="c5b-clk">01:40</span></div>
+      <div class="c5b-row"><span class="c5b-pr p3">P3</span><span class="c5b-rn">Edge cert — 21 days left
+        <small>Platform</small></span><span class="c5b-clk">06:05</span></div>
+      </div>
+      <div class="c5b-foot">
+        <div class="c5b-frow"><span class="c5b-fl2">USES</span><span class="c5b-f">F9</span><span class="c5b-f">F10</span><span class="c5b-f">F11</span><span class="c5b-f">F12</span></div>
+        <div class="c5b-frow"><span class="c5b-fl2">KPI</span><span class="c5b-kpi">MTTR trend</span><span class="c5b-kpi">SLA breaches</span><span class="c5b-kpi">backlog age</span></div>
+      </div>
+    </div>
+    <div class="c5b-card">
+      <div class="c5b-seat">SEAT 03</div>
+      <div class="c5b-role">CTO / CIO</div>
+      <p class="c5b-q">&ldquo;Are we keeping the promise — and can I prove it?&rdquo;</p>
+      <div class="c5b-lbl">SEES</div>
+      <ul class="c5b-ul">
+        <li>Quick view, four tiles: journey availability today</li>
+        <li>Business-fail vs technical-fail split — the number that separates &ldquo;green&rdquo; from &ldquo;working&rdquo;</li>
+        <li>Value-at-risk now <span class="flag-ill">ILLUSTRATIVE</span> and the MTTD / MTTR 90-day trend</li>
+      </ul>
+      <div class="c5b-lbl">DOES</div>
+      <ul class="c5b-ul">
+        <li>Glance daily — five seconds</li>
+        <li>Pull the board / monthly evidence pack</li>
+        <li>Budget by measured risk, not by anecdote</li>
+      </ul>
+      <div class="c5b-mock">
+      <div class="c5b-mh">CTO · quick view <span class="flag-ill">ILLUSTRATIVE</span></div>
+      <div class="c5b-tiles">
+        <div class="c5b-tile"><div class="v">99.4%</div><div class="l">Pay-Bill journey availability · today</div></div>
+        <div class="c5b-tile"><div class="v">3 : 1</div><div class="l">business-fail vs technical-fail</div></div>
+        <div class="c5b-tile"><div class="v">312 txn/h</div><div class="l">value-at-risk now</div></div>
+        <div class="c5b-tile"><div class="v">−34%</div><div class="l">MTTD / MTTR · 90-day trend</div></div>
+      </div>
+      </div>
+      <div class="c5b-foot">
+        <div class="c5b-frow"><span class="c5b-fl2">USES</span><span class="c5b-f">F11</span><span class="c5b-f">F12</span></div>
+        <div class="c5b-frow"><span class="c5b-fl2">KPI</span><span class="c5b-kpi">journey availability</span><span class="c5b-kpi">audit readiness</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="note-card"><span><b>One incident, three seats.</b> Ops sees the balance assertion fail at 14:33 while every rail still answers 200, and tickets it by 14:41 with the log line, the lag graph and the assertion diff attached; the Manager sees a P1 with the SLA clock already running and the Core / App squad assigned, not a queue of green dashboards to argue about; the CTO sees business-fail flip red while technical-fail stays green — and next morning the evidence pack shows the save, timestamped. <b>A read-only overlay over the tools you already run. No agents in the payment path. Reversible by design</b> — we detect, trace, score and ticket; your team owns the fix.</span></div>
+</section>
+
+
+  <section class="notes" id="notes">
+    <div class="kicker" style="color:var(--purple-ink);font-size:11px;font-weight:750;letter-spacing:.16em">NOTES</div>
+    <h2 style="font-size:25px;margin:10px 0 8px;color:var(--ink)">Boundaries and instantiation</h2>
+    <p style="font-size:14px;color:var(--slate);max-width:800px;line-height:1.62">All thresholds and clock figures are <strong style="color:var(--ink)">illustrative seeds</strong> — the first two observation weeks calibrate them per bank. Vendor-specific identifiers (SNMP OIDs beyond the verified set, storage and appliance MIBs, rate-limit headers) are confirmed per device in discovery. Swap <strong style="color:var(--ink)">{BANK}</strong>, confirm the biller list and carrier set, and agree the seeded test account and test MSISDN. Regulatory context lives in the companion E2E Visibility Map.</p>
+    <div class="guarline"><strong>The standing commitment:</strong> every check on this page is read-only — probes from outside, log and receipt reads, canary queries on read replicas, file checks. No agents in the payment path, nothing writes back, and if you turn Adeptio off, nothing in production changes. We detect, trace, score and ticket; your team owns the fix.</div>
+    <div class="pagefoot">
+      <div><span class="fbrand">adeptio<span class="dot">.</span></span> <span class="pulseword">Pulse</span> &nbsp;·&nbsp; Demonstration template · mock data · all figures illustrative</div>
+      <div>Flow Inspection : Mobile Payment Module — instrumentation ledger · Generic Myanmar-bank edition · All figures illustrative · August 2027</div>
+    </div>
+  </section>
+
+</div>
+
+</div><!-- /#pulse-main -->
+
+<!-- v2.0.2: mount the platform shell. Coded against the v2.0.2 shell CONTRACT
+     (PULSE_SHELL.mount / crumb — docs/SPEC-Shell-v2.0.2.md §4/§7), not
+     necessarily the shell.js this build ships today: the call is feature-
+     detected with a pre-contract fallback (.init(), the current shell.js's
+     mount-equivalent) and wrapped in try/catch, so this boots cleanly either
+     way and never throws. Matches the guard pattern in index.html's own
+     mount script (worker S2). No node relocation needed on this page — its
+     content is untouched, chrome only. -->
+<script src="assets/shell.js"></script>
+<script>
+(function () {
+  "use strict";
+  if (!window.PULSE_SHELL) return;
+  var S = window.PULSE_SHELL;
+
+  function whenReady(fn) {
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", fn);
+    else fn();
+  }
+
+  whenReady(function () {
+    var opts = {
+      title: "Flow instrumentation",
+      crumb: [
+        { label: "Pulse", path: "index.html" },
+        { label: "MAIN" },
+        { label: "Flow instrumentation" }
+      ]
+    };
+    try {
+      if (typeof S.mount === "function") S.mount(opts);
+      else if (typeof S.init === "function") S.init(opts);   /* pre-v2.0.2 shell.js */
+    } catch (e) {
+      /* .pshell-page never lands on <body>: the page's own original header
+         stays visible — see rule 2 in the <style> block in <head>. */
+    }
+  });
+})();
+</script>
+</body>
+</html>
