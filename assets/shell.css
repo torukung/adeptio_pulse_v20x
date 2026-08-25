@@ -1,0 +1,421 @@
+/* ============================================================================
+ * ADEPTIO Pulse — SHELL  (page frame for the menu / admin pages)  v2.0.2
+ *
+ * Scope rule: every page-level rule is scoped to `body.pshell-page` or to a
+ * `.pshell`/`.pl*`/`.pstrip`/`.ppal*` class. index.html and
+ * flow-instrumentation.html load this file ONLY for the Menus launcher
+ * (.plaunch / .pl-menu) and must be untouched by it — so nothing here styles
+ * a bare element selector.
+ *
+ * Requires assets/tokens.css (or assets/styles.css) for the palette.
+ * `.chips / .chip` (the range-chip component) live in assets/menus.css.
+ * No !important anywhere; specificity stays at one or two classes.
+ * ==========================================================================*/
+
+/* ------------------------------------------------------------ page basics */
+body.pshell-page{
+  margin:0;background:var(--bg);color:var(--ink);
+  font-family:var(--font);font-size:14px;line-height:1.45;
+  overflow-x:hidden;overflow-y:auto;                 /* scrolling pages */
+  -webkit-font-smoothing:antialiased;
+}
+body.pshell-page,
+body.pshell-page *,
+body.pshell-page *::before,
+body.pshell-page *::after{box-sizing:border-box}
+body.pshell-page button,
+body.pshell-page input,
+body.pshell-page select,
+body.pshell-page textarea{font-family:inherit;color:inherit;font-size:inherit}
+body.pshell-page a{color:var(--chipink)}
+body.pshell-page h1,body.pshell-page h2,body.pshell-page h3,
+body.pshell-page h4,body.pshell-page h5{margin:0;font-weight:650}
+
+/* a single, consistent focus ring for the whole shell */
+.pshell :focus-visible,
+.plaunch :focus-visible,
+.pstrip :focus-visible,
+.ppal :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+
+.pskip{position:absolute;left:-9999px;top:0;z-index:110;padding:8px 14px;border-radius:0 0 10px 0;
+  background:var(--panel);color:var(--ink);border:1px solid var(--line);font-size:12.5px;font-weight:650;
+  text-decoration:none}
+.pskip:focus{left:0}
+
+/* ------------------------------------------------------------ shell frame
+   Exactly one of nav-expanded | nav-rail | nav-hidden is present at
+   >=1024px; --pnavw (280/64/0) is the single source of truth other modules
+   (e.g. the front page's map engine) read to react to the sidebar. Below
+   1024px nav-off replaces all three (the v2.0.1 off-canvas drawer). */
+.pshell{
+  --pnavw:280px;
+  display:grid;grid-template-columns:var(--pnavw) minmax(0,1fr);min-height:100vh;
+  transition:grid-template-columns 180ms cubic-bezier(.4,0,.2,1);
+}
+.pshell.nav-expanded{--pnavw:280px;transition-delay:0ms}
+.pshell.nav-rail{--pnavw:64px;transition-delay:120ms}
+.pshell.nav-hidden{--pnavw:0px;transition-delay:120ms}
+.pshell.nav-off{--pnavw:0px;grid-template-columns:minmax(0,1fr);transition:none}
+.pcol{display:flex;flex-direction:column;min-width:0;min-height:100vh}
+
+/* ---------------------------------------------------------------- left nav */
+.pnav{position:sticky;top:0;height:100vh;overflow-y:auto;overflow-x:hidden;
+  background:var(--bg2);border-right:1px solid var(--line);
+  display:flex;flex-direction:column;gap:2px;padding:0 0 14px;z-index:40}
+
+/* right-border 6px hit strip — click toggles expanded<->rail. Not shown in
+   the <1024px drawer (dragging the edge of an overlay makes no sense) or in
+   nav-hidden (the strip lives inside a 0-width nav and is unreachable). */
+.pnav-grip{position:absolute;top:0;right:-3px;bottom:0;width:6px;cursor:ew-resize;
+  background:transparent;z-index:41}
+.pnav-grip:hover{background:var(--chipline)}
+.nav-off .pnav-grip{display:none}
+
+/* ------------------------------------------------------------ brand block
+   .pnav-brand = .pnb-home (mark+wordmark, <a> to site home) + .pnb-expand
+   (full-cover button, rail-only — the mark itself is the expand control) +
+   .pnb-toggle (the chevron, expanded-only — collapses). One 56px unit,
+   aligned with .ptopbar so nav+topbar read as one continuous band. */
+.pnav-brand{position:relative;display:flex;align-items:center;gap:8px;
+  padding:0 8px 0 14px;height:56px;flex:0 0 auto;border-bottom:1px solid var(--line)}
+.pnb-home{position:relative;display:flex;align-items:center;gap:9px;min-width:0;flex:1 1 auto;
+  overflow:hidden;text-decoration:none;border-radius:8px}
+.pnb-home .pulsemark{flex:0 0 auto;display:block}
+.pnb-home .pm-badge{fill:var(--chipbg);stroke:var(--chipline)}
+.pnb-home .pm-trace{fill:none;stroke:var(--chipink);stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.pnb-t{display:flex;align-items:baseline;gap:6px;min-width:0;white-space:nowrap;
+  opacity:1;visibility:visible;transition:opacity 120ms ease 180ms,visibility 0ms linear 180ms}
+.pnb-w{font-weight:800;font-size:15px;letter-spacing:-.012em;color:var(--ink)}
+.pnb-w i{font-style:normal;color:var(--coral)}
+.pnb-p{font-size:10px;font-weight:600;letter-spacing:.15em;text-transform:uppercase;color:var(--ink2)}
+
+.pnb-expand{display:none;position:absolute;inset:0;padding:0;margin:0;border:0;
+  background:transparent;border-radius:8px;cursor:pointer}
+.pnb-expand:hover{background:var(--panel)}
+
+.pnb-toggle{flex:0 0 auto;display:flex;align-items:center;justify-content:center;width:26px;height:26px;
+  border-radius:8px;border:1px solid transparent;background:transparent;color:var(--muted);cursor:pointer}
+.pnb-toggle:hover{background:var(--panel);color:var(--ink)}
+.pnb-chev{width:15px;height:15px}
+
+/* rail: wordmark fades out, mark becomes the (full-cover) expand button,
+   the chevron button is swapped out instantly for it */
+.nav-rail .pnav-brand{justify-content:center;padding:0}
+.nav-rail .pnb-home{flex:0 0 auto;pointer-events:none;gap:0}
+/* collapse the wordmark's BOX too — with only opacity/visibility it kept its
+   ~110px width, and the centered flex row pushed the mark off-canvas (x:-37) */
+.nav-rail .pnb-t{opacity:0;visibility:hidden;width:0;overflow:hidden;transition:opacity 120ms ease 0ms,visibility 0ms linear 120ms}
+.nav-rail .pnb-toggle{display:none}
+.nav-rail .pnb-expand{display:block}
+/* the drawer (<1024px) always shows the full brand block; expand/collapse
+   toggling is a desktop-only affordance there, so both buttons stay hidden */
+.nav-off .pnb-toggle,.nav-off .pnb-expand{display:none}
+
+/* ------------------------------------------------------------- ECG mark
+   .pm-trace draws once at mount (shell.js computes --pm-len from
+   getTotalLength() and adds .pm-run); .pm-pip then beats forever at the
+   trace's right end. Reduced motion: shell.js never adds .pm-run, so the
+   path keeps its default (no dasharray = fully drawn) and .pm-static holds
+   the pip at rest — see the consolidated reduced-motion rules below too. */
+.pnb-home .pm-trace.pm-run{
+  stroke-dasharray:var(--pm-len);
+  animation:pm-draw 1600ms cubic-bezier(0,0,.2,1) both;
+}
+@keyframes pm-draw{ from{stroke-dashoffset:var(--pm-len)} to{stroke-dashoffset:0} }
+.pnb-home .pm-pip{fill:var(--ok);transform-box:fill-box;transform-origin:center}
+.pnb-home .pm-pip.pm-run{animation:pm-beat 2000ms ease-in-out infinite}
+@keyframes pm-beat{
+  0%{transform:scale(1);opacity:1}
+  15%{transform:scale(1.18);opacity:.7}
+  30%,100%{transform:scale(1);opacity:1}
+}
+
+.pn-group{padding:8px 8px 4px}
+.pn-gt{font-size:9.5px;font-weight:750;letter-spacing:.11em;text-transform:uppercase;
+  color:var(--muted);padding:4px 8px 6px;
+  opacity:1;visibility:visible;transition:opacity 120ms ease 180ms,visibility 0ms linear 180ms}
+.pn-link{display:flex;align-items:center;gap:10px;padding:7px 9px;border-radius:9px;
+  color:var(--ink2);text-decoration:none;font-size:12.5px;font-weight:600;
+  border:1px solid transparent;white-space:nowrap;min-width:0}
+.pn-link:hover{background:var(--panel);color:var(--ink)}
+.pn-ic{flex:0 0 auto;width:18px;height:18px;display:block;color:var(--muted)}
+.pn-link:hover .pn-ic{color:var(--ink2)}
+.pn-lb{overflow:hidden;text-overflow:ellipsis;
+  opacity:1;visibility:visible;transition:opacity 120ms ease 180ms,visibility 0ms linear 180ms}
+.pn-link.on{background:var(--chipbg);border-color:var(--chipline);color:var(--chipink)}
+.pn-link.on .pn-ic{color:var(--chipink)}
+.pn-ext{margin-left:auto;font-size:10px;color:var(--muted);font-weight:700}
+
+.pnav-foot{margin-top:auto;padding:10px 16px 0;font-size:10.5px;line-height:1.55;color:var(--muted);
+  opacity:1;visibility:visible;transition:opacity 120ms ease 180ms,visibility 0ms linear 180ms}
+.pnav-foot b{color:var(--ink2);font-weight:700}
+
+/* collapsed-to-rail mode: icons only, centred, 2px left accent bar marks the
+   active item (the pill-background treatment reads as too heavy at 64px) */
+.nav-rail .pn-lb,.nav-rail .pn-gt,.nav-rail .pnav-foot,.nav-rail .pn-ext,
+.nav-hidden .pn-lb,.nav-hidden .pn-gt,.nav-hidden .pnav-foot,.nav-hidden .pn-ext{
+  opacity:0;visibility:hidden;transition:opacity 120ms ease 0ms,visibility 0ms linear 120ms}
+.nav-rail .pn-link{justify-content:center;padding:9px 0}
+.nav-rail .pn-group{padding:6px 8px 2px;border-top:1px solid var(--line2)}
+.nav-rail .pn-group:first-of-type{border-top:none}
+.nav-rail .pn-link.on{background:transparent;border-color:transparent;border-radius:0 9px 9px 0;
+  box-shadow:inset 2px 0 0 var(--chipink)}
+
+/* off-canvas drawer mode (narrow, <1024px) — unchanged from v2.0.1 */
+.nav-off .pnav{position:fixed;left:0;top:0;bottom:0;height:auto;width:250px;max-width:84vw;
+  transform:translateX(-100%);transition:transform .22s cubic-bezier(.4,0,.2,1);
+  box-shadow:var(--shadow);z-index:70}
+.nav-off.nav-open .pnav{transform:translateX(0)}
+.pscrim{position:fixed;inset:0;background:rgba(0,0,0,.42);opacity:0;visibility:hidden;
+  transition:opacity .2s;z-index:65}
+.nav-off.nav-open .pscrim{opacity:1;visibility:visible}
+
+/* floating reopen tab — nav-hidden only, fixed at the left edge, vertically
+   centred. `#pshell` is the positioning root's ancestor is the viewport
+   since the button itself is position:fixed, so this works regardless of
+   the (0px) nav width. */
+.pnav-reopen{display:none;position:fixed;left:0;top:50%;transform:translateY(-50%);
+  width:20px;height:52px;padding:0;border:1px solid var(--line);border-left:0;
+  border-radius:0 10px 10px 0;background:var(--panel);color:var(--muted);
+  align-items:center;justify-content:center;cursor:pointer;z-index:45;
+  font-size:15px;line-height:1;box-shadow:var(--shadow)}
+.pnav-reopen:hover{color:var(--chipink);border-color:var(--chipline)}
+.nav-hidden .pnav-reopen{display:flex}
+
+/* ------------------------------------------------------- topbar v2 (row 1)
+   One 56px global band: breadcrumb · spacer · ⌘K · status · freshness ·
+   theme. Sticky at top:0, above .ptop (the page toolbar, row 2 below it). */
+.ptopbar{position:sticky;top:0;z-index:37;height:56px;flex:0 0 auto;
+  display:flex;align-items:center;gap:10px;padding:0 18px;
+  background:var(--glass);backdrop-filter:blur(12px) saturate(140%);border-bottom:1px solid var(--line)}
+
+.pcrumb{display:flex;align-items:center;gap:6px;min-width:0;overflow:hidden;
+  font-size:12.5px;font-weight:600}
+.pcr-l{color:var(--ink2);text-decoration:none;white-space:nowrap;flex:0 0 auto}
+.pcr-l:hover{color:var(--chipink)}
+.pcr-g{color:var(--muted);white-space:nowrap;flex:0 0 auto}
+.pcr-c{color:var(--ink);font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.pcr-sep{color:var(--muted);opacity:.6;flex:0 0 auto;font-size:12px}
+.ptbsp{flex:1 1 auto;min-width:8px}
+
+.pkbtn{height:30px;padding:0 10px;flex:0 0 auto;border-radius:8px;border:1px solid var(--line);
+  background:var(--panel);color:var(--muted);cursor:pointer;font-size:11.5px;font-weight:650;
+  display:inline-flex;align-items:center;gap:7px}
+.pkbtn:hover{border-color:var(--accent);color:var(--ink)}
+.psrch-ic{width:14px;height:14px;flex:0 0 auto}
+.pkbtn-k{font-family:var(--mono);font-size:10px;color:var(--muted);border:1px solid var(--line);
+  border-radius:5px;padding:1px 5px;background:var(--panel2)}
+
+.pstatus{display:flex;align-items:center;gap:8px;flex:0 0 auto;font-size:11px;color:var(--muted);white-space:nowrap}
+.pstatus[hidden]{display:none}
+.pstatus .pst-dot{width:7px;height:7px;border-radius:50%;background:var(--ok);flex:0 0 auto}
+.pstatus.warn .pst-dot{background:var(--warn)}
+.pstatus.crit .pst-dot{background:var(--crit)}
+.pst-n b{color:var(--ink2);font-weight:700;font-variant-numeric:tabular-nums}
+.pst-warn b{color:var(--warn)}
+.pst-crit b{color:var(--crit)}
+
+/* ----------------------------------------------------- page toolbar (row 2)
+   The pre-existing title/subtitle/range-chip row, unchanged in behaviour —
+   just sitting below .ptopbar now (freshness + theme moved up into it). */
+.ptop{position:sticky;top:56px;z-index:35;display:flex;align-items:center;
+  column-gap:12px;row-gap:3px;flex-wrap:nowrap;flex-wrap:wrap;
+  padding:9px 18px;min-height:53px;background:var(--glass);
+  backdrop-filter:blur(12px) saturate(140%);border-bottom:1px solid var(--line)}
+/* the drawer trigger — hidden at >=1024px, where the chevron/[ /grip take
+   over; the only remaining job below 1024px is opening the off-canvas nav */
+.pnavbtn{display:flex;width:32px;height:32px;flex:0 0 auto;border-radius:9px;border:1px solid var(--line);
+  background:var(--panel);color:var(--ink2);cursor:pointer;align-items:center;justify-content:center}
+.pnavbtn:hover{border-color:var(--accent);color:var(--ink)}
+.pnavbtn svg{width:16px;height:16px}
+@media (min-width:1024px){ .pnavbtn{display:none} }
+/* The subtitle carries the page's provenance line ("computed from: … · no APM").
+   Sharing one nowrap line with the title, it was cut mid-phrase on 10 of the 12
+   menu pages — and what got cut was the end, i.e. the "no APM" claim. Letting it
+   wrap in place instead made the bar 54/70/98/114 px tall depending on the page,
+   which is worse: the shell has to look the same everywhere.
+   So the title block dissolves (display:contents) and the provenance line takes
+   its own full-width row under the controls: one predictable two-row bar on every
+   page, and the longest subtitle on the site (864 px) fits that row outright. */
+.ptitle{display:contents}
+.ptitle h1{min-width:0;margin-right:2px;font-size:15px;font-weight:700;letter-spacing:-.01em;
+  line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.psub{order:99;flex:1 1 100%;margin:0;font-size:11.5px;color:var(--muted);line-height:1.4;
+  white-space:normal;overflow-wrap:anywhere;
+  display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;
+  overflow:hidden;text-overflow:ellipsis}
+.psub:empty{display:none}
+.psp{flex:1 1 auto;min-width:8px}
+.ptop .chips{flex:0 1 auto}
+.pfresh{display:flex;align-items:center;gap:7px;color:var(--muted);font-size:11.5px;white-space:nowrap}
+.pfresh .pdot{width:8px;height:8px;border-radius:50%;background:var(--ok);flex:0 0 auto}
+.ptheme{height:32px;padding:0 11px;flex:0 0 auto;border-radius:9px;border:1px solid var(--line);
+  background:var(--panel);color:var(--ink2);cursor:pointer;font-size:11.5px;font-weight:650;
+  display:inline-flex;align-items:center;gap:6px}
+.ptheme:hover{border-color:var(--accent);color:var(--ink)}
+.ptheme svg{width:15px;height:15px}
+
+/* ------------------------------------------------------------ body + foot */
+.pmain{flex:1 1 auto;min-width:0;padding:16px 18px 26px;display:flex;flex-direction:column;gap:14px}
+.pfoot{border-top:1px solid var(--line);background:var(--bg2);padding:13px 18px 26px;
+  color:var(--muted);font-size:11px;line-height:1.65}
+.pfoot b{color:var(--ink2);font-weight:700}
+.pf-lin{display:block;margin-bottom:4px}
+.pf-lin code{font-family:var(--mono);font-size:10.5px;color:var(--ink2)}
+.pf-note{display:block}
+
+/* ==================================================  ⌘K COMMAND PALETTE  ==
+ * #ppalscrim / #ppal, appended to <body> (built once by shell.js inside
+ * init()). Self-contained: token colours only.
+ * ==========================================================================*/
+.ppal-scrim{position:fixed;inset:0;z-index:100;display:none;align-items:flex-start;justify-content:center;
+  padding:min(14vh,120px) 16px 16px;background:rgba(6,8,12,.55)}
+.ppal-scrim.open{display:flex}
+.ppal{width:100%;max-width:560px;max-height:min(66vh,520px);min-height:0;display:flex;flex-direction:column;
+  background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);overflow:hidden}
+.ppal-hd{display:flex;align-items:center;gap:10px;padding:13px 16px;border-bottom:1px solid var(--line);flex:0 0 auto}
+.ppal-sic{width:17px;height:17px;color:var(--muted);flex:0 0 auto}
+.ppal-in{flex:1 1 auto;min-width:0;border:0;background:transparent;color:var(--ink);
+  font:inherit;font-size:14px;outline:none}
+.ppal-list{flex:1 1 auto;min-height:0;overflow-y:auto;padding:6px}
+.ppal-sec{font-size:9.5px;font-weight:750;letter-spacing:.11em;text-transform:uppercase;color:var(--muted);
+  padding:9px 9px 5px}
+.ppal-gh{font-size:9.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);
+  opacity:.8;padding:6px 9px 3px 20px}
+.ppal-item{display:flex;align-items:center;gap:9px;width:100%;padding:7px 9px;border-radius:8px;
+  border:0;background:transparent;color:var(--ink2);text-decoration:none;font:inherit;font-size:12.5px;
+  font-weight:600;text-align:left;cursor:pointer;white-space:nowrap}
+.ppal-item .pn-ic{width:16px;height:16px}
+.ppal-lb{overflow:hidden;text-overflow:ellipsis;min-width:0}
+.ppal-meta{margin-left:auto;flex:0 0 auto;font-size:10px;color:var(--muted);font-weight:700;
+  letter-spacing:.04em;padding-left:10px}
+.ppal-hint{font-family:var(--mono);color:var(--ink2);border:1px solid var(--line);border-radius:5px;
+  padding:1px 6px;background:var(--panel2)}
+.ppal-item.on{background:var(--chipbg);color:var(--chipink)}
+.ppal-item.on .pn-ic{color:var(--chipink)}
+.ppal-empty{padding:22px 12px;text-align:center;color:var(--muted);font-size:12px}
+.ppal-ft{display:flex;gap:14px;padding:9px 16px;border-top:1px solid var(--line);
+  font-size:10.5px;color:var(--muted);flex:0 0 auto}
+
+/* =======================================================  MENUS LAUNCHER  ==
+ * Used by index.html / flow-instrumentation.html (inside the SF-STRIP markers)
+ * and by the incident-trace strip. Self-contained: token colours only, so it
+ * matches .navchip without depending on assets/styles.css.
+ * ==========================================================================*/
+/* shell.css styles the launcher and nothing else on the front page: the brand
+   block already truncates gracefully (assets/styles.css sets .topbar{overflow:
+   hidden}, .brand{overflow:hidden} and .brand .s{text-overflow:ellipsis}), so
+   the chip needs no help from us there. What it does owe the front page is its
+   own share of the responsive rhythm — see the media queries at the end. */
+.plaunch-mount{display:inline-flex;flex:0 0 auto}
+.plaunch{position:relative;display:inline-flex;flex:none;box-sizing:border-box}
+.plaunch *{box-sizing:border-box}
+.plaunch-btn{display:inline-flex;align-items:center;gap:5px;flex:none;
+  font-family:var(--font);font-size:10.5px;font-weight:700;line-height:1.2;
+  color:var(--chipink);background:var(--chipbg);border:1px solid var(--chipline);border-radius:6px;
+  padding:4px 9px;margin-left:4px;cursor:pointer;white-space:nowrap}
+.plaunch-btn:hover{border-color:var(--chipink)}
+.plaunch-btn:focus-visible{outline:2px solid var(--chipink);outline-offset:2px}
+.plaunch-btn svg{width:11px;height:11px;flex:0 0 auto}
+.plaunch-btn .pll-i{width:12px;height:12px}
+.plaunch-btn .plc{transition:transform .15s}
+.plaunch.open .plaunch-btn .plc{transform:rotate(180deg)}
+
+/* the panel is a child of <body>, positioned by shell.js from the button's
+   rect: the front page's .topbar sets overflow:hidden, which would otherwise
+   clip a nested dropdown to the height of the bar. */
+.pl-menu{position:fixed;top:0;left:0;width:262px;max-height:540px;overflow-y:auto;
+  z-index:80;display:none;
+  background:var(--panel);border:1px solid var(--line);border-radius:12px;
+  box-shadow:var(--shadow);padding:7px}
+.pl-menu.open{display:block}
+.pl-gt{font-size:9.5px;font-weight:750;letter-spacing:.11em;text-transform:uppercase;
+  color:var(--muted);padding:8px 9px 4px}
+.pl-item{display:flex;align-items:center;gap:9px;padding:6px 9px;border-radius:8px;
+  color:var(--ink2);text-decoration:none;font-size:12.5px;font-weight:600;white-space:nowrap}
+.pl-item:hover{background:var(--panel);color:var(--ink)}
+.pl-item.on{color:var(--chipink);background:var(--chipbg)}
+.pl-item .pn-ic{width:16px;height:16px}
+.pl-foot{padding:8px 9px 4px;margin-top:4px;border-top:1px solid var(--line2);
+  font-size:10.5px;color:var(--muted);white-space:normal;line-height:1.5}
+
+/* ==============================================  TOP-ONLY NAV STRIP  ======
+ * incident-trace.html gets this instead of the left nav.
+ * ==========================================================================*/
+.pstrip{display:flex;align-items:center;gap:6px;flex-wrap:nowrap;overflow-x:auto;
+  padding:7px 18px;background:var(--panel2);border-bottom:1px solid var(--line)}
+.pstrip-t{font-size:9.5px;font-weight:750;letter-spacing:.11em;text-transform:uppercase;
+  color:var(--muted);padding-right:4px;flex:0 0 auto}
+.pstrip-sep{flex:0 0 auto;width:1px;height:16px;background:var(--line);margin:0 3px}
+.pstrip-l{display:inline-flex;align-items:center;gap:6px;flex:0 0 auto;
+  font-size:11.5px;font-weight:650;color:var(--ink2);text-decoration:none;
+  background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:4px 11px;white-space:nowrap}
+.pstrip-l:hover{border-color:var(--chipink);color:var(--ink)}
+.pstrip-l.on{color:var(--chipink);background:var(--chipbg);border-color:var(--chipline)}
+.pstrip-l .pn-ic{width:14px;height:14px}
+.pstrip .plaunch{margin-left:auto;flex:0 0 auto}
+
+/* --------------------------------------------------------------- responsive */
+@media (max-width:1100px){
+  .ptopbar{padding:0 14px}
+  .ptop{padding:9px 14px}
+  .pmain{padding:14px 14px 24px}
+  .pfoot{padding:12px 14px 24px}
+  .pkbtn-l{display:none}
+}
+@media (max-width:900px){
+  .pcr-g{display:none}
+}
+@media (max-width:760px){
+  .ptopbar{padding:0 12px;gap:8px}
+  .pstatus{display:none}
+  .ptop{gap:9px;padding:8px 12px}
+  .ptitle h1{font-size:14px}
+  /* the row is narrower here, so the provenance line gets a third line rather
+     than having the "no APM" cut off the end of it */
+  .psub{-webkit-line-clamp:3;line-clamp:3}
+  .pfresh{font-size:11px}
+  .pmain{padding:12px 12px 22px;gap:12px}
+  .pfoot{padding:12px 12px 22px}
+  .pl-menu{position:fixed;left:8px;right:8px;top:56px;min-width:0;max-height:74vh}
+  .pstrip{padding:7px 12px}
+}
+@media (max-width:520px){
+  .psub{display:none}
+  .pfresh .pfresh-t{display:none}
+  .pkbtn-k{display:none}
+}
+
+/* The launcher takes its turn in the FRONT PAGE's responsive rhythm. That top
+   bar is already at its content floor around 900px in the base build, and
+   assets/styles.css sheds items in a set order (freshness at 1400, the chip
+   qualifiers at 1300, the brand subtitle at 1180). The launcher joins that
+   order: label off at 1300, chip off below 1000 — so it never pushes the bar
+   past the width where the base build itself still fits. */
+@media (max-width:1300px){
+  .topbar .plaunch-btn{padding:4px 7px;margin-left:2px}
+  .topbar .plaunch-btn .pll{display:none}
+}
+@media (max-width:1000px){
+  .topbar .plaunch-mount{display:none}
+}
+
+/* honour the reader's motion preference — only the shell's own transitions/
+   animations. Matched selectors (equal specificity to the "on" rules above)
+   placed AFTER them, so source order — not !important — settles the cascade,
+   per this file's own rule (see header comment). */
+@media (prefers-reduced-motion:reduce){
+  .pshell,
+  .pn-lb,.pn-gt,.pnav-foot,.pn-ext,.pnb-t,
+  .nav-off .pnav,.pscrim,.plaunch-btn .plc{transition:none}
+  .pnb-home .pm-trace.pm-run{animation:none;stroke-dasharray:none;stroke-dashoffset:0}
+  .pnb-home .pm-pip.pm-run{animation:none;transform:scale(1);opacity:1}
+}
+html[data-motion="reduce"] .pshell,
+html[data-motion="reduce"] .pn-lb,html[data-motion="reduce"] .pn-gt,
+html[data-motion="reduce"] .pnav-foot,html[data-motion="reduce"] .pn-ext,html[data-motion="reduce"] .pnb-t,
+html[data-motion="reduce"] .nav-off .pnav,html[data-motion="reduce"] .pscrim,
+html[data-motion="reduce"] .plaunch-btn .plc{transition:none}
+html[data-motion="reduce"] .pnb-home .pm-trace.pm-run{animation:none;stroke-dasharray:none;stroke-dashoffset:0}
+html[data-motion="reduce"] .pnb-home .pm-pip.pm-run{animation:none;transform:scale(1);opacity:1}
+.pnb-home .pm-pip.pm-static{animation:none;transform:scale(1);opacity:1}

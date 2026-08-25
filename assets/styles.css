@@ -1,0 +1,363 @@
+/* ADEPTIO Pulse — Flow Inspection : Mobile Payment Module · stylesheet
+   (extracted verbatim from the single-file build) */
+:root{
+  --ok:#2dd4a7; --warn:#f5a623; --crit:#ff6b5a; --unk:#8b94a3; --maint:#7aa2ff;
+  --font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,Arial,sans-serif;
+  --mono:"SF Mono",ui-monospace,Menlo,Consolas,monospace;
+  --dockW:390px; --bh:252px; --rcaW:380px;
+}
+html[data-theme="dark"]{
+  --bg:#0e1116; --bg2:#0b0e13; --panel:#171b22; --panel2:#1c212b; --glass:rgba(23,27,34,.74);
+  --ink:#e6eaf0; --ink2:#aeb6c2; --muted:#7c8798; --line:#262c37; --line2:#2f37436e;
+  --node:#1b212b; --nodeStroke:#39424f; --grid:#171c24; --accent:#2dd4a7; --shadow:0 8px 30px rgba(0,0,0,.45);
+  --chipink:#2dd4a7; --chipbg:rgba(45,212,167,.10); --chipline:rgba(45,212,167,.42);
+  --zebra:rgba(255,255,255,.015);
+  /* house brand coral — the full-stop in the wordmark. CHROME only: deliberately
+     off the --crit hue so a brand mark can never be read as a status mark. */
+  --coral:#dd6b55;
+}
+html[data-theme="light"]{
+  --bg:#eef1f5; --bg2:#e7ebf0; --panel:#ffffff; --panel2:#f6f8fa; --glass:rgba(255,255,255,.80);
+  --ink:#161a20; --ink2:#3b4452; --muted:#6b7482; --line:#e2e7ee; --line2:#eef1f5;
+  --node:#ffffff; --nodeStroke:#cdd5df; --grid:#e6eaf0; --accent:#0e8a5f; --shadow:0 8px 30px rgba(20,30,50,.12);
+  --ok:#0e8a5f; --warn:#b45309; --crit:#ce3b24; --unk:#6b7280; --maint:#3b62c4; --zebra:rgba(20,30,50,.015);
+  --chipink:#0a6e4c; --chipbg:rgba(14,138,95,.09); --chipline:rgba(14,138,95,.34);
+  --coral:#c0392b;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--font);font-size:14px;overflow:hidden;-webkit-font-smoothing:antialiased}
+button{font-family:inherit;color:inherit}
+.app{display:grid;grid-template-rows:auto 1fr auto auto;height:100vh;width:100vw}
+
+/* top bar */
+.topbar{display:flex;align-items:center;gap:14px;padding:10px 16px;background:var(--glass);backdrop-filter:blur(12px) saturate(140%);border-bottom:1px solid var(--line);z-index:20}
+.brand{display:flex;align-items:center;gap:10px;min-width:0}
+/* ADEPTIO Pulse mark — rounded-square badge carrying an ECG/pulse trace.
+   Chrome, not data: the stroke uses the chrome/link accent token and the badge
+   never changes colour with status. Vector, so it stays crisp at 22–28px. */
+.pulsemark{flex:0 0 auto;display:block}
+.pulsemark .pm-badge{fill:var(--chipbg);stroke:var(--chipline)}
+.pulsemark .pm-trace{fill:none;stroke:var(--chipink);stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.brand .t{font-weight:650;font-size:15px;white-space:nowrap;display:flex;align-items:baseline;gap:6px}
+/* lowercase wordmark + coral full-stop, then PULSE as a lighter small-caps word */
+.wm{font-weight:800;letter-spacing:-.012em;color:var(--ink)}
+.wm i{font-style:normal;color:var(--coral)}
+.pulseword{font-size:11px;font-weight:600;letter-spacing:.15em;text-transform:uppercase;color:var(--ink2)}
+.brand .s{color:var(--muted);font-size:12px;white-space:nowrap}
+/* page-2 link chip — sits beside the version chip; tuned for both themes */
+.navchip{display:inline-flex;align-items:center;gap:5px;flex:none;font-size:10.5px;font-weight:700;
+  color:var(--chipink);background:var(--chipbg);border:1px solid var(--chipline);border-radius:6px;
+  padding:4px 9px;margin-left:4px;text-decoration:none;white-space:nowrap}
+.navchip:hover{border-color:var(--chipink)}
+.navchip:focus-visible{outline:2px solid var(--chipink);outline-offset:2px}
+/* the portal is the primary cross-page destination — filled, not outlined */
+.navchip.main{color:var(--panel);background:var(--chipink);border-color:var(--chipink)}
+html[data-theme="light"] .navchip.main{color:#fff}
+.navchip.main:hover{filter:brightness(1.08)}
+.spacer{flex:1}
+.summary{display:flex;gap:8px;align-items:center}
+.scount{display:flex;align-items:center;gap:7px;background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:5px 12px;font-size:13px;font-variant-numeric:tabular-nums}
+.scount .dot{width:9px;height:9px;border-radius:50%}
+.scount b{font-weight:700}
+.freshness{display:flex;align-items:center;gap:7px;color:var(--muted);font-size:12px;white-space:nowrap}
+.livedot{width:8px;height:8px;border-radius:50%;background:var(--ok);animation:pulse 2s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(45,212,167,.5)}70%{box-shadow:0 0 0 7px rgba(45,212,167,0)}100%{box-shadow:0 0 0 0 rgba(45,212,167,0)}}
+.tools{display:flex;gap:6px;align-items:center}
+.tbtn{width:34px;height:34px;border-radius:9px;border:1px solid var(--line);background:var(--panel);color:var(--ink2);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:.15s}
+.tbtn:hover{border-color:var(--accent);color:var(--ink)}
+.tbtn.on{border-color:var(--accent);color:var(--accent)}
+.tbtn svg{width:17px;height:17px}
+.search{display:flex;align-items:center;gap:7px;background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:6px 10px;min-width:140px}
+.search input{background:none;border:none;outline:none;color:var(--ink);width:100%;font-size:13px}
+.search svg{width:15px;height:15px;color:var(--muted);flex:0 0 auto}
+
+/* stage */
+.stage{position:relative;overflow:hidden;background:radial-gradient(1200px 700px at 30% 20%, var(--panel2), transparent 60%),var(--bg)}
+.grid-bg{position:absolute;inset:0;background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);background-size:40px 40px;opacity:.5;pointer-events:none}
+svg.canvas{position:absolute;inset:0;width:100%;height:100%;cursor:grab}
+svg.canvas.panning{cursor:grabbing}
+.link{fill:none;stroke-linecap:round;transition:stroke .4s}
+.link.flow{stroke-dasharray:1 10;animation:dash 1.1s linear infinite}
+@keyframes dash{to{stroke-dashoffset:-22}}
+.node{cursor:pointer}
+.node .body{fill:var(--node);stroke:var(--nodeStroke);stroke-width:1.5;transition:filter .2s}
+.node.sel .body{stroke:var(--accent);stroke-width:2.5}
+.node .ic{stroke:var(--ink);stroke-width:1.7;fill:none;stroke-linecap:round;stroke-linejoin:round;opacity:.9}
+.node .lbl{fill:var(--ink);font-size:12px;font-weight:600;text-anchor:middle;paint-order:stroke;stroke:var(--bg);stroke-width:3px;stroke-linejoin:round}
+.node .ip{fill:var(--muted);font-size:10px;text-anchor:middle;paint-order:stroke;stroke:var(--bg);stroke-width:3px}
+/* third label line — polling / collection method. Deliberately quieter than the
+   subtitle: smaller, mono, half-toned slate. --ink2 at .62 renders dimmer than
+   .ip in BOTH themes while still clearing 3:1 at 9px (muted at .55 was ~2:1). */
+.node .pm{fill:var(--ink2);opacity:.62;font-size:9px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;letter-spacing:.01em;text-anchor:middle;paint-order:stroke;stroke:var(--bg);stroke-width:3px}
+.node.dim{opacity:.28;transition:opacity .2s}
+.arc{fill:none;stroke-width:4;stroke-linecap:round;transition:stroke .4s}
+.notebadge{fill:var(--maint)} .pin{fill:var(--warn)}
+.selring{fill:none;stroke:var(--accent);stroke-width:1.5;opacity:.5;stroke-dasharray:3 4}
+
+.hovercard{position:absolute;z-index:30;min-width:220px;max-width:280px;background:var(--glass);backdrop-filter:blur(14px) saturate(140%);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:11px 13px;pointer-events:none;opacity:0;transform:translateY(4px);transition:opacity .12s,transform .12s}
+.hovercard.on{opacity:1;transform:translateY(0)}
+.hc-h{display:flex;align-items:center;gap:8px;margin-bottom:7px}
+.hc-h .nm{font-weight:650;font-size:13.5px}
+.pill{font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:999px;text-transform:uppercase;letter-spacing:.03em}
+.hc-row{display:flex;align-items:center;gap:8px;margin:5px 0;font-size:12px}
+.hc-row .k{color:var(--ink2);flex:1;min-width:0}
+.hc-row .v{font-variant-numeric:tabular-nums;color:var(--ink);font-family:var(--mono);font-size:11.5px}
+.sd{width:8px;height:8px;border-radius:50%;flex:0 0 auto}
+.hc-foot{margin-top:8px;font-size:11px;color:var(--accent);font-weight:600}
+.spark{display:block}
+/* F1: hover-card objectives carry the same full-week graph as the dock */
+.hc-item{margin:7px 0}
+.hc-item .hc-row{margin:0 0 2px}
+
+/* dock */
+.dock{position:absolute;top:0;right:0;bottom:0;width:var(--dockW);max-width:88vw;background:var(--glass);backdrop-filter:blur(16px) saturate(140%);border-left:1px solid var(--line);display:flex;flex-direction:column;transform:translateX(100%);transition:transform .28s cubic-bezier(.4,0,.2,1);z-index:25;box-shadow:var(--shadow)}
+.dock.open{transform:translateX(0)}
+.dockresizer{position:absolute;left:-4px;top:0;bottom:0;width:9px;cursor:col-resize;z-index:26}
+.dockresizer::after{content:"";position:absolute;left:3px;top:50%;transform:translateY(-50%);width:3px;height:44px;border-radius:3px;background:var(--line)}
+.dockresizer:hover::after{background:var(--accent)}
+.dock-h{display:flex;align-items:center;gap:8px;padding:11px 13px;border-bottom:1px solid var(--line)}
+.dock-h .t{font-weight:650;font-size:13px}
+.dock-h .c{color:var(--muted);font-size:12px}
+/* F2a: flex items default to min-height:auto, which stopped the body shrinking
+   below its content — the stacked panes overflowed the dock and everything past
+   the first objective was cut off. flex:1 1 auto + min-height:0 lets the body
+   take the leftover height and scroll, so panes render at natural height. */
+.dock-body{flex:1 1 auto;min-height:0;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:10px}
+.pane{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden;flex:0 0 auto}
+.pane-h{display:flex;align-items:center;gap:9px;padding:10px 12px;border-bottom:1px solid var(--line);background:var(--panel2)}
+.pane-h .ic{width:22px;height:22px;flex:0 0 auto;color:var(--ink2)}
+.pane-h .nm{font-weight:650;font-size:13px}
+.pane-h .meta{font-size:11px;color:var(--muted);font-family:var(--mono)}
+.pane-h .acts{margin-left:auto;display:flex;gap:4px}
+.iconbtn{width:24px;height:24px;border-radius:7px;border:1px solid transparent;background:none;color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center}
+.iconbtn:hover{background:var(--panel2);border-color:var(--line);color:var(--ink)}
+.iconbtn.act{color:var(--warn)}
+.pane-body{padding:10px 12px}
+.obj{padding:8px 0;border-bottom:1px solid var(--line2)}.obj:last-child{border-bottom:none}
+.obj-h{display:flex;align-items:center;gap:8px}
+.obj-h .k{flex:1;font-size:12.5px}.obj-h .v{font-family:var(--mono);font-size:12px;color:var(--ink2)}
+/* the graph gets the pane's full inner width; the threshold caption sits under it */
+.obj .sub{margin-top:6px}
+.obj .thr{display:block;margin-top:4px;font-size:10.5px;color:var(--muted)}
+/* F2c · "About this object" — body text that is editable in place, session-only */
+.about{padding-bottom:9px;margin-bottom:2px;border-bottom:1px solid var(--line2)}
+.about label{font-size:11px;color:var(--muted);display:flex;align-items:center;gap:7px;margin:0 0 4px}
+.about .aff{font-size:10px;opacity:.7}
+.abouttx{display:block;width:100%;min-height:34px;resize:vertical;overflow:hidden;background:transparent;
+  border:1px solid transparent;border-radius:8px;color:var(--ink2);padding:6px 7px;font-family:inherit;
+  font-size:12px;line-height:1.5;outline:none}
+.abouttx:hover{border-color:var(--line);background:var(--panel2)}
+.abouttx:focus{border-color:var(--accent);background:var(--panel2);color:var(--ink)}
+.notes label{font-size:11px;color:var(--muted);display:block;margin:2px 0 5px}
+.notes textarea{width:100%;min-height:48px;resize:vertical;background:var(--panel2);border:1px solid var(--line);border-radius:9px;color:var(--ink);padding:8px;font-family:inherit;font-size:12.5px;outline:none}
+.notes textarea:focus{border-color:var(--accent)}
+.empty{padding:26px 16px;text-align:center;color:var(--muted);font-size:12.5px}
+
+/* F3 · incident / RCA panel — left slide-in, mirrors the right dock */
+.rcapanel{position:absolute;top:0;left:0;bottom:0;width:var(--rcaW);max-width:92vw;background:var(--glass);
+  backdrop-filter:blur(16px) saturate(140%);border-right:1px solid var(--line);display:flex;flex-direction:column;
+  transform:translateX(-100%);transition:transform .28s cubic-bezier(.4,0,.2,1);z-index:26;box-shadow:var(--shadow)}
+.rcapanel.open{transform:translateX(0)}
+.rca-h{display:flex;align-items:center;gap:8px;padding:11px 13px;border-bottom:1px solid var(--line);flex:0 0 auto}
+.rca-h .t{font-weight:650;font-size:13px}
+.rca-h .iconbtn{margin-left:auto}
+.rca-body{flex:1 1 auto;min-height:0;overflow-y:auto;padding:12px 13px}
+.rsec{margin-bottom:15px}
+.rsec h4{margin:0 0 7px;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);
+  font-weight:700;display:flex;align-items:center;gap:7px}
+.rsec .rn{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:4px;
+  background:var(--chipbg);color:var(--chipink);font-size:9px;font-weight:800}
+.rsec h5{margin:11px 0 5px;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700}
+.rhead{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:3px}
+.rhead .robj{font-weight:650;font-size:13px;color:var(--ink)}
+.rhead .rind{font-size:12px;color:var(--ink2)}
+.rwin{font-size:10.5px;color:var(--muted);margin-bottom:8px;font-family:var(--mono)}
+.rstats{display:grid;grid-template-columns:1fr 1fr;gap:6px 8px;margin-bottom:9px}
+.rstats>div{display:flex;flex-direction:column;gap:1px;background:var(--panel);border:1px solid var(--line);
+  border-radius:8px;padding:5px 8px;min-width:0}
+.rk{font-size:9.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:600}
+.rv{font-size:12px;color:var(--ink);font-family:var(--mono);overflow-wrap:anywhere}
+.rmut{color:var(--muted)}
+.rspark{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:5px 6px}
+.rcap{font-size:10.5px;color:var(--muted);margin-top:4px}
+.rpage{font-size:12px;color:var(--ink2);line-height:1.5;margin-bottom:7px}
+.rchips{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px}
+.syschip{font-size:11px;font-weight:600;color:var(--chipink);background:var(--chipbg);border:1px solid var(--chipline);
+  border-radius:6px;padding:3px 8px;cursor:pointer;font-family:inherit}
+.syschip:hover{border-color:var(--chipink)}
+.rflow{font-size:11px;font-weight:700;color:var(--chipink);text-decoration:none}
+.rflow:hover{text-decoration:underline}
+.rlist{margin:0;padding-left:16px}
+.rlist li{font-size:12px;color:var(--ink2);line-height:1.5;margin-bottom:5px}
+.rlist.q li{color:var(--ink)}
+.rnone{font-size:12px;color:var(--muted)}
+.rown{display:flex;flex-direction:column;gap:5px;margin-bottom:7px}
+.rown>div{display:flex;gap:8px;align-items:baseline}
+.rown .rk{flex:0 0 60px}
+.rown .rv{font-family:inherit;font-size:12px;color:var(--ink2)}
+.resc{font-size:11.5px;color:var(--ink2);line-height:1.5;background:var(--panel);border:1px solid var(--line);
+  border-radius:8px;padding:6px 8px}
+.resc .rk{display:block;margin-bottom:2px}
+/* F7 · Incident Trace row — collapsed by default, slides open to a mini status
+   card for the ticket that carries the incident window behind this indicator. */
+.rtrace{margin-top:9px;border-top:1px solid var(--line);padding-top:9px}
+.rtoggle{display:flex;align-items:center;gap:7px;width:100%;background:none;border:none;padding:3px 0;
+  cursor:pointer;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.rtoggle:hover{color:var(--ink)}
+.rtoggle .car{display:inline-block;transition:transform .16s;font-size:9px}
+.rtoggle[aria-expanded="true"] .car{transform:rotate(90deg)}
+.rtoggle .rtn{margin-left:auto;font-size:9.5px;font-weight:700;letter-spacing:0;text-transform:none;color:var(--muted)}
+.rtbody{max-height:0;overflow:hidden;transition:max-height .22s ease}
+.rtbody.open{max-height:260px}
+.rtcard{margin-top:8px;background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:9px 10px}
+.rtrow{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:6px}
+.rtlz{display:inline-flex;align-items:center;font-size:9px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;
+  border-radius:4px;padding:2px 6px;border:1px solid transparent}
+.rtlz.todo{color:var(--unk);background:rgba(139,148,163,.13);border-color:rgba(139,148,163,.34)}
+.rtlz.inprog{color:var(--maint);background:rgba(122,162,255,.14);border-color:rgba(122,162,255,.36)}
+.rtlz.done{color:var(--ok);background:rgba(45,212,167,.13);border-color:rgba(45,212,167,.34)}
+.rtkey{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--ink2)}
+.rtmaj{font-size:9px;font-weight:800;letter-spacing:.06em;color:var(--crit);background:rgba(255,107,90,.14);
+  border:1px solid rgba(255,107,90,.42);border-radius:4px;padding:2px 6px}
+.rtsum{font-size:12px;color:var(--ink);line-height:1.45;margin-bottom:6px}
+.rtmeta{display:flex;gap:8px;flex-wrap:wrap;font-size:10.5px;color:var(--muted)}
+.rtmeta b{color:var(--ink2);font-weight:650}
+.rtopen{display:inline-block;margin-top:8px;font-size:11px;font-weight:700;color:var(--chipink);text-decoration:none}
+.rtopen:hover{text-decoration:underline}
+.rtnone{font-size:11.5px;color:var(--muted);line-height:1.5}
+/* keep the stage furniture clear of the panel while it is open */
+.hint,.leftstack{transition:left .28s}
+body.rca-open .hint,body.rca-open .leftstack{left:calc(var(--rcaW) + 14px)}
+
+/* legend / hint / scenario */
+/* BOTTOM-LEFT STACK: scenario card above the status legend, one anchor for both.
+   Bottom-anchored, so the card grows UPWARD and the legend never moves. The
+   wrapper itself is click-through; only the cards take pointer events. */
+.leftstack{position:absolute;left:14px;bottom:14px;z-index:15;display:flex;flex-direction:column;align-items:flex-start;gap:8px;pointer-events:none;max-width:calc(100% - 28px)}
+.leftstack>*{pointer-events:auto}
+.legend{display:flex;gap:12px;align-items:center;background:var(--glass);backdrop-filter:blur(12px);border:1px solid var(--line);border-radius:11px;padding:8px 12px;font-size:11.5px;color:var(--ink2);flex-wrap:wrap;max-width:min(560px,68vw)}
+.legend .li{display:flex;align-items:center;gap:6px}.legend .sw{width:11px;height:11px;border-radius:3px}.legend .sep{width:1px;height:14px;background:var(--line)}
+/* build + provenance remarks, shifted out of the top bar — always its own last
+   row inside the legend card, muted so it never competes with the status keys. */
+.legend .lgfoot{flex:0 0 100%;margin-top:1px;padding-top:6px;border-top:1px solid var(--line);
+  color:var(--muted);font-size:10.5px;letter-spacing:.01em;white-space:normal}
+.hint{position:absolute;left:14px;top:14px;background:var(--glass);backdrop-filter:blur(12px);border:1px solid var(--line);border-radius:11px;padding:9px 13px;font-size:12px;color:var(--ink2);z-index:15;max-width:320px;box-shadow:var(--shadow)}
+.hint b{color:var(--ink)}.hint .x{float:right;cursor:pointer;color:var(--muted);margin-left:10px}
+/* SCENARIO CARD — resizable frame. Width is a session-scoped custom property
+   (--scW, 260…520 by drag); height is governed by .sc-body's max-height, which
+   the engine sets to the free pocket above the legend, so the card scrolls
+   internally instead of ever riding over the hint card or a node label. */
+.scenario{position:relative;width:min(var(--scW,440px),33vw,calc(100vw - 28px));background:var(--glass);backdrop-filter:blur(12px);border:1px solid var(--line);border-left:3px solid var(--warn);border-radius:11px;padding:9px 13px;font-size:12px;color:var(--ink2);box-shadow:var(--shadow)}
+.scenario b{color:var(--ink)}
+.sc-body{overflow:auto;overscroll-behavior:contain;padding-right:18px}
+.sc-body::-webkit-scrollbar{width:7px}
+.sc-body::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px}
+.sc-min{position:absolute;top:5px;right:6px;z-index:2;width:19px;height:19px;padding:0;display:flex;align-items:center;justify-content:center;font-size:16px;line-height:1;border:1px solid transparent;background:transparent;color:var(--muted);border-radius:5px;cursor:pointer}
+.sc-min:hover{color:var(--ink);border-color:var(--line);background:var(--panel)}
+.sc-min:focus-visible{outline:2px solid var(--chipink);outline-offset:1px}
+/* drag affordances: right edge = width, top-right corner = width + height */
+.sc-rz{position:absolute;top:10px;bottom:10px;right:-4px;width:8px;cursor:col-resize}
+.sc-rz::after{content:"";position:absolute;top:50%;left:2.5px;transform:translateY(-50%);width:3px;height:24px;border-radius:3px;background:var(--line)}
+.sc-rzc{position:absolute;top:-4px;right:-4px;width:16px;height:16px;cursor:nesw-resize}
+.sc-rzc::after{content:"";position:absolute;top:5px;right:5px;width:7px;height:7px;border-top:2px solid var(--line);border-right:2px solid var(--line);border-radius:0 3px 0 0}
+/* grips rest as quietly as the dock's and the table handle's, but come forward on
+   card hover so the frame reads as adjustable before you go looking for the edge */
+.scenario:hover .sc-rz::after{background:var(--ink2)}
+.scenario:hover .sc-rzc::after{border-color:var(--ink2)}
+.sc-rz:hover::after{background:var(--accent)}
+.sc-rzc:hover::after{border-color:var(--accent)}
+/* MINIMISED FORM — chrome-accent glyph chip; the dot alone carries status colour */
+.scchip{display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-size:11.5px;font-weight:650;color:var(--chipink);background:var(--chipbg);backdrop-filter:blur(12px);border:1px solid var(--chipline);border-radius:10px;padding:6px 10px 6px 8px;box-shadow:var(--shadow)}
+.scchip[hidden]{display:none}
+.scchip:hover{border-color:var(--chipink)}
+.scchip:focus-visible{outline:2px solid var(--chipink);outline-offset:2px}
+.scchip .sev{width:8px;height:8px;border-radius:50%;background:var(--ok);flex:0 0 auto;margin-left:1px}
+
+/* bottom live tables */
+.bottom{position:relative;min-width:0;height:var(--bh);background:var(--glass);backdrop-filter:blur(12px);border-top:1px solid var(--line);display:flex;flex-direction:column;z-index:18}
+.bottom.closed{display:none}
+.bhandle{position:absolute;top:-4px;left:0;right:0;height:8px;cursor:row-resize;z-index:5}
+.bhandle::after{content:"";position:absolute;top:3px;left:50%;transform:translateX(-50%);width:52px;height:3px;border-radius:3px;background:var(--line)}
+.bhandle:hover::after{background:var(--accent)}
+.bhead{display:flex;align-items:center;gap:10px;padding:7px 14px;border-bottom:1px solid var(--line)}
+.bhead .bt{font-weight:650;font-size:13px}
+.bhead .bsub{color:var(--muted);font-size:11.5px}
+.bhead .bacts{margin-left:auto;display:flex;gap:6px;align-items:center}
+.btables{flex:1;display:flex;min-height:0}
+.btbl{display:flex;flex-direction:column;min-width:200px;min-height:0;border-right:1px solid var(--line)}
+.btbl:last-child{border-right:none}
+.btbl-h{display:flex;align-items:center;gap:8px;padding:7px 11px;border-bottom:1px solid var(--line);background:var(--panel2);flex-wrap:wrap}
+.btbl-h .tt{font-weight:650;font-size:12px;display:flex;align-items:center;gap:6px}
+.btbl-h .tag{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);border:1px solid var(--line);border-radius:5px;padding:1px 6px}
+.btbl-h .ctrls{margin-left:auto;display:flex;gap:5px;align-items:center;flex-wrap:wrap}
+.mini{font-size:11px;border:1px solid var(--line);background:var(--panel);color:var(--ink2);border-radius:7px;padding:3px 7px;cursor:pointer}
+.mini:hover{border-color:var(--accent);color:var(--ink)}
+.mini.sel{border-color:var(--accent);color:var(--accent)}
+select.mini{padding:3px 5px}
+.tblwrap{overflow:auto;flex:1;min-height:0}
+table.dt{width:100%;border-collapse:collapse;font-size:11.5px}
+table.dt thead th{position:sticky;top:0;background:var(--panel2);text-align:left;font-size:9.5px;letter-spacing:.03em;text-transform:uppercase;color:var(--muted);font-weight:600;padding:6px 9px;border-bottom:1px solid var(--line);white-space:nowrap;cursor:pointer;user-select:none}
+table.dt thead th.num{text-align:right}
+table.dt thead th .ar{opacity:.5;font-size:8px}
+table.dt tbody td{padding:6px 9px;border-bottom:1px solid var(--line2);white-space:nowrap;color:var(--ink2)}
+table.dt tbody td.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--ink)}
+table.dt tbody tr{cursor:pointer}
+table.dt tbody tr:nth-child(even){background:var(--zebra)}
+table.dt tbody tr:hover{background:var(--panel2)}
+table.dt tbody tr.flash{animation:flash 1.4s ease-out}
+@keyframes flash{0%{background:color-mix(in srgb,var(--warn) 30%,transparent)}100%{background:transparent}}
+.sevchip{font-size:9px;font-weight:800;letter-spacing:.03em;padding:2px 6px;border-radius:5px;text-transform:uppercase}
+.sevchip.crit{background:color-mix(in srgb,var(--crit) 20%,transparent);color:var(--crit)}
+.sevchip.warn{background:color-mix(in srgb,var(--warn) 22%,transparent);color:var(--warn)}
+.sevchip.ok{background:color-mix(in srgb,var(--ok) 20%,transparent);color:var(--ok)}
+.objcell{color:var(--ink);font-weight:600}
+.tbl-empty{padding:22px;text-align:center;color:var(--ok);font-size:12px}
+.tbl-empty.warnc{color:var(--muted)}
+.colmenu{position:absolute;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);padding:8px;z-index:40;font-size:12px;display:none;max-height:230px;overflow:auto}
+.colmenu.on{display:block}
+.colmenu label{display:flex;gap:7px;align-items:center;padding:3px 5px;cursor:pointer;white-space:nowrap}
+.spin svg{animation:spin .6s ease}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* timeline */
+.timeline{display:flex;align-items:center;gap:14px;padding:10px 16px;background:var(--glass);backdrop-filter:blur(12px);border-top:1px solid var(--line);z-index:20}
+.play{width:40px;height:40px;border-radius:11px;border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+.play:hover{border-color:var(--accent)}.play svg{width:18px;height:18px}
+.tl-mid{flex:1;min-width:0}
+.tl-top{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:5px;font-variant-numeric:tabular-nums}
+.tl-top .cur{color:var(--ink);font-weight:650;font-family:var(--mono)}
+.track{position:relative;height:26px;border-radius:8px;background:var(--panel);border:1px solid var(--line);cursor:pointer;overflow:hidden}
+.track .fill{position:absolute;top:0;bottom:0;left:0;background:linear-gradient(90deg,rgba(45,212,167,.08),rgba(45,212,167,.18));border-right:2px solid var(--accent)}
+.track .band{position:absolute;top:0;bottom:0;opacity:.16}
+.track .htick{position:absolute;top:0;bottom:0;width:0;border-left:1px solid var(--line);opacity:.5}
+.track .dtick{position:absolute;top:0;bottom:0;width:0;border-left:1px solid var(--line2)}
+.track .dlbl{position:absolute;top:2px;padding-left:4px;font-size:8.5px;font-family:var(--mono);letter-spacing:.04em;color:var(--muted);pointer-events:none;user-select:none}
+.head{position:absolute;top:-4px;width:4px;height:34px;background:var(--accent);border-radius:3px;transform:translateX(-2px);box-shadow:0 0 8px var(--accent)}
+.tl-right{display:flex;gap:6px;align-items:center;flex:0 0 auto}
+.speed{border:1px solid var(--line);background:var(--panel);color:var(--ink2);border-radius:9px;padding:7px 10px;cursor:pointer;font-size:12px;min-width:44px}.speed:hover{border-color:var(--accent)}
+.ghost{position:absolute;bottom:30px;transform:translateX(-50%);background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:3px 7px;font-size:11px;font-family:var(--mono);color:var(--ink);pointer-events:none;opacity:0;transition:opacity .1s;white-space:nowrap;z-index:5}.ghost.on{opacity:1}
+@media(max-width:820px){.dock{width:100vw}.rcapanel{width:100vw}.scenario,.scchip{display:none}.summary .scount .lbl{display:none}
+  body.rca-open .hint,body.rca-open .leftstack{left:14px}}
+/* Narrow desktops (kept last so it wins on source order): the top bar had ~2px of slack before the page-2 chip was
+   added, so shed the most redundant items first. The version chip repeats the
+   brand subtitle, and freshness repeats the timeline clock. */
+/* The top bar is a grid item, so its default min-width:auto let its min-content
+   push .app wider than the viewport (the bar measured 1482px inside a 1366px
+   window before this). min-width:0 lets it shrink and the flex children absorb
+   it instead. */
+.topbar{min-width:0;overflow:hidden}
+/* The version/template chip moved to the legend card. Spending the space it
+   freed on a tighter rhythm below 1440 keeps the flow-name subtitle legible all
+   the way down to 1280, where the old build had already dropped its subtitle. */
+@media(max-width:1440px){ .topbar{gap:10px;padding-left:12px;padding-right:12px} .search{min-width:150px}
+  .summary{gap:6px} .scount{padding:5px 9px} }
+/* the "as of" clock is the first thing to go — the timeline restates it, and
+   dropping it is what buys the flow name its full width at 1366. */
+@media(max-width:1400px){ .freshness{display:none} }
+/* below 1300 the nav chips shed their qualifier words rather than the flow name */
+@media(max-width:1300px){ .topbar{gap:8px} .search{min-width:140px} .chiplong{display:none} }
+@media(max-width:1180px){ .brand .s{display:none} }
+.brand{overflow:hidden}   /* guard: clip the brand rather than paint over the chip */
+.brand>div{min-width:0}
+.brand .s{overflow:hidden;text-overflow:ellipsis}

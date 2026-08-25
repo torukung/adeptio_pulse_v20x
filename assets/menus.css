@@ -1,0 +1,356 @@
+/* ============================================================================
+ * ADEPTIO Pulse — MENUS  ·  shared page components in the Pulse look
+ *
+ * Load order: tokens.css -> shell.css -> menus.css.
+ * Dark-first, house tokens only. Status colours (--ok/--warn/--crit/--unk)
+ * are used for STATUS and nothing else; chrome uses --ink/--ink2/--muted/
+ * --line/--panel/--chipink. No !important; selectors stay at one or two
+ * classes so a page can override with a single extra class.
+ * ==========================================================================*/
+
+/* =============================================================== SECTIONS */
+.sect{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin:4px 0 0}
+.sect h2{font-size:12.5px;font-weight:750;letter-spacing:.02em;color:var(--ink)}
+.sect .sh{font-size:11px;color:var(--muted)}
+.sect .sp{flex:1 1 auto;min-width:6px}
+
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+  padding:13px 14px;min-width:0;display:flex;flex-direction:column;gap:9px}
+.card > header{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.card > header h3{font-size:12.5px;font-weight:700;color:var(--ink)}
+.card > header .ch{font-size:11px;color:var(--muted)}
+.card.flat{background:transparent;border-style:dashed}
+.card.pad0{padding:0;overflow:hidden}
+
+/* align-items:start so a short card is its own height instead of being
+   stretched to match a tall neighbour (that reads as an empty panel). Add
+   .even to a grid when equal heights ARE wanted. */
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;align-items:start}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;align-items:start}
+.grid-2-1{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:12px;align-items:start}
+.grid2.even,.grid3.even,.grid-2-1.even{align-items:stretch}
+
+.muted{color:var(--muted)}
+.num{font-variant-numeric:tabular-nums}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:11.5px}
+.note{font-size:11px;color:var(--muted);line-height:1.6}
+.empty{padding:24px 16px;text-align:center;color:var(--muted);font-size:12.5px}
+
+/* ================================================================== TILES */
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(184px,1fr));gap:10px}
+.tile{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+  padding:11px 13px 12px;display:flex;flex-direction:column;gap:3px;min-width:0}
+.tile .label{font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;
+  color:var(--muted);display:flex;align-items:center;gap:7px;min-width:0}
+.tile .label span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tile .value{font-size:23px;font-weight:700;letter-spacing:-.02em;color:var(--ink);
+  font-variant-numeric:tabular-nums;line-height:1.18;display:flex;align-items:baseline;gap:6px}
+.tile .value u{font-style:normal;text-decoration:none;font-size:12px;font-weight:600;color:var(--muted)}
+.tile .sub{font-size:11px;color:var(--muted);line-height:1.5;overflow-wrap:anywhere}
+.tile .sub b{color:var(--ink2);font-weight:650}
+.tile .spark{margin-top:4px}
+.tile.ok    .value{color:var(--ok)}
+.tile.warn  .value{color:var(--warn)}
+.tile.crit  .value{color:var(--crit)}
+.tile.unk   .value{color:var(--unk)}
+.tile.plain .value{color:var(--ink)}
+.tile .tilefoot{margin-top:auto;padding-top:5px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+
+/* pass / fail pill on a tile (SLA target met or missed) */
+/* color-mix() gives the tint; where it is unsupported the base panel2 fill and
+   the --line border stay, so the pill is still legible (status stays in the
+   text + dot colour). Every variant therefore needs no fallback of its own. */
+.pf{font-size:9.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;
+  padding:2px 7px;border-radius:999px;background:var(--panel2);border:1px solid var(--line);
+  white-space:nowrap;flex:0 0 auto}
+.pf.pass{color:var(--ok);background:color-mix(in srgb,var(--ok) 12%,transparent);border-color:var(--ok)}
+.pf.fail{color:var(--crit);background:color-mix(in srgb,var(--crit) 12%,transparent);border-color:var(--crit)}
+.pf.part{color:var(--warn);background:color-mix(in srgb,var(--warn) 12%,transparent);border-color:var(--warn)}
+.pf.na  {color:var(--unk);background:color-mix(in srgb,var(--unk) 12%,transparent);border-color:var(--unk)}
+
+/* ================================================================== CHIPS
+   Also the shell's range-chip component (shell.css positions .ptop .chips). */
+.chips{display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0}
+.chips[hidden]{display:none}
+.chip{font-size:11.5px;font-weight:650;line-height:1.2;color:var(--ink2);background:var(--panel);
+  border:1px solid var(--line);border-radius:999px;padding:5px 12px;cursor:pointer;
+  white-space:nowrap;font-family:var(--font)}
+.chip:hover{border-color:var(--chipink);color:var(--ink)}
+.chip.on,.chip[aria-pressed="true"]{color:var(--chipink);background:var(--chipbg);border-color:var(--chipline)}
+.chip[disabled]{opacity:.45;cursor:default}
+.chip .n{font-variant-numeric:tabular-nums;opacity:.62;margin-left:6px}
+.chip.sm{padding:3px 9px;font-size:11px}
+.chips .csep{width:1px;height:16px;background:var(--line);flex:0 0 auto;margin:0 2px}
+.chips .clbl{font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;
+  color:var(--muted);flex:0 0 auto}
+
+/* toolbar row above a table */
+.toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
+.toolbar .sp{flex:1 1 auto;min-width:6px}
+.field{display:inline-flex;align-items:center;gap:6px;background:var(--panel);
+  border:1px solid var(--line);border-radius:9px;padding:5px 10px;min-width:0}
+.field:focus-within{border-color:var(--accent)}
+.field input,.field select{background:none;border:none;outline:none;color:var(--ink);
+  font-size:12px;min-width:0;width:100%}
+.field .fl{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--muted);flex:0 0 auto}
+.btn{font-size:11.5px;font-weight:650;color:var(--ink2);background:var(--panel);
+  border:1px solid var(--line);border-radius:9px;padding:5px 11px;cursor:pointer;white-space:nowrap}
+.btn:hover{border-color:var(--accent);color:var(--ink)}
+.btn.pri{color:var(--chipink);background:var(--chipbg);border-color:var(--chipline)}
+
+/* ================================================================= TABLES */
+.twrap{width:100%;overflow-x:auto;overflow-y:auto;max-height:var(--tmax,none);
+  border:1px solid var(--line);border-radius:12px;background:var(--panel)}
+.twrap.plain{border:none;border-radius:0;background:transparent}
+.ptable{width:100%;border-collapse:separate;border-spacing:0;font-size:12px;min-width:var(--tmin,560px)}
+.ptable caption{caption-side:top;text-align:left;padding:9px 12px;font-size:11px;color:var(--muted)}
+.ptable th,.ptable td{padding:7px 11px;text-align:left;vertical-align:top;
+  border-bottom:1px solid var(--line2);white-space:nowrap}
+/* Column names are the labels a reader needs most and they were the smallest,
+   faintest text on every page (9.5 px on --muted = 4.4:1). 10.5 px on --ink2
+   reads ~7:1 and still sits a full step below the 12 px body row. */
+.ptable thead th{position:sticky;top:0;z-index:2;background:var(--panel2);color:var(--ink2);
+  font-size:10.5px;font-weight:750;letter-spacing:.06em;text-transform:uppercase;
+  border-bottom:1px solid var(--line);white-space:nowrap}
+.ptable thead th.sortable{cursor:pointer;user-select:none}
+.ptable thead th.sortable:hover{color:var(--ink)}
+.ptable thead th .sarr{opacity:.5;margin-left:4px}
+.ptable thead th.sorted{color:var(--chipink)}
+.ptable thead th.sorted .sarr{opacity:1}
+.ptable tbody tr:nth-child(even){background:var(--zebra)}
+.ptable tbody tr:hover{background:var(--panel2)}
+.ptable tbody tr:last-child td{border-bottom:none}
+.ptable td.num,.ptable th.num{text-align:right;font-variant-numeric:tabular-nums}
+.ptable td.code,.ptable td.mono{font-family:var(--mono);font-size:11px;font-variant-numeric:tabular-nums}
+.ptable td.wrap{white-space:normal;overflow-wrap:anywhere;min-width:180px}
+.ptable td.nm{color:var(--ink);font-weight:650}
+.ptable td .sub{display:block;color:var(--muted);font-size:10.5px;font-weight:400;margin-top:2px}
+.ptable tfoot td{background:var(--panel2);font-weight:700;color:var(--ink2);border-top:1px solid var(--line)}
+
+/* expandable rows */
+.ptable tr.row-toggle{cursor:pointer}
+.ptable tr.row-toggle > td:first-child{padding-left:9px}
+.rt-c{display:inline-block;width:13px;color:var(--muted);transition:transform .15s;
+  transform:rotate(0deg);transform-origin:50% 50%}
+.ptable tr.row-toggle.open .rt-c{transform:rotate(90deg);color:var(--chipink)}
+.ptable tr.row-detail{display:none}
+.ptable tr.row-detail.open{display:table-row}
+.ptable tr.row-detail > td{background:var(--bg2);white-space:normal;padding:11px 14px 13px;
+  border-bottom:1px solid var(--line)}
+.ptable tr.row-detail .dgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px}
+
+/* ============================================================ STATUS PILL */
+.pill{display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:800;
+  letter-spacing:.05em;text-transform:uppercase;padding:2px 8px;border-radius:999px;
+  background:var(--panel2);border:1px solid var(--line);white-space:nowrap;line-height:1.5}
+.pill::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;flex:0 0 auto}
+.pill.ok   {color:var(--ok);  background:color-mix(in srgb,var(--ok)   13%,transparent);border-color:color-mix(in srgb,var(--ok)   42%,transparent)}
+.pill.warn {color:var(--warn);background:color-mix(in srgb,var(--warn) 13%,transparent);border-color:color-mix(in srgb,var(--warn) 42%,transparent)}
+.pill.crit {color:var(--crit);background:color-mix(in srgb,var(--crit) 13%,transparent);border-color:color-mix(in srgb,var(--crit) 42%,transparent)}
+.pill.unk  {color:var(--unk); background:color-mix(in srgb,var(--unk)  13%,transparent);border-color:color-mix(in srgb,var(--unk)  42%,transparent)}
+.pill.maint{color:var(--maint);background:color-mix(in srgb,var(--maint)13%,transparent);border-color:color-mix(in srgb,var(--maint)42%,transparent)}
+.pill.plain{color:var(--ink2);background:var(--panel2);border-color:var(--line)}
+.pill.plain::before{display:none}
+.pill.lg{font-size:10.5px;padding:3px 10px}
+
+/* a bare status dot, for dense rows */
+.sdot{display:inline-block;width:8px;height:8px;border-radius:50%;flex:0 0 auto;vertical-align:middle}
+.sdot.ok{background:var(--ok)} .sdot.warn{background:var(--warn)}
+.sdot.crit{background:var(--crit)} .sdot.unk{background:var(--unk)}
+.sdot.maint{background:var(--maint)}
+
+/* delta / trend text — direction is chrome, magnitude is data */
+.delta{font-size:11px;font-weight:650;font-variant-numeric:tabular-nums;white-space:nowrap}
+.delta.up{color:var(--crit)} .delta.down{color:var(--ok)} .delta.flat{color:var(--muted)}
+.delta.good{color:var(--ok)} .delta.bad{color:var(--crit)}
+
+/* ================================================================ BADGES */
+.badge{display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:750;
+  letter-spacing:.05em;text-transform:uppercase;padding:2px 7px;border-radius:6px;
+  color:var(--ink2);background:var(--panel2);border:1px solid var(--line);white-space:nowrap}
+.badge.provisional{color:var(--unk);border-style:dashed;border-color:var(--unk);
+  background:color-mix(in srgb,var(--unk) 10%,transparent)}
+.badge.provisional::before{content:"";width:6px;height:6px;border-radius:2px;background:var(--unk);opacity:.8}
+.badge.lens{color:var(--chipink);background:var(--chipbg);border-color:var(--chipline)}
+.badge.src{font-family:var(--mono);letter-spacing:0;text-transform:none;font-weight:600}
+
+/* ============================================================== STATUSBAR
+   Stacked status distribution: <div class="statusbar"><i class="s-ok" …> */
+.statusbar{display:flex;width:100%;height:10px;border-radius:999px;overflow:hidden;
+  background:var(--panel2);border:1px solid var(--line)}
+.statusbar > i{display:block;height:100%;min-width:0;transition:width .2s}
+.statusbar.tall{height:16px}
+.statusbar.thin{height:6px}
+.statusbar > i.s-ok{background:var(--ok)}
+.statusbar > i.s-warn{background:var(--warn)}
+.statusbar > i.s-crit{background:var(--crit)}
+.statusbar > i.s-unk{background:var(--unk)}
+.statusbar > i.s-maint{background:var(--maint)}
+.sb-legend{display:flex;gap:11px;flex-wrap:wrap;margin-top:6px;font-size:10.5px;color:var(--muted)}
+.sb-legend b{color:var(--ink2);font-weight:650;font-variant-numeric:tabular-nums}
+
+/* ============================================================ UPTIME BARS
+   One bar per interval: 100% / >=80% / <80% / no data. */
+.uptime-bars{display:flex;align-items:flex-end;gap:2px;height:24px;min-width:90px}
+.uptime-bars > i{display:block;flex:1 1 3px;min-width:2px;border-radius:1.5px;background:var(--unk)}
+.uptime-bars > i.u-100{height:100%;background:var(--ok)}
+.uptime-bars > i.u-80 {height:74%;background:var(--warn)}
+.uptime-bars > i.u-lo {height:48%;background:var(--crit)}
+.uptime-bars > i.u-nd {height:26%;background:var(--unk);opacity:.55}
+.uptime-bars.sm{height:16px}
+.uptime-bars.dense > i{flex:1 1 2px;min-width:1px}
+
+/* ============================================================== FUNNEL */
+.funnel{display:flex;flex-direction:column;gap:7px}
+.funnel-step{display:grid;grid-template-columns:minmax(120px,1.25fr) minmax(0,3fr) auto;
+  align-items:center;gap:11px;min-width:0}
+.funnel-step .fs-l{min-width:0}
+.funnel-step .fs-n{font-size:12px;font-weight:650;color:var(--ink);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.funnel-step .fs-k{font-size:10.5px;color:var(--muted);font-family:var(--mono);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.funnel-step .fs-bar{height:20px;border-radius:5px;background:var(--panel2);
+  border:1px solid var(--line);overflow:hidden;position:relative}
+.funnel-step .fs-bar > i{display:block;height:100%;background:var(--chipink);opacity:.55}
+.funnel-step.warn .fs-bar > i{background:var(--warn);opacity:.75}
+.funnel-step.crit .fs-bar > i{background:var(--crit);opacity:.75}
+.funnel-step .fs-v{font-size:11.5px;font-variant-numeric:tabular-nums;color:var(--ink2);
+  text-align:right;white-space:nowrap;min-width:104px}
+.funnel-step .fs-v b{color:var(--ink);font-weight:700}
+.funnel-step .fs-v .drop{color:var(--crit);font-weight:700}
+
+/* ============================================================== LEGEND */
+.legend{display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:10.5px;color:var(--muted)}
+.legend > span{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.legend i{width:9px;height:9px;border-radius:2px;flex:0 0 auto;background:var(--muted)}
+.legend i.ok{background:var(--ok)} .legend i.warn{background:var(--warn)}
+.legend i.crit{background:var(--crit)} .legend i.unk{background:var(--unk)}
+.legend i.maint{background:var(--maint)}
+.legend i.c1{background:var(--maint)} .legend i.c2{background:var(--ink2)}
+.legend i.c3{background:var(--coral)} .legend i.c4{background:var(--muted)}
+.legend i.line{height:2px;border-radius:0}
+.legend b{color:var(--ink2);font-weight:650}
+
+/* ============================================================== OVERLAY
+   Right-side detail drawer. Markup:
+   <div class="overlay"><div class="ov-scrim"></div>
+     <aside class="ov-panel"><header>… <button class="ov-x">…</header>
+       <div class="ov-body">…</div></aside></div>                            */
+.overlay{position:fixed;inset:0;z-index:80;visibility:hidden;opacity:0;transition:opacity .18s}
+.overlay.open{visibility:visible;opacity:1}
+.ov-scrim{position:absolute;inset:0;background:rgba(0,0,0,.46)}
+.ov-panel{position:absolute;top:0;right:0;bottom:0;width:min(560px,94vw);display:flex;
+  flex-direction:column;background:var(--panel);border-left:1px solid var(--line);
+  box-shadow:var(--shadow);transform:translateX(100%);
+  transition:transform .24s cubic-bezier(.4,0,.2,1)}
+.overlay.open .ov-panel{transform:translateX(0)}
+.ov-panel > header{display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding:12px 14px;
+  border-bottom:1px solid var(--line);background:var(--panel2)}
+.ov-panel > header h3{font-size:13px;font-weight:700;min-width:0;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ov-panel > header .ovk{font-family:var(--mono);font-size:11px;color:var(--muted)}
+.ov-x{margin-left:auto;width:26px;height:26px;flex:0 0 auto;border-radius:8px;
+  border:1px solid transparent;background:none;color:var(--muted);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;font-size:14px;line-height:1}
+.ov-x:hover{background:var(--panel);border-color:var(--line);color:var(--ink)}
+.ov-body{flex:1 1 auto;min-height:0;overflow-y:auto;padding:13px 14px 22px;
+  display:flex;flex-direction:column;gap:12px}
+.ov-foot{flex:0 0 auto;padding:11px 14px;border-top:1px solid var(--line);
+  background:var(--panel2);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.ov-kv{display:grid;grid-template-columns:auto minmax(0,1fr);gap:5px 12px;font-size:12px}
+.ov-kv dt{color:var(--muted);font-size:10px;font-weight:700;letter-spacing:.06em;
+  text-transform:uppercase;padding-top:2px}
+.ov-kv dd{margin:0;color:var(--ink2);overflow-wrap:anywhere}
+
+/* ================================================================= BOARD */
+.board{display:grid;grid-template-columns:repeat(var(--bcols,3),minmax(0,1fr));gap:12px;align-items:start}
+.bcol{background:var(--bg2);border:1px solid var(--line);border-radius:12px;
+  display:flex;flex-direction:column;min-width:0}
+.bcol-h{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--line)}
+.bcol-h .bt{font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--ink2)}
+.bcol-h .bn{margin-left:auto;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+.bcol-h .bmark{width:3px;height:14px;border-radius:2px;background:var(--muted);flex:0 0 auto}
+.bcol.todo  .bmark{background:var(--unk)}
+.bcol.prog  .bmark{background:var(--maint)}
+.bcol.done  .bmark{background:var(--ok)}
+.bcol-b{padding:9px;display:flex;flex-direction:column;gap:8px;min-height:60px}
+.bcard{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+  padding:9px 11px;display:flex;flex-direction:column;gap:6px;cursor:pointer;min-width:0}
+.bcard:hover{border-color:var(--chipline)}
+.bcard .bk{font-family:var(--mono);font-size:10.5px;color:var(--muted)}
+.bcard .bs{font-size:12px;color:var(--ink);line-height:1.4;overflow-wrap:anywhere}
+.bcard .bm{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:10.5px;color:var(--muted)}
+
+/* =============================================================== CHARTS
+   Palette for assets/charts.js. Status series use the status tokens; every
+   other series takes a CHROME token so a neutral line can never be misread
+   as a status. Text is >= 11px at the intended render width. */
+.pchart{display:block;width:100%;height:auto;overflow:visible;
+  --c1:var(--maint);--c2:var(--ink2);--c3:var(--coral);--c4:var(--muted)}
+.pchart .cx-ax{stroke:var(--line);stroke-width:1}
+.pchart .cx-gr{stroke:var(--line2);stroke-width:1}
+.pchart .cx-tx{fill:var(--muted);font-family:var(--font)}
+.pchart .cx-tx.hi{fill:var(--ink2)}
+.pchart .cx-thr{stroke:var(--warn);stroke-width:1.2;stroke-dasharray:5 4;fill:none}
+/* The threshold caption is drawn inside the plot at the right edge, so wherever
+   the line runs through the data it lands on top of a series (kpi-live's SLA
+   budget sat on the error-rate bars; sla-weekly's "target" sat on the last bar
+   group at 768). A paint-order halo in the card fill keeps it legible without
+   moving the label or changing any chart geometry. */
+.pchart .cx-thrtx{fill:var(--warn);font-family:var(--font);
+  paint-order:stroke;stroke:var(--panel);stroke-width:3.5px;stroke-linejoin:round}
+.pchart .cx-ln{fill:none;stroke-width:1.8;stroke-linejoin:round;stroke-linecap:round}
+.pchart .cx-ar{stroke:none;opacity:.14}
+.pchart .cx-dot{stroke:none}
+.pchart .cx-bar{stroke:none}
+.pchart .s1{stroke:var(--c1)} .pchart .f1{fill:var(--c1)}
+.pchart .s2{stroke:var(--c2)} .pchart .f2{fill:var(--c2)}
+.pchart .s3{stroke:var(--c3)} .pchart .f3{fill:var(--c3)}
+.pchart .s4{stroke:var(--c4)} .pchart .f4{fill:var(--c4)}
+.pchart .s-ok{stroke:var(--ok)}     .pchart .f-ok{fill:var(--ok)}
+.pchart .s-warn{stroke:var(--warn)} .pchart .f-warn{fill:var(--warn)}
+.pchart .s-crit{stroke:var(--crit)} .pchart .f-crit{fill:var(--crit)}
+.pchart .s-unk{stroke:var(--unk)}   .pchart .f-unk{fill:var(--unk)}
+.pchart .cx-hit{fill:transparent;stroke:none;cursor:crosshair}
+.pchart .cx-hit:hover{fill:var(--ink);fill-opacity:.05}
+/* a sparkline is cell furniture: it keeps the width/height it was built with
+   so a table row cannot be stretched by it. .fluid opts into filling instead. */
+.psparkline{display:inline-block;vertical-align:middle;overflow:visible}
+.psparkline.fluid{display:block;width:100%;height:auto}
+.psparkline .sp-ln{fill:none;stroke:var(--ink2);stroke-width:1.4;stroke-linejoin:round;stroke-linecap:round}
+.psparkline .sp-ar{fill:var(--ink2);opacity:.13;stroke:none}
+.psparkline.ok .sp-ln{stroke:var(--ok)}     .psparkline.ok .sp-ar{fill:var(--ok)}
+.psparkline.warn .sp-ln{stroke:var(--warn)} .psparkline.warn .sp-ar{fill:var(--warn)}
+.psparkline.crit .sp-ln{stroke:var(--crit)} .psparkline.crit .sp-ar{fill:var(--crit)}
+.psparkline.unk .sp-ln{stroke:var(--unk)}   .psparkline.unk .sp-ar{fill:var(--unk)}
+.chartbox{min-width:0;overflow:hidden}
+
+/* ============================================================ RESPONSIVE
+   1440 is the design width. 1024 folds the 3-up grids, 768 folds everything
+   and lets tables scroll inside .twrap instead of the page. */
+@media (max-width:1440px){
+  .grid3{grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
+}
+@media (max-width:1024px){
+  .grid2,.grid-2-1{grid-template-columns:minmax(0,1fr)}
+  .grid3{grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+  .board{--bcols:2}
+  .tiles{grid-template-columns:repeat(auto-fit,minmax(168px,1fr))}
+  .tile .value{font-size:21px}
+}
+@media (max-width:768px){
+  .grid3{grid-template-columns:minmax(0,1fr)}
+  .board{--bcols:1}
+  .tiles{grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+  .tile{padding:10px 11px}
+  .tile .value{font-size:19px}
+  .funnel-step{grid-template-columns:minmax(0,1fr);gap:4px}
+  .funnel-step .fs-v{text-align:left;min-width:0}
+  .ov-panel{width:100vw}
+  .ptable th,.ptable td{padding:6px 9px}
+}
+
+@media (prefers-reduced-motion:reduce){
+  .overlay,.ov-panel,.rt-c,.statusbar > i{transition:none}
+}

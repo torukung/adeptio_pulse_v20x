@@ -1,0 +1,48 @@
+/* ADEPTIO Pulse — design tokens.
+   The :root + html[data-theme="dark"] + html[data-theme="light"] blocks are copied
+   from assets/styles.css (lines 3-26). Variable names are identical, so a page that
+   loads tokens.css alone gets the same palette as the front page.
+   Do not add rules here: this file is tokens only.
+   ONE deliberate divergence (Wave-C accessibility pass): --muted is re-tuned in both
+   themes, because the menu pages use it at 9.5-11.5 px where the front-page value
+   falls below WCAG AA. See the note on each line. Everything else is verbatim, and
+   the front page does not load this file. */
+:root{
+  --ok:#2dd4a7; --warn:#f5a623; --crit:#ff6b5a; --unk:#8b94a3; --maint:#7aa2ff;
+  --font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,Arial,sans-serif;
+  --mono:"SF Mono",ui-monospace,Menlo,Consolas,monospace;
+  --dockW:390px; --bh:252px; --rcaW:380px;
+}
+html[data-theme="dark"]{
+  --bg:#0e1116; --bg2:#0b0e13; --panel:#171b22; --panel2:#1c212b; --glass:rgba(23,27,34,.74);
+  /* --muted is re-tuned from the styles.css value (#7c8798) for the menu pages:
+     they use it at 9.5-11.5 px, where #7c8798 lands on 4.4-4.5:1 against --panel
+     / --panel2 and fails AA for small text. #949daa reads 5.9:1 and still sits
+     clear of --unk (#8b94a3) so a muted caption cannot be read as "no data".
+     Only the menu/admin pages load tokens.css, so the front page is unaffected. */
+  --ink:#e6eaf0; --ink2:#aeb6c2; --muted:#949daa; --line:#262c37; --line2:#2f37436e;
+  --node:#1b212b; --nodeStroke:#39424f; --grid:#171c24; --accent:#2dd4a7; --shadow:0 8px 30px rgba(0,0,0,.45);
+  --chipink:#2dd4a7; --chipbg:rgba(45,212,167,.10); --chipline:rgba(45,212,167,.42);
+  --zebra:rgba(255,255,255,.015);
+  /* house brand coral — the full-stop in the wordmark. CHROME only: deliberately
+     off the --crit hue so a brand mark can never be read as a status mark. */
+  --coral:#dd6b55;
+}
+html[data-theme="light"]{
+  --bg:#eef1f5; --bg2:#e7ebf0; --panel:#ffffff; --panel2:#f6f8fa; --glass:rgba(255,255,255,.80);
+  --ink:#161a20; --ink2:#3b4452; --muted:#5b6470; --line:#e2e7ee; --line2:#eef1f5;
+  --node:#ffffff; --nodeStroke:#cdd5df; --grid:#e6eaf0; --accent:#0e8a5f; --shadow:0 8px 30px rgba(20,30,50,.12);
+  /* same re-tune in light: #6b7482 read 3.95:1 on --bg and 4.17:1 on --panel2 —
+     the whole footer lineage strip, the nav group labels and every table header
+     were below AA. #5b6470 reads 5.0:1 on --bg and 5.6:1 on --panel2.
+     The four status hues are re-tuned for the same reason. In light they were
+     picked as FILLS (dots, bars, bar segments) but the menus also print them as
+     9.5-12 px bold TEXT sitting on their own 13 % tint — pills, pass/fail marks,
+     Biz/Tech badges, the c/t cell values — where #0e8a5f/#b45309/#ce3b24/#6b7280
+     read 3.2-4.4:1. These four clear 5:1 there and still read as green / amber /
+     red / grey; --ok now equals --chipink, so light mode has one green.
+     Dark mode was already above AA and is unchanged. */
+  --ok:#0a6e4c; --warn:#a04a08; --crit:#b52d18; --unk:#5a626e; --maint:#3b62c4; --zebra:rgba(20,30,50,.015);
+  --chipink:#0a6e4c; --chipbg:rgba(14,138,95,.09); --chipline:rgba(14,138,95,.34);
+  --coral:#c0392b;
+}
