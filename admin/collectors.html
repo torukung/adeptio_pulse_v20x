@@ -1,0 +1,1459 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<link rel="icon" href="data:,"/>
+
+<!-- ===========================================================================
+     ADEPTIO Pulse — admin · COLLECTORS & MANAGEMENT
+     Built from menus/_template.html. This page lives in admin/, so every
+     relative path is "../". Every figure comes from
+     PULSE_SYNTH.collectorAdmin() (+ serviceHealth/synthetic tiles for the
+     range-scoped context strip) — the page formats, it never computes.
+     =========================================================================== -->
+
+<title>Collectors &amp; management &mdash; Adeptio Pulse</title>
+
+<link rel="stylesheet" href="../assets/tokens.css"/>
+<link rel="stylesheet" href="../assets/shell.css"/>
+<link rel="stylesheet" href="../assets/menus.css"/>
+
+<style>
+/* ------------------------------------------------------------- page-local
+   Eight additions this screen needs and the shared kit does not carry:
+   a tab strip, the four-stage readiness rail and meter, a buffer bar, an
+   in-cell number input, a licence tier block, a sample-line block, a lane
+   legend and the [hidden] override for components that set their own
+   display. Tokens only; status colours are used for status only. ---------*/
+
+/* components that set display need an explicit [hidden] */
+[hidden]{display:none !important}
+
+/* 1 · tabs — .chips with tab semantics, and the panels they switch.
+      Deliberately NOT sticky: .ptop already owns the sticky band at top:0. */
+.tabbar{padding:2px 0 9px;border-bottom:1px solid var(--line)}
+.tabbar .chips{gap:5px}
+.tabpanel{display:flex;flex-direction:column;gap:12px}
+.btn[disabled]{opacity:.45;cursor:default;border-color:var(--line)}
+.btn[disabled]:hover{border-color:var(--line);color:var(--ink2)}
+
+/* the two tile rows read as clean blocks instead of an orphaned last tile */
+@media (min-width:820px){ #tiles{grid-template-columns:repeat(4,minmax(0,1fr))} }
+@media (min-width:640px) and (max-width:1179px){ #ctx{grid-template-columns:repeat(3,minmax(0,1fr))} }
+@media (min-width:1180px){ #ctx{grid-template-columns:repeat(6,minmax(0,1fr))} }
+
+/* .dgrid is defined for row-detail cells only; the gap card uses it too */
+.card > .dgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px}
+.card > .dgrid .label{font-size:10px;font-weight:700;letter-spacing:.06em;
+  text-transform:uppercase;margin-bottom:3px}
+
+/* 2 · the four-stage readiness rail — chrome only, never a status colour */
+.srail{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:8px}
+@media (max-width:900px){ .srail{grid-template-columns:repeat(2,minmax(0,1fr))} }
+@media (max-width:430px){ .srail{grid-template-columns:minmax(0,1fr)} }
+.stage{display:flex;flex-direction:column;gap:6px;text-align:left;min-width:0;
+  background:var(--panel);border:1px solid var(--line);border-radius:10px;
+  padding:9px 11px 10px;cursor:pointer;font:inherit;color:inherit}
+.stage:hover{border-color:var(--chipink)}
+.stage.on{border-color:var(--chipline);background:var(--chipbg)}
+.stage .st-n{font-size:9.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--muted)}
+.stage.on .st-n{color:var(--chipink)}
+.stage .st-v{font-size:21px;font-weight:750;letter-spacing:-.02em;color:var(--ink);
+  font-variant-numeric:tabular-nums;line-height:1}
+.stage .st-v u{font-style:normal;text-decoration:none;font-size:11px;font-weight:600;
+  color:var(--muted);margin-left:4px}
+.stage .st-d{font-size:10.5px;color:var(--muted);line-height:1.45}
+.stage .st-ids{display:flex;flex-wrap:wrap;gap:4px}
+.stage .st-ids span{font-family:var(--mono);font-size:9.5px;color:var(--ink2);
+  border:1px solid var(--line);border-radius:5px;padding:1px 4px;background:var(--panel2)}
+
+/* 3 · readiness meter: four segments, filled to stateIndex */
+.smeter{display:inline-flex;gap:2px;vertical-align:middle;margin-right:7px}
+.smeter > i{display:block;width:9px;height:9px;border-radius:2px;background:var(--line);
+  border:1px solid var(--line)}
+.smeter > i.on{background:var(--chipink);border-color:var(--chipink);opacity:.55}
+.smeter > i.on.last{opacity:1}
+.sname{font-size:11px;font-weight:650;color:var(--ink2)}
+
+/* 4 · buffer bar — geometry beside the byte figure, not a status reading */
+.bufwrap{display:flex;align-items:center;gap:8px;min-width:0}
+.bufbar{flex:1 1 46px;min-width:34px;height:7px;border-radius:999px;background:var(--panel2);
+  border:1px solid var(--line);overflow:hidden}
+.bufbar > i{display:block;height:100%;background:var(--ink2);opacity:.5;transition:width .2s}
+.bufbar.hi > i{background:var(--unk);opacity:.95}
+
+/* 5 · in-cell editable objective */
+.tin{width:74px;background:var(--panel2);border:1px solid var(--line);border-radius:6px;
+  color:var(--ink);font:inherit;font-size:11.5px;font-variant-numeric:tabular-nums;
+  padding:2px 6px;text-align:right}
+.tin:focus{outline:none;border-color:var(--accent)}
+.tin.dirty{border-color:var(--chipline);background:var(--chipbg);color:var(--chipink);font-weight:700}
+.btn.mini{padding:2px 7px;font-size:10px}
+
+/* 6 · licence tiers */
+.ltier{display:flex;flex-direction:column;gap:6px}
+.ltop{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;min-width:0}
+.ltop .ln{font-size:12.5px;font-weight:700;color:var(--ink);min-width:0}
+.tstate{font-family:var(--mono);font-size:11px;font-weight:800;letter-spacing:.09em;
+  padding:2px 8px;border-radius:6px;border:1px solid var(--line);background:var(--panel2);
+  color:var(--muted);flex:0 0 auto}
+.tstate.on{color:var(--chipink);border-color:var(--chipline);background:var(--chipbg)}
+.killrow{display:flex;align-items:center;gap:12px;flex-wrap:wrap;min-width:0}
+.killrow .kgap{flex:1 1 auto;min-width:6px}
+.ksw{font-family:var(--mono);font-size:12px;font-weight:800;letter-spacing:.08em}
+.ksw.armed{color:var(--chipink)} .ksw.halted{color:var(--unk)}
+.lclist{margin:0;padding-left:17px;font-size:11.5px;color:var(--ink2);line-height:1.75}
+.lclist li{margin:0}
+
+/* 7 · the parser sample line */
+.pre{font-family:var(--mono);font-size:11px;line-height:1.7;color:var(--ink2);
+  background:var(--panel2);border:1px solid var(--line);border-radius:9px;
+  padding:10px 12px;overflow-x:auto;white-space:pre;overflow-wrap:normal}
+.stat{font-size:11px;color:var(--muted);min-height:1em}
+.stat.on{color:var(--chipink)}
+
+/* 8 · lane legend + small shared bits */
+/* C2: these five were written as bare `.lane`, which also matched the
+   `<span class="badge lane">` tags in the Sources and Pipeline tables — so the
+   lane tags there rendered 10.5 px / 8 px / r7 while every other badge on the
+   site is 9.5 px / 7 px / r6. Scoping the legend chip to its own container ends
+   the collision; .badge.lane below keeps only the mono treatment it asked for. */
+.lanes{display:flex;flex-wrap:wrap;gap:6px}
+.lanes .lane{display:inline-flex;align-items:center;gap:6px;font-size:10.5px;color:var(--ink2);
+  border:1px solid var(--line);border-radius:7px;padding:2px 8px;background:var(--panel2)}
+.lanes .lane b{font-family:var(--mono);font-weight:750;color:var(--ink)}
+.lanes .lane .n{color:var(--muted);font-variant-numeric:tabular-nums}
+.lanes .lane.off{opacity:.55}
+
+.mline{display:flex;align-items:center;gap:7px;flex-wrap:wrap;min-width:0}
+.mline .mn{font-weight:650;color:var(--ink)}
+.uv{font-weight:700;font-variant-numeric:tabular-nums}
+.uv.ok{color:var(--ok)} .uv.warn{color:var(--warn)}
+.uv.crit{color:var(--crit)} .uv.unk{color:var(--unk)}
+.badge.ctl{color:var(--unk);border-color:color-mix(in srgb,var(--unk) 42%,transparent)}
+.badge.inc{text-decoration:none;color:var(--warn);
+  border-color:color-mix(in srgb,var(--warn) 42%,transparent);
+  background:color-mix(in srgb,var(--warn) 12%,transparent)}
+.badge.inc.crit{color:var(--crit);border-color:color-mix(in srgb,var(--crit) 42%,transparent);
+  background:color-mix(in srgb,var(--crit) 12%,transparent)}
+.badge.inc:hover{border-color:currentColor}
+/* weight 600 to match the shared .badge.src mono variant in menus.css */
+.badge.lane{font-family:var(--mono);letter-spacing:0;text-transform:none;font-weight:600}
+.dlinks{display:flex;gap:10px;flex-wrap:wrap;align-items:center;font-size:11px}
+.dlinks a{text-decoration:none;border-bottom:1px solid transparent;color:var(--chipink)}
+.dlinks a:hover{border-bottom-color:currentColor}
+a.tlink{color:var(--chipink);text-decoration:none;border-bottom:1px solid var(--chipline);
+  font-size:11.5px;white-space:nowrap}
+a.tlink:hover{border-bottom-color:var(--chipink)}
+.ptable td.wide{white-space:normal;overflow-wrap:anywhere;min-width:150px}
+/* C2: 9% of --unk over --bg2 darkened the light-theme row enough to drag the
+   muted text and the dashed provisional badge inside it to 4.06-4.46:1. 5% still
+   marks the row (the dashed badge and the state dots carry the meaning anyway)
+   and puts everything in it back above AA. */
+.gaprow > td{background:color-mix(in srgb,var(--unk) 5%,var(--bg2))}
+
+@media (max-width:768px){
+  .tabbar{position:static}
+  .tin{width:62px}
+}
+@media (prefers-reduced-motion:reduce){
+  .rt-c,.statusbar > i,.bufbar > i{transition:none}
+}
+</style>
+</head>
+
+<body data-shell="page"
+      data-title="Collectors &amp; management"
+      data-subtitle="computed from: the collector control plane &mdash; per-node lane, method and state &middot; probe registry &middot; parser schema &middot; L3 assertions &middot; objective register &middot; no APM &middot; Aug 23 &ndash; 29, 2027"
+      data-ranges="1h,4h,24h,7d"
+      data-range="24h"
+      data-lineage="the collector control plane itself">
+
+<div id="pulse-main">
+
+  <!-- ================================================================ tiles -->
+  <section class="tiles" id="tiles" aria-label="Collector control plane"></section>
+
+  <!-- ====================================================== estate context -->
+  <div class="card flat">
+    <header><h3>Estate context</h3>
+      <span class="ch" id="ctxwin">&mdash;</span>
+      <span class="sp" style="flex:1 1 auto"></span>
+      <a class="tlink" id="ctxflow" href="../index.html">Open on the flow map</a>
+    </header>
+    <div class="tiles" id="ctx"></div>
+    <p class="note">The range chips scope this strip only. The control plane below is not
+      range-scoped: it is a registry, and probe uptime is quoted over the whole seeded week.</p>
+  </div>
+
+  <!-- ================================================================= tabs -->
+  <div class="tabbar">
+    <div class="chips" id="tabs" role="tablist" aria-label="Collector administration"></div>
+  </div>
+
+  <!-- ============================================================= SOURCES -->
+  <section class="tabpanel" id="p-sources" role="tabpanel" aria-labelledby="tab-sources" tabindex="-1">
+
+    <section class="sect"><h2>Readiness</h2>
+      <span class="sh">every source walks one pipeline: arrives &rarr; parses &rarr; computes &rarr; live</span>
+      <span class="sp"></span>
+      <span class="note">click a stage to filter the table</span>
+    </section>
+    <div class="srail" id="srail" role="group" aria-label="Filter sources by state"></div>
+
+    <div class="card">
+      <div class="toolbar">
+        <span class="clbl">Lane</span>
+        <div class="chips" id="slane" role="group" aria-label="Filter sources by lane"></div>
+        <div class="sp"></div>
+        <label class="field"><span class="fl">Filter</span>
+          <input type="text" id="sq" placeholder="node, name, archetype or method" aria-label="Filter sources"/></label>
+        <button class="btn" type="button" id="sreset">Reset</button>
+      </div>
+      <div class="lanes" id="lanelegend" aria-label="Collection lanes"></div>
+    </div>
+
+    <section class="sect"><h2>Sources</h2>
+      <span class="sh">16 collector archetypes &middot; one row per node on the flow map</span>
+      <span class="sp"></span>
+      <span class="note" id="sshown"></span>
+    </section>
+
+    <div class="card pad0">
+      <div class="twrap" style="--tmax:72vh">
+        <table class="ptable" style="--tmin:1140px">
+          <thead>
+            <tr>
+              <th scope="col">Source</th>
+              <th scope="col">Archetype</th>
+              <th scope="col">Lane</th>
+              <th scope="col">Method</th>
+              <th scope="col">Cadence</th>
+              <th scope="col">State</th>
+              <th scope="col">Last event</th>
+              <th class="num" scope="col">Buffer</th>
+              <th scope="col">Watermark</th>
+            </tr>
+          </thead>
+          <tbody id="srows"></tbody>
+        </table>
+      </div>
+      <div id="snone" class="empty" hidden>No source matches these filters. Clear the filter box or pick another stage.</div>
+    </div>
+    <p class="note" id="snote"></p>
+  </section>
+
+  <!-- ============================================================== PROBES -->
+  <section class="tabpanel" id="p-probes" role="tabpanel" aria-labelledby="tab-probes" tabindex="-1" hidden>
+
+    <section class="sect"><h2>Vantages</h2>
+      <span class="sh">where the prober sits &mdash; a probe is only as honest as its path</span></section>
+    <div class="card">
+      <div class="toolbar">
+        <span class="clbl">Vantage</span>
+        <div class="chips" id="pvant" role="group" aria-label="Filter probes by vantage"></div>
+        <span class="csep"></span>
+        <button class="chip" type="button" id="pctl" aria-pressed="true">Control probes<span class="n" id="pctln"></span></button>
+        <div class="sp"></div>
+        <label class="field"><span class="fl">Filter</span>
+          <input type="text" id="pq" placeholder="name, URL, node or assertion" aria-label="Filter probes"/></label>
+        <button class="btn" type="button" id="preset">Reset</button>
+      </div>
+    </div>
+
+    <section class="sect"><h2>Probe registry</h2>
+      <span class="sh">one row per monitor &middot; result at the last check &middot; uptime over the seeded week</span>
+      <span class="sp"></span>
+      <span class="note" id="pshown"></span>
+    </section>
+
+    <div class="card pad0">
+      <div class="twrap" style="--tmax:72vh">
+        <table class="ptable" style="--tmin:1120px">
+          <thead>
+            <tr>
+              <th scope="col">Probe</th>
+              <th scope="col">Vantage</th>
+              <th scope="col">Node</th>
+              <th class="num" scope="col">Every</th>
+              <th scope="col">Last result</th>
+              <th class="num" scope="col">HTTP</th>
+              <th class="num" scope="col">Last RT</th>
+              <th class="num" scope="col">Uptime 7d</th>
+              <th class="num" scope="col">No-data</th>
+            </tr>
+          </thead>
+          <tbody id="prows"></tbody>
+        </table>
+      </div>
+      <div id="pnone" class="empty" hidden>No probe matches these filters.</div>
+    </div>
+    <p class="note">A check counts as successful only when its assertion passed, and a check that
+      could not run is no-data, never a failure. The three control probes are meant to fail: they
+      prove the prober still reports honestly when the target is broken.</p>
+  </section>
+
+  <!-- ============================================================= PARSERS -->
+  <section class="tabpanel" id="p-parsers" role="tabpanel" aria-labelledby="tab-parsers" tabindex="-1" hidden>
+
+    <section class="sect"><h2>Parser contract</h2>
+      <span class="sh">the one log shape every L3 menu is computed from</span></section>
+
+    <div class="card">
+      <header><h3 id="prsname">&mdash;</h3><span class="ch" id="prsn"></span>
+        <span class="sp" style="flex:1 1 auto"></span>
+        <button class="btn" type="button" id="prscopy">Copy sample line</button>
+      </header>
+      <div class="pre" id="prssample">&mdash;</div>
+      <p class="stat" id="prsstat"></p>
+    </div>
+
+    <div class="card pad0">
+      <div class="twrap" style="--tmax:72vh">
+        <table class="ptable" style="--tmin:640px">
+          <thead>
+            <tr><th class="num" scope="col">#</th><th scope="col">Field</th>
+                <th scope="col">Type</th><th scope="col">Meaning</th></tr>
+          </thead>
+          <tbody id="prsrows"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="grid3">
+      <div class="card"><header><h3>Templated, never raw</h3></header>
+        <p class="note"><span class="mono">route_template</span> carries the template, so cardinality
+          stays bounded and two menus grouping by route can never disagree. A raw URI would make the
+          drill-down grid unbuildable.</p></div>
+      <div class="card"><header><h3>Two codes, two columns</h3></header>
+        <p class="note"><span class="mono">status</span> is what the client saw;
+          <span class="mono">result_code</span> is the domain outcome the application emitted.
+          They stay separate, which is the only reason a business decline carried on HTTP 200 is
+          visible at all.</p></div>
+      <div class="card"><header><h3>Callee time, not total</h3></header>
+        <p class="note"><span class="mono">upstream_ms</span> is the callee's own time and
+          <span class="mono">dur_ms</span> the whole hop. Downstream Health quotes the first;
+          SLA quotes the second. One field mixed up moves every latency figure on the site.</p></div>
+    </div>
+  </section>
+
+  <!-- ========================================================== ASSERTIONS -->
+  <section class="tabpanel" id="p-assertions" role="tabpanel" aria-labelledby="tab-assertions" tabindex="-1" hidden>
+
+    <section class="sect"><h2>L3 assertions</h2>
+      <span class="sh">seeded-account checks that prove an outcome, not an HTTP code</span>
+      <span class="sp"></span>
+      <span class="note" id="ashown"></span>
+    </section>
+
+    <div class="card pad0">
+      <div class="twrap">
+        <table class="ptable" style="--tmin:820px">
+          <thead>
+            <tr><th scope="col">ID</th><th scope="col">Assertion</th><th scope="col">Target</th>
+                <th scope="col">Node</th><th scope="col">Last result</th><th scope="col">Last run</th></tr>
+          </thead>
+          <tbody id="arows"></tbody>
+        </table>
+      </div>
+    </div>
+    <p class="note">Every assertion above runs against a seeded account and asserts on the body, not
+      the status line. That is what separates &ldquo;the API answered&rdquo; from &ldquo;the customer
+      got what they asked for&rdquo; &mdash; and it is the whole reason the silent-decline window is
+      visible on this site.</p>
+  </section>
+
+  <!-- ========================================================== THRESHOLDS -->
+  <section class="tabpanel" id="p-thresholds" role="tabpanel" aria-labelledby="tab-thresholds" tabindex="-1" hidden>
+
+    <section class="sect"><h2>Objective register</h2>
+      <span class="sh">read straight out of data/manifest.js &mdash; the front page and every menu score against these</span>
+      <span class="sp"></span>
+      <span class="note" id="tshown"></span>
+    </section>
+
+    <div class="card">
+      <div class="toolbar">
+        <label class="field"><span class="fl">Node</span>
+          <select id="tnode" aria-label="Filter objectives by node"></select></label>
+        <label class="field"><span class="fl">Filter</span>
+          <input type="text" id="tq" placeholder="objective, unit or collection method" aria-label="Filter objectives"/></label>
+        <span class="csep"></span>
+        <button class="chip" type="button" id="tdirty" aria-pressed="false">Edited only<span class="n" id="tdirtyn">0</span></button>
+        <div class="sp"></div>
+        <span class="note" id="tcount"></span>
+        <button class="btn" type="button" id="trevert">Revert all edits</button>
+      </div>
+    </div>
+
+    <div class="card pad0">
+      <div class="twrap" style="--tmax:72vh">
+        <table class="ptable" style="--tmin:940px">
+          <thead>
+            <tr>
+              <th scope="col">Node</th><th scope="col">Objective</th><th scope="col">Unit</th>
+              <th class="num" scope="col">Base</th><th class="num" scope="col">Warn</th>
+              <th class="num" scope="col">Crit</th><th scope="col">Direction</th>
+              <th scope="col">Collected by</th><th scope="col">Edit</th>
+            </tr>
+          </thead>
+          <tbody id="trows"></tbody>
+        </table>
+      </div>
+      <div id="tnone" class="empty" hidden>No objective matches these filters.</div>
+    </div>
+    <p class="note">Warn and crit are editable here and the edit is held in this browser tab only
+      &mdash; nothing is written to storage, to the manifest or to any other page. Reload and the
+      register is the manifest's again. <b>Base</b> is the seeded baseline and is never editable.</p>
+  </section>
+
+  <!-- ============================================================ PIPELINE -->
+  <section class="tabpanel" id="p-pipeline" role="tabpanel" aria-labelledby="tab-pipeline" tabindex="-1" hidden>
+
+    <section class="sect"><h2>Completeness</h2>
+      <span class="sh">buffer, drops and the watermark each node has proved data up to</span></section>
+
+    <div class="card" id="gapcard">
+      <header><h3>Collector gap</h3><span class="ch" id="gapch"></span>
+        <span class="sp" style="flex:1 1 auto"></span>
+        <span class="badge provisional">Provisional</span>
+      </header>
+      <div class="dgrid" id="gapgrid"></div>
+      <div class="dlinks" id="gaplinks"></div>
+    </div>
+
+    <div class="card">
+      <header><h3>Buffer held per node</h3><span class="ch">bytes waiting to be shipped at the last poll &middot; largest first</span></header>
+      <div class="chartbox" id="pipechart"></div>
+      <p class="note">One node holds three orders of magnitude more than the rest: that is the
+        signature of a shipper that stopped while the source kept writing.</p>
+    </div>
+
+    <div class="card pad0">
+      <div class="twrap" style="--tmax:72vh">
+        <table class="ptable" style="--tmin:920px">
+          <thead>
+            <tr><th scope="col">Node</th><th scope="col">Lane</th><th scope="col">State</th>
+                <th class="num" scope="col">Buffer</th><th class="num" scope="col">Dropped</th>
+                <th scope="col">Watermark</th><th scope="col">Completeness</th></tr>
+          </thead>
+          <tbody id="pprows"></tbody>
+        </table>
+      </div>
+    </div>
+    <p class="note">A watermark is the point up to which a node has proved it shipped everything.
+      Buckets after it are <b>unknown</b>, not zero &mdash; every aggregate on this site drops them
+      from the denominator instead of averaging a nought into the result, which is why the affected
+      cells read <i>provisional</i> and never 0&nbsp;%.</p>
+  </section>
+
+  <!-- ============================================================= LICENCE -->
+  <section class="tabpanel" id="p-licence" role="tabpanel" aria-labelledby="tab-licence" tabindex="-1" hidden>
+
+    <section class="sect"><h2>Licence &amp; metering</h2>
+      <span class="sh">what is included, what is off, and what stops when the meter stops</span></section>
+
+    <div class="card flat"><p class="note" id="licmodel" style="font-size:12.5px;color:var(--ink2)"></p></div>
+
+    <div class="grid3" id="lictiers"></div>
+
+    <div class="card">
+      <header><h3>Capture orchestrator</h3><span class="ch">the kill switch, and what it does not touch</span></header>
+      <div class="killrow">
+        <span class="clbl">State</span>
+        <span class="ksw armed" id="killstate">ARMED</span>
+        <span class="kgap"></span>
+        <button class="btn pri" type="button" id="kill" aria-pressed="false">Halt automated capture</button>
+      </div>
+      <p class="note" id="killnote"></p>
+      <p class="note">Guardrails around it, always on: a per-node cooldown, a global concurrency cap,
+        a bundles-per-hour ceiling, and an allow-list of fixed read-only commands run by a named
+        account &mdash; nothing from an alert payload is ever interpolated into a command line.</p>
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <header><h3>Runs with no licence and no uplink</h3></header>
+        <ul class="lclist">
+          <li>Every lane on the Sources tab, and every menu computed from them.</li>
+          <li>Episode detection against the objective register, and the severity bands with it.</li>
+          <li>Window freeze, per-node log slices, the request chain and the hashed evidence bundle.</li>
+          <li>Deterministic correlation &mdash; the ranked hypothesis list that names the suspect.</li>
+          <li>The pre-filled ticket on Ops Issues and the trace on Incident Trace.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <header><h3>Stops when the meter stops</h3></header>
+        <ul class="lclist">
+          <li>The written narrative over an evidence bundle, with its citations.</li>
+          <li>The optional cloud tier &mdash; already off in this deployment.</li>
+        </ul>
+        <p class="note" id="licnote"></p>
+      </div>
+    </div>
+  </section>
+
+</div><!-- /#pulse-main -->
+
+<!-- ===================================================== LOAD ORDER ======= -->
+<script src="../data/manifest.js"></script>
+<script src="../data/rcameta.js"></script>
+<script src="../data/tickets.js"></script>
+<script src="../data/registry.js"></script>
+<script src="../data/spine.js"></script>
+<script src="../assets/synth.js"></script>
+<script src="../assets/charts.js"></script>
+<script src="../assets/shell.js"></script>
+
+<script>
+/* ------------------------------------------------------------------ page */
+(function () {
+  "use strict";
+
+  var C   = window.PULSE_CHARTS,
+      S   = window.PULSE_SHELL,
+      SY  = window.PULSE_SYNTH,
+      REG = window.PULSE_REG,
+      TK  = window.ADEPTIO_TICKETS || { byWindow: {} },
+      DA  = window.ADEPTIO_DATA;
+
+  var esc = C.esc;
+  var $ = function (id) { return document.getElementById(id); };
+
+  /* the payload — the control plane is a registry, so it is read once */
+  var A = null;
+  var PIPE = {};                 /* node -> pipeline row                     */
+  var BUFMAX = 1;
+  var chart = null;              /* PULSE_CHARTS.render handle, drawn lazily */
+
+  /* view state — filters, sort and edits live on the page; every number
+     lives in the payload and is only formatted here. */
+  var V = { tab: 'sources', state: null, lane: null, sq: '',
+            vantage: null, controls: true, pq: '',
+            tnode: '', tq: '', dirtyOnly: false, kill: false };
+  var EDITS = {};                /* "node|objective" -> {warn,crit}          */
+  var openS = {}, openP = {}, openA = {};
+
+  var TABS = [
+    { k: 'sources',    label: 'Sources'    },
+    { k: 'probes',     label: 'Probes'     },
+    { k: 'parsers',    label: 'Parsers'    },
+    { k: 'assertions', label: 'Assertions' },
+    { k: 'thresholds', label: 'Thresholds' },
+    { k: 'pipeline',   label: 'Pipeline'   },
+    { k: 'licence',    label: 'Licence'    }
+  ];
+
+  var STAGE_NOTE = {
+    arrives:  'the bytes reach the collector; nothing is understood yet',
+    parses:   'fields are extracted and typed against the contract',
+    computes: 'objectives are computed and scored against the register',
+    live:     'the menus read it; it carries a watermark and a coverage figure'
+  };
+
+  /* --------------------------------------------------------------- format */
+  function pct(v)   { return v == null ? 'NO DATA' : SY.fmtPct(v, 2); }
+  function num(v)   { return v == null ? 'NO DATA' : SY.fmtNum(v); }
+  function ms(v)    { return v == null ? 'NO DATA' : SY.fmtMs(v); }
+  function bytes(v) { return v == null ? 'NO DATA' : SY.fmtBytes(v); }
+
+  /* incident windows a probe is coupled to. The coupling is registry
+     metadata; the peak index and the ticket key are payload/manifest. */
+  function probeIncidents(id) {
+    var m = REG.byMonitor[id] || {}, inc = m.inc || {}, out = [], k;
+    for (k in DA.INC) {
+      if (!Object.prototype.hasOwnProperty.call(DA.INC, k)) continue;
+      if (!inc[k]) continue;
+      out.push(incMeta(k));
+    }
+    out.sort(function (a, b) {
+      if (a.sev !== b.sev) return a.sev === 'crit' ? -1 : 1;
+      return a.peak - b.peak;
+    });
+    return out;
+  }
+
+  function incMeta(k) {
+    var w = DA.INC[k], meta = DA.INCMETA[k] || [k, 'warn'];
+    return { key: k, label: meta[0], sev: meta[1], peak: w[1],
+             peakLabel: SY.dstamp(w[1]), ticket: (TK.byWindow || {})[k] || null };
+  }
+
+  /* a payload note may name an incident window in words ("inside WK34 ·
+     Incident A"). Reading the key out of the payload text keeps the link
+     honest — the peak index and the ticket still come from the manifest and
+     tickets.js. */
+  function notedWindows(text) {
+    var out = [], seen = {}, re = /Incident ([A-Z])\b/g, m;
+    while ((m = re.exec(String(text || '')))) {
+      if (seen[m[1]] || !DA.INC[m[1]]) continue;
+      seen[m[1]] = 1; out.push(incMeta(m[1]));
+    }
+    return out;
+  }
+
+  function incBadges(list) {
+    var h = '', i;
+    for (i = 0; i < list.length; i++) {
+      h += '<a class="badge inc' + (list[i].sev === 'crit' ? ' crit' : '') + '" ' +
+           'href="../index.html#t=' + list[i].peak + '" ' +
+           'title="' + esc('WK34 · Incident ' + list[i].key + ' — ' + list[i].label +
+                           ' · peak ' + list[i].peakLabel +
+                           ' — open on the flow map at this time') + '">' +
+           esc('W34·' + list[i].key) + ' ' + esc(list[i].peakLabel) + '</a>';
+    }
+    return h;
+  }
+
+  function incLinks(list, extra) {
+    var h = extra || '', i;
+    for (i = 0; i < list.length; i++) {
+      h += (h ? '<span class="csep"></span>' : '') +
+           '<a href="../index.html#t=' + list[i].peak + '">Flow map at ' + esc('WK34 · Incident ' + list[i].key) +
+           ' peak (' + esc(list[i].peakLabel) + ')</a>';
+      if (list[i].ticket) {
+        h += '<a href="../incident-trace.html#' + esc(list[i].ticket) + '">' +
+             esc(list[i].ticket) + ' &mdash; ' + esc(list[i].label) + '</a>';
+      }
+    }
+    return h;
+  }
+
+  /* ---------------------------------------------------------------- tiles */
+  function tiles() {
+    var t = A.tiles, h = '';
+
+    h += '<div class="tile plain" id="tile-sources"><div class="label"><span>Sources</span></div>' +
+         '<div class="value"><span class="v">' + esc(String(t.sources)) + '</span></div>' +
+         '<div class="sub">collector archetypes &middot; one per node on the flow map</div>' +
+         '<div class="tilefoot"><span class="note">16 nodes, 16 rows</span></div></div>';
+
+    h += '<div class="tile plain" id="tile-live"><div class="label"><span>Live</span></div>' +
+         '<div class="value"><span class="v">' + esc(String(t.live)) + '</span><u> / ' +
+         esc(String(t.sources)) + '</u></div>' +
+         '<div class="sub">feeding the menus now &middot; <b>' +
+         esc(String(t.sources - t.live)) + '</b> still walking the pipeline</div>' +
+         '<div class="tilefoot"><span class="pf ' + (t.live === t.sources ? 'pass' : 'part') + '">' +
+         (t.live === t.sources ? 'Complete' : 'In progress') + '</span></div></div>';
+
+    h += '<div class="tile plain" id="tile-lanes"><div class="label"><span>Lanes</span></div>' +
+         '<div class="value"><span class="v">' + esc(String(t.lanes)) + '</span></div>' +
+         '<div class="sub">collection techniques in the register &middot; no APM agent in any of them</div>' +
+         '<div class="tilefoot"><span class="note">L1 &hellip; L8</span></div></div>';
+
+    h += '<div class="tile plain" id="tile-probes"><div class="label"><span>Probes</span></div>' +
+         '<div class="value"><span class="v">' + esc(String(t.probes)) + '</span></div>' +
+         '<div class="sub">synthetic monitors across three vantages</div>' +
+         '<div class="tilefoot"><span class="note">L1 &middot; 5-min schedule</span></div></div>';
+
+    h += '<div class="tile plain" id="tile-assertions"><div class="label"><span>Assertions</span></div>' +
+         '<div class="value"><span class="v">' + esc(String(t.assertions)) + '</span></div>' +
+         '<div class="sub">outcome checks on a seeded account, not status-line checks</div>' +
+         '<div class="tilefoot"><span class="note">L3 &middot; body asserted</span></div></div>';
+
+    h += '<div class="tile plain" id="tile-objectives"><div class="label"><span>Objectives</span></div>' +
+         '<div class="value"><span class="v">' + esc(String(t.objectives)) + '</span></div>' +
+         '<div class="sub">warn / crit thresholds, read from <b>data/manifest.js</b></div>' +
+         '<div class="tilefoot"><span class="note">one register, every page</span></div></div>';
+
+    h += '<div class="tile plain" id="tile-fields"><div class="label"><span>Parser fields</span></div>' +
+         '<div class="value"><span class="v">' + esc(String(A.parsers.fields.length)) + '</span></div>' +
+         '<div class="sub">the access-log contract every L3 menu is computed from</div>' +
+         '<div class="tilefoot"><span class="note">one line per HTTP hop</span></div></div>';
+
+    h += '<div class="tile unk" id="tile-gap"><div class="label"><span>Collector gap</span></div>' +
+         '<div class="value"><span class="v">' + esc(String(t.gapMinutes)) + '</span><u>min</u></div>' +
+         '<div class="sub">' + esc(SY.fmtDur(t.gapMinutes)) + ' on <b>' + esc(A.gap.node) +
+         '</b> &middot; ' + esc(A.gap.label) + '</div>' +
+         '<div class="tilefoot"><span class="pf na">Provisional</span></div></div>';
+
+    $('tiles').innerHTML = h;
+  }
+
+  /* ------------------------------------------------- range-scoped context */
+  function context(rangeKey) {
+    var H = SY.serviceHealth(rangeKey), N = SY.synthetic(rangeKey), h = '';
+    var rng = N.range;
+
+    $('ctxwin').textContent = rng.label + ' · ' + rng.buckets + ' buckets' +
+                              (rng.clamped ? ' · clamped to the seeded week' : '');
+    $('ctxflow').setAttribute('href', '../index.html#t=' + rng.t1);
+
+    h += '<div class="tile plain" id="ctx-services"><div class="label"><span>Services observed</span></div>' +
+         '<div class="value"><span class="v">' + esc(String(H.tiles.services)) + '</span></div>' +
+         '<div class="sub">reporting through the lanes above</div></div>';
+
+    h += '<div class="tile plain" id="ctx-req"><div class="label"><span>Requests</span></div>' +
+         '<div class="value"><span class="v">' + esc(SY.fmtCompact(H.tiles.totalRequests)) + '</span></div>' +
+         '<div class="sub">' + esc(num(H.tiles.totalRequests)) + ' rows parsed</div></div>';
+
+    h += '<div class="tile plain" id="ctx-err"><div class="label"><span>Error rate</span></div>' +
+         '<div class="value"><span class="v">' + esc(SY.fmtRate(H.tiles.errorRate)) + '</span></div>' +
+         '<div class="sub"><b>' + esc(num(H.tiles.totalErrors)) + '</b> technical failures</div></div>';
+
+    h += '<div class="tile plain" id="ctx-crit"><div class="label"><span>Critical services</span></div>' +
+         '<div class="value"><span class="v">' + esc(String(H.tiles.criticalServices)) + '</span></div>' +
+         '<div class="sub"><b>' + esc(String(H.tiles.alertingMonitors)) + '</b> monitors alerting</div></div>';
+
+    h += '<div class="tile plain" id="ctx-mon"><div class="label"><span>Monitors up</span></div>' +
+         '<div class="value"><span class="v">' + esc(String(N.tiles.monitorsUp)) + '</span><u> / ' +
+         esc(String(N.tiles.monitorsTotal)) + '</u></div>' +
+         '<div class="sub"><b>' + esc(String(N.tiles.down)) + '</b> down at the last check</div></div>';
+
+    h += '<div class="tile plain" id="ctx-checks"><div class="label"><span>Checks ran</span></div>' +
+         '<div class="value"><span class="v">' + esc(SY.fmtCompact(N.tiles.totalChecks)) + '</span></div>' +
+         '<div class="sub">of <b>' + esc(num(N.tiles.expectedChecks)) + '</b> scheduled</div></div>';
+
+    $('ctx').innerHTML = h;
+  }
+
+  /* =================================================== TAB 1 · SOURCES === */
+  function stageCounts() {
+    var m = {}, i;
+    for (i = 0; i < A.states.length; i++) m[A.states[i]] = [];
+    for (i = 0; i < A.sources.length; i++) m[A.sources[i].state].push(A.sources[i].node);
+    return m;
+  }
+
+  function srail() {
+    var m = stageCounts(), h = '', i;
+    for (i = 0; i < A.states.length; i++) {
+      var st = A.states[i], ids = m[st] || [], on = V.state === st, ih = '', j;
+      for (j = 0; j < ids.length && j < 8; j++) ih += '<span>' + esc(ids[j]) + '</span>';
+      if (ids.length > 8) ih += '<span>+' + (ids.length - 8) + '</span>';
+      h += '<button class="stage' + (on ? ' on' : '') + '" type="button" data-st="' + esc(st) + '" ' +
+           'aria-pressed="' + (on ? 'true' : 'false') + '">' +
+           '<span class="st-n">' + (i + 1) + ' &middot; ' + esc(st) + '</span>' +
+           '<span class="st-v">' + esc(String(ids.length)) + '<u>of ' + esc(String(A.sources.length)) + '</u></span>' +
+           '<span class="st-d">' + esc(STAGE_NOTE[st] || '') + '</span>' +
+           '<span class="st-ids">' + ih + '</span></button>';
+    }
+    $('srail').innerHTML = h;
+  }
+
+  function laneChips() {
+    var counts = {}, i, order = [];
+    for (i = 0; i < A.sources.length; i++) {
+      var l = A.sources[i].lane;
+      if (counts[l] == null) { counts[l] = 0; order.push(l); }
+      counts[l]++;
+    }
+    order.sort();
+    var h = '<button class="chip' + (V.lane === null ? ' on' : '') + '" type="button" data-l="" ' +
+            'aria-pressed="' + (V.lane === null ? 'true' : 'false') + '">All<span class="n">' +
+            esc(String(A.sources.length)) + '</span></button>';
+    for (i = 0; i < order.length; i++) {
+      var on = V.lane === order[i];
+      h += '<button class="chip' + (on ? ' on' : '') + '" type="button" data-l="' + esc(order[i]) + '" ' +
+           'aria-pressed="' + (on ? 'true' : 'false') + '" title="' + esc(REG.lanes[order[i]] || order[i]) + '">' +
+           esc(order[i]) + '<span class="n">' + esc(String(counts[order[i]])) + '</span></button>';
+    }
+    $('slane').innerHTML = h;
+
+    /* full lane legend: all eight, with how many sources use each as primary
+       or secondary. Lanes with no source in this account read dimmed. */
+    var use = {}, k, j;
+    for (i = 0; i < A.sources.length; i++) {
+      var s = A.sources[i];
+      use[s.lane] = (use[s.lane] || 0) + 1;
+      for (j = 0; j < s.secondary.length; j++) use[s.secondary[j]] = (use[s.secondary[j]] || 0) + 1;
+    }
+    var lh = '';
+    for (k in REG.lanes) {
+      if (!Object.prototype.hasOwnProperty.call(REG.lanes, k)) continue;
+      var n = use[k] || 0;
+      lh += '<span class="lane' + (n ? '' : ' off') + '"><b>' + esc(k) + '</b>' +
+            esc(String(REG.lanes[k]).replace(/^L\d\s+/, '')) +
+            '<span class="n">' + esc(String(n)) + '</span></span>';
+    }
+    $('lanelegend').innerHTML = lh;
+  }
+
+  function meter(idx) {
+    var h = '<span class="smeter" aria-hidden="true">', i;
+    for (i = 0; i < 4; i++) {
+      h += '<i class="' + (i <= idx ? 'on' + (i === idx ? ' last' : '') : '') + '"></i>';
+    }
+    return h + '</span>';
+  }
+
+  function sourceRow(s) {
+    var id = 'sd-' + s.node, p = PIPE[s.node] || {}, isGap = !!p.gap;
+    var h = '', i;
+
+    h += '<tr class="row-toggle' + (openS[s.node] ? ' open' : '') + (isGap ? ' gaprow' : '') + '" ' +
+         'data-row="' + id + '" data-node="' + esc(s.node) + '" tabindex="0" role="button" ' +
+         'aria-expanded="' + (openS[s.node] ? 'true' : 'false') + '" aria-controls="' + id + '">';
+
+    h += '<td class="nm"><div class="mline"><span class="rt-c">&#9656;</span>' +
+         '<span class="mn">' + esc(s.name) + '</span>' +
+         (isGap ? '<span class="badge provisional">Watermark held</span>' : '') +
+         '</div><span class="sub mono">' + esc(s.node) + '</span></td>';
+
+    h += '<td class="wide">' + esc(s.archetype) + '</td>';
+
+    var lanes = '<span class="badge lane" title="' + esc(s.laneLabel) + '">' + esc(s.lane) + '</span>';
+    for (i = 0; i < s.secondary.length; i++) {
+      lanes += ' <span class="badge" title="' + esc(s.secondaryLabels[i]) + '">' + esc(s.secondary[i]) + '</span>';
+    }
+    h += '<td>' + lanes + '</td>';
+
+    h += '<td class="wide">' + esc(s.method) + '</td>';
+    h += '<td class="wide">' + esc(s.cadence) + '</td>';
+    h += '<td class="c-state" data-state="' + esc(s.state) + '">' + meter(s.stateIndex) +
+         '<span class="sname">' + esc(s.state) + '</span></td>';
+    h += '<td class="mono c-last">' + esc(p.watermarkLabel == null ? 'NO DATA' : p.watermarkLabel) + '</td>';
+    h += '<td class="num c-buf">' + esc(bytes(p.buffer_bytes)) + '</td>';
+    h += '<td class="mono c-wm">t&thinsp;' + esc(p.watermark == null ? '—' : String(p.watermark)) + '</td>';
+    h += '</tr>';
+
+    /* ------------------------------------------------------------- detail */
+    var o = s.owner || {};
+    var links = '<a href="../index.html#t=' + (p.watermark == null ? REG.NOW : p.watermark) + '">' +
+                'Open the flow map at ' + esc(p.watermarkLabel || SY.dstamp(REG.NOW)) + '</a>';
+    if (isGap) {
+      links += '<span class="csep"></span><a href="../index.html#t=' + p.gap.t0 + '">' +
+               'Flow map at the gap start (' + esc(p.gap.label.split(' - ')[0]) + ')</a>';
+    }
+
+    h += '<tr class="row-detail' + (openS[s.node] ? ' open' : '') + '" id="' + id +
+         '"><td colspan="9"><div class="dgrid">' +
+      '<div><div class="label muted">Owner</div><div>' + esc(o.name || '—') +
+        '</div><div class="note">' + esc(o.team || '') + (o.ext ? ' &middot; ext ' + esc(o.ext) : '') +
+        ' &middot; <span class="mono">' + esc(o.email || '') + '</span> (mock)</div></div>' +
+      '<div><div class="label muted">Readiness</div><div>stage <b>' + (s.stateIndex + 1) +
+        '</b> of 4 &middot; <b>' + esc(String(s.statePct)) + '%</b></div>' +
+        '<div class="note">' + esc(STAGE_NOTE[s.state] || '') + '</div></div>' +
+      '<div><div class="label muted">Prerequisite</div><div class="note" style="font-size:11.5px;color:var(--ink2)">' +
+        esc(s.prereq) + '</div></div>' +
+      '<div><div class="label muted">Lanes</div><div>' + esc(s.laneLabel) + '</div>' +
+        (s.secondaryLabels.length
+          ? '<div class="note">secondary: ' + esc(s.secondaryLabels.join(' · ')) + '</div>'
+          : '<div class="note">no secondary lane on this node.</div>') + '</div>' +
+      '<div><div class="label muted">Pipeline</div><div>buffer <b>' + esc(bytes(p.buffer_bytes)) +
+        '</b> &middot; dropped <b>' + esc(num(p.dropped_records)) + '</b></div>' +
+        '<div class="note">watermark ' + esc(p.watermarkLabel || '—') + '</div></div>' +
+      (isGap
+        ? '<div><div class="label muted">Gap</div><div class="uv unk">' + esc(p.gap.label) +
+          '</div><div class="note">' + esc(p.gap.reason) + '</div></div>'
+        : '<div><div class="label muted">Gap</div><div class="note">none — this node has shipped every ' +
+          'bucket in the seeded week.</div></div>') +
+      '<div style="grid-column:1/-1"><div class="label muted">Cross-links</div>' +
+        '<div class="dlinks">' + links + '</div></div>' +
+      '</div></td></tr>';
+
+    return h;
+  }
+
+  function sourceTable() {
+    var q = V.sq.toLowerCase(), list = [], i;
+    for (i = 0; i < A.sources.length; i++) {
+      var s = A.sources[i];
+      if (V.state && s.state !== V.state) continue;
+      if (V.lane && s.lane !== V.lane) continue;
+      if (q) {
+        var hay = (s.node + ' ' + s.name + ' ' + s.archetype + ' ' + s.method + ' ' +
+                   s.cadence + ' ' + s.lane + ' ' + s.prereq).toLowerCase();
+        if (hay.indexOf(q) < 0) continue;
+      }
+      list.push(s);
+    }
+    var h = '';
+    for (i = 0; i < list.length; i++) h += sourceRow(list[i]);
+    $('srows').innerHTML = h;
+    $('snone').hidden = list.length > 0;
+    $('sshown').textContent = 'showing ' + list.length + ' of ' + A.sources.length + ' sources';
+  }
+
+  /* ==================================================== TAB 2 · PROBES === */
+  function vantChips() {
+    var counts = {}, order = [], i;
+    for (i = 0; i < A.probes.length; i++) {
+      var v = A.probes[i].vantage;
+      if (counts[v] == null) { counts[v] = { total: 0, up: 0 }; order.push(v); }
+      counts[v].total++;
+      if (A.probes[i].lastResult === 'pass') counts[v].up++;
+    }
+    order.sort();
+    var h = '<button class="chip' + (V.vantage === null ? ' on' : '') + '" type="button" data-v="" ' +
+            'aria-pressed="' + (V.vantage === null ? 'true' : 'false') + '">All<span class="n">' +
+            esc(String(A.probes.length)) + '</span></button>';
+    for (i = 0; i < order.length; i++) {
+      var c = counts[order[i]], on = V.vantage === order[i];
+      h += '<button class="chip' + (on ? ' on' : '') + '" type="button" data-v="' + esc(order[i]) + '" ' +
+           'aria-pressed="' + (on ? 'true' : 'false') + '" title="' +
+           esc(order[i] + ': ' + c.up + ' of ' + c.total + ' passing at the last check') + '">' +
+           '<span class="sdot ' + (c.up === c.total ? 'ok' : c.up === 0 ? 'crit' : 'warn') + '"></span>' +
+           esc(order[i]) + '<span class="n">' + c.up + '/' + c.total + '</span></button>';
+    }
+    $('pvant').innerHTML = h;
+
+    var ctl = 0;
+    for (i = 0; i < A.probes.length; i++) if (A.probes[i].control) ctl++;
+    $('pctln').textContent = String(ctl);
+    $('pctl').className = V.controls ? 'chip on' : 'chip';
+    $('pctl').setAttribute('aria-pressed', V.controls ? 'true' : 'false');
+  }
+
+  function probeRow(p) {
+    var id = 'pd-' + p.id;
+    var nodata = p.lastResult === 'no-data';
+    var band = SY.slaBand(p.uptime7d);      /* the site's one banding rule */
+    var incs = probeIncidents(p.id);
+    var h = '';
+
+    h += '<tr class="row-toggle' + (openP[p.id] ? ' open' : '') + '" data-row="' + id +
+         '" data-id="' + esc(p.id) + '" tabindex="0" role="button" ' +
+         'aria-expanded="' + (openP[p.id] ? 'true' : 'false') + '" aria-controls="' + id + '">';
+
+    h += '<td class="nm"><div class="mline"><span class="rt-c">&#9656;</span>' +
+         '<span class="sdot ' + (nodata ? 'unk' : p.lastResult === 'pass' ? 'ok' : 'crit') + '"></span>' +
+         '<span class="mn">' + esc(p.name) + '</span>' +
+         '<span class="badge">' + esc(p.method) + '</span>' +
+         (p.control ? '<span class="badge ctl">Control</span>' : '') +
+         (p.noDataChecks ? '<span class="badge provisional">' + esc(num(p.noDataChecks)) + ' no-data</span>' : '') +
+         incBadges(incs) +
+         '</div><span class="sub mono">' + esc(p.id) + ' &middot; ' + esc(p.url) + '</span></td>';
+
+    h += '<td><span class="badge src">' + esc(p.vantage) + '</span></td>';
+    h += '<td class="mono">' + esc(p.node) + '</td>';
+    h += '<td class="num">' + esc(String(p.interval)) + '&thinsp;min</td>';
+    h += '<td class="c-res"><span class="pill ' + (nodata ? 'unk' : p.lastResult === 'pass' ? 'ok' : 'crit') + '">' +
+         (nodata ? 'NO DATA' : p.lastResult === 'pass' ? 'Pass' : 'Fail') + '</span></td>';
+    h += '<td class="num mono c-http">' + esc(p.lastStatus == null ? 'NO DATA' : String(p.lastStatus)) + '</td>';
+    h += '<td class="num c-rt">' + esc(nodata ? 'NO DATA' : ms(p.lastRt)) + '</td>';
+    h += '<td class="num c-up"><span class="uv ' + band + '">' + esc(pct(p.uptime7d)) + '</span></td>';
+    h += '<td class="num c-nd">' + esc(num(p.noDataChecks)) + '</td>';
+    h += '</tr>';
+
+    var links = incLinks(incs, '<a href="../index.html#t=' + REG.NOW + '">Open the flow map at ' +
+                               esc(SY.dstamp(REG.NOW)) + '</a>');
+
+    h += '<tr class="row-detail' + (openP[p.id] ? ' open' : '') + '" id="' + id +
+         '"><td colspan="9"><div class="dgrid">' +
+      '<div><div class="label muted">Assertion</div><div class="mono">' + esc(p.assertion) + '</div>' +
+        '<div class="note">A 200 that fails this assertion is a failed check.</div></div>' +
+      '<div><div class="label muted">Target</div><div class="mono" style="overflow-wrap:anywhere">' +
+        esc(p.url) + '</div></div>' +
+      '<div><div class="label muted">Schedule &amp; path</div><div>every <b>' + esc(String(p.interval)) +
+        '</b> min &middot; vantage <b>' + esc(p.vantage) + '</b></div>' +
+        '<div class="note">node <span class="mono">' + esc(p.node) + '</span>' +
+        (p.control ? ' &middot; control probe: expected to fail' : '') + '</div></div>' +
+      '<div><div class="label muted">Last check</div><div>' +
+        (nodata ? '<span class="uv unk">NO DATA</span>'
+                : 'HTTP <b>' + esc(String(p.lastStatus)) + '</b> in <b>' + esc(ms(p.lastRt)) + '</b>') +
+        '</div><div class="note">' + esc(SY.dstamp(REG.NOW)) + ' &middot; uptime over the week ' +
+        esc(pct(p.uptime7d)) + '</div></div>' +
+      '<div style="grid-column:1/-1"><div class="label muted">Cross-links</div>' +
+        '<div class="dlinks">' + links + '</div></div>' +
+      '</div></td></tr>';
+
+    return h;
+  }
+
+  function probeTable() {
+    var q = V.pq.toLowerCase(), list = [], i;
+    for (i = 0; i < A.probes.length; i++) {
+      var p = A.probes[i];
+      if (!V.controls && p.control) continue;
+      if (V.vantage && p.vantage !== V.vantage) continue;
+      if (q) {
+        var hay = (p.id + ' ' + p.name + ' ' + p.url + ' ' + p.method + ' ' + p.vantage + ' ' +
+                   p.node + ' ' + p.assertion).toLowerCase();
+        if (hay.indexOf(q) < 0) continue;
+      }
+      list.push(p);
+    }
+    var h = '';
+    for (i = 0; i < list.length; i++) h += probeRow(list[i]);
+    $('prows').innerHTML = h;
+    $('pnone').hidden = list.length > 0;
+    $('pshown').textContent = 'showing ' + list.length + ' of ' + A.probes.length + ' probes';
+  }
+
+  /* =================================================== TAB 3 · PARSERS === */
+  function parsers() {
+    var P = A.parsers, h = '', i;
+    $('prsname').textContent = P.name;
+    $('prsn').textContent = P.fields.length + ' fields · one line per HTTP hop';
+    $('prssample').textContent = P.sample;
+    for (i = 0; i < P.fields.length; i++) {
+      var f = P.fields[i];
+      h += '<tr><td class="num muted">' + (i + 1) + '</td>' +
+           '<td class="code">' + esc(f.f) + '</td>' +
+           '<td class="mono muted">' + esc(f.t) + '</td>' +
+           '<td class="wide">' + esc(f.note) + '</td></tr>';
+    }
+    $('prsrows').innerHTML = h;
+  }
+
+  function copyText(txt) {
+    var done = false;
+    try {
+      var ta = document.createElement('textarea');
+      ta.value = txt;
+      ta.setAttribute('readonly', 'readonly');
+      ta.style.position = 'fixed'; ta.style.top = '-2000px'; ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      done = !!document.execCommand('copy');
+      document.body.removeChild(ta);
+    } catch (e) { done = false; }
+    if (!done && navigator.clipboard && navigator.clipboard.writeText) {
+      try { navigator.clipboard.writeText(txt); done = true; } catch (e2) { done = false; }
+    }
+    return done;
+  }
+
+  /* ================================================ TAB 4 · ASSERTIONS === */
+  function assertions() {
+    var h = '', i;
+    for (i = 0; i < A.assertions.length; i++) {
+      var a = A.assertions[i], id = 'ad-' + a.id;
+      var incs = notedWindows(a.note);
+      var res = a.lastResult === 'pass' ? 'ok' : a.lastResult === 'fail' ? 'crit' : 'unk';
+      var lbl = a.lastResult === 'pass' ? 'Pass' : a.lastResult === 'fail' ? 'Fail' : 'NO DATA';
+
+      h += '<tr class="row-toggle' + (openA[a.id] ? ' open' : '') + '" data-row="' + id +
+           '" data-id="' + esc(a.id) + '" tabindex="0" role="button" ' +
+           'aria-expanded="' + (openA[a.id] ? 'true' : 'false') + '" aria-controls="' + id + '">' +
+        '<td class="nm"><span class="rt-c">&#9656;</span>' + esc(a.id) + '</td>' +
+        '<td class="wide">' + esc(a.name) + incBadges(incs) + '</td>' +
+        '<td class="code">' + esc(a.target) + '</td>' +
+        '<td class="mono">' + esc(a.node) + '</td>' +
+        '<td class="c-res"><span class="pill ' + res + '">' + lbl + '</span></td>' +
+        '<td class="mono c-run">' + esc(a.lastRun) + '</td></tr>';
+
+      var links = incLinks(incs, '<a href="../index.html#t=' + REG.NOW + '">Open the flow map at ' +
+                                 esc(SY.dstamp(REG.NOW)) + '</a>');
+
+      h += '<tr class="row-detail' + (openA[a.id] ? ' open' : '') + '" id="' + id +
+           '"><td colspan="6"><div class="dgrid">' +
+        '<div><div class="label muted">Expected</div><div class="mono" style="overflow-wrap:anywhere">' +
+          esc(a.expected) + '</div></div>' +
+        '<div><div class="label muted">Runs against</div><div class="code">' + esc(a.target) +
+          '</div><div class="note">node <span class="mono">' + esc(a.node) + '</span> &middot; last run ' +
+          esc(a.lastRun) + '</div></div>' +
+        '<div style="grid-column:1/-1"><div class="label muted">Why it exists</div>' +
+          '<div class="note" style="font-size:11.5px;color:var(--ink2)">' + esc(a.note) + '</div></div>' +
+        '<div style="grid-column:1/-1"><div class="label muted">Cross-links</div>' +
+          '<div class="dlinks">' + links + '</div></div>' +
+        '</div></td></tr>';
+    }
+    $('arows').innerHTML = h;
+    $('ashown').textContent = A.assertions.length + ' assertions';
+  }
+
+  /* ================================================ TAB 5 · THRESHOLDS === */
+  function thresholdKey(t) { return t.node + '|' + t.objective; }
+
+  function nodeSelect() {
+    var seen = {}, order = [], i;
+    for (i = 0; i < A.thresholds.length; i++) {
+      var t = A.thresholds[i];
+      if (seen[t.node]) { seen[t.node].n++; continue; }
+      seen[t.node] = { name: t.nodeName, n: 1 };
+      order.push(t.node);
+    }
+    var h = '<option value="">All nodes (' + A.thresholds.length + ')</option>';
+    for (i = 0; i < order.length; i++) {
+      h += '<option value="' + esc(order[i]) + '">' + esc(seen[order[i]].name) +
+           ' (' + seen[order[i]].n + ')</option>';
+    }
+    $('tnode').innerHTML = h;
+    $('tnode').value = V.tnode;
+  }
+
+  function thresholdRows() {
+    var q = V.tq.toLowerCase(), list = [], i;
+    for (i = 0; i < A.thresholds.length; i++) {
+      var t = A.thresholds[i], k = thresholdKey(t);
+      if (V.tnode && t.node !== V.tnode) continue;
+      if (V.dirtyOnly && !EDITS[k]) continue;
+      if (q) {
+        var hay = (t.node + ' ' + t.nodeName + ' ' + t.objective + ' ' + t.unit + ' ' + t.pm).toLowerCase();
+        if (hay.indexOf(q) < 0) continue;
+      }
+      list.push(t);
+    }
+
+    var h = '';
+    for (i = 0; i < list.length; i++) {
+      var r = list[i], key = thresholdKey(r), e = EDITS[key] || null;
+      var warn = e && e.warn != null ? e.warn : r.warn;
+      var crit = e && e.crit != null ? e.crit : r.crit;
+      var dw = e && e.warn != null && e.warn !== r.warn;
+      var dc = e && e.crit != null && e.crit !== r.crit;
+
+      h += '<tr data-k="' + esc(key) + '">' +
+        '<td class="nm">' + esc(r.nodeName) + '<span class="sub mono">' + esc(r.node) + '</span></td>' +
+        '<td class="wide">' + esc(r.objective) + '</td>' +
+        '<td class="mono">' + esc(r.unit) + '</td>' +
+        '<td class="num c-base">' + esc(String(r.base)) + '</td>' +
+        '<td class="num"><input class="tin' + (dw ? ' dirty' : '') + '" type="number" step="any" ' +
+          'data-f="warn" value="' + esc(String(warn)) + '" ' +
+          'aria-label="Warn threshold for ' + esc(r.objective + ' on ' + r.nodeName) + '"/></td>' +
+        '<td class="num"><input class="tin' + (dc ? ' dirty' : '') + '" type="number" step="any" ' +
+          'data-f="crit" value="' + esc(String(crit)) + '" ' +
+          'aria-label="Critical threshold for ' + esc(r.objective + ' on ' + r.nodeName) + '"/></td>' +
+        '<td>' + (r.dir === 'lo' ? 'lower is worse' : 'higher is worse') + '</td>' +
+        '<td class="wide muted">' + esc(r.pm) + '</td>' +
+        '<td><button class="btn mini" type="button" data-revert="' + esc(key) + '"' +
+          (e ? '' : ' hidden') + '>Revert</button></td>' +
+        '</tr>';
+    }
+    $('trows').innerHTML = h;
+    $('tnone').hidden = list.length > 0;
+    $('tshown').textContent = 'showing ' + list.length + ' of ' + A.thresholds.length + ' objectives';
+    thresholdCount();
+  }
+
+  function thresholdCount() {
+    var n = 0, k;
+    for (k in EDITS) if (Object.prototype.hasOwnProperty.call(EDITS, k)) n++;
+    $('tdirtyn').textContent = String(n);
+    $('tcount').textContent = n === 0
+      ? "no edits — the register is the manifest's"
+      : n + (n === 1 ? ' objective' : ' objectives') + ' edited in this tab only';
+    $('trevert').disabled = n === 0;
+    $('tdirty').className = V.dirtyOnly ? 'chip on' : 'chip';
+    $('tdirty').setAttribute('aria-pressed', V.dirtyOnly ? 'true' : 'false');
+  }
+
+  /* ================================================== TAB 6 · PIPELINE === */
+  function pipeline() {
+    var g = A.gap, i;
+
+    $('gapch').textContent = g.label + ' · ' + SY.fmtDur(g.mins);
+    $('gapgrid').innerHTML =
+      '<div><div class="label muted">Node</div><div class="mono">' + esc(g.node) +
+        '</div><div class="note">service <span class="mono">' + esc(g.svc) + '</span></div></div>' +
+      '<div><div class="label muted">Window</div><div class="uv unk">' + esc(g.label) +
+        '</div><div class="note">' + esc(SY.fmtDur(g.mins)) + ' · t ' + g.t0 + '–' + g.t1 +
+        '</div></div>' +
+      '<div><div class="label muted">Watermark held at</div><div class="mono">' +
+        esc((PIPE[g.node] || {}).watermarkLabel || '—') + '</div>' +
+        '<div class="note">buffer <b>' + esc(bytes((PIPE[g.node] || {}).buffer_bytes)) +
+        '</b> · dropped <b>' + esc(num((PIPE[g.node] || {}).dropped_records)) + '</b></div></div>' +
+      '<div><div class="label muted">Probes on this node</div><div><b>' +
+        esc(String(probesOnNode(g.node))) + '</b> of ' + A.probes.length + '</div>' +
+        '<div class="note">their bars read no-data across the window, never down.</div></div>' +
+      '<div style="grid-column:1/-1"><div class="label muted">Reason</div>' +
+        '<div class="note" style="font-size:11.5px;color:var(--ink2)">' + esc(g.reason) + '</div></div>';
+
+    $('gaplinks').innerHTML =
+      '<a href="../index.html#t=' + g.t0 + '">Open the flow map at the gap start</a>' +
+      '<span class="csep"></span>' +
+      '<a href="../index.html#t=' + g.t1 + '">Flow map at the gap end</a>' +
+      '<span class="csep"></span>' +
+      '<a href="../menus/sla-drilldown.html">SLA drill-down &mdash; the provisional Aug 26 cell</a>' +
+      '<a href="../menus/synthetic.html">Synthetic &mdash; the no-data bars</a>';
+
+    /* table */
+    var h = '';
+    for (i = 0; i < A.pipeline.length; i++) {
+      var p = A.pipeline[i], isGap = !!p.gap;
+      var w = Math.max(2, Math.round((p.buffer_bytes / BUFMAX) * 100));
+      h += '<tr' + (isGap ? ' class="gaprow"' : '') + ' data-node="' + esc(p.node) + '">' +
+        '<td class="nm">' + esc(p.name) + '<span class="sub mono">' + esc(p.node) + '</span></td>' +
+        '<td><span class="badge lane">' + esc(p.lane) + '</span></td>' +
+        '<td class="c-state">' + meter(A.states.indexOf(p.state)) +
+          '<span class="sname">' + esc(p.state) + '</span></td>' +
+        '<td class="num c-buf"><div class="bufwrap"><span class="bufbar' + (isGap ? ' hi' : '') +
+          '"><i style="width:' + w + '%"></i></span><span>' + esc(bytes(p.buffer_bytes)) + '</span></div></td>' +
+        '<td class="num c-drop">' + esc(num(p.dropped_records)) + '</td>' +
+        '<td class="mono c-wm">' + esc(p.watermarkLabel) + '</td>' +
+        '<td class="wide">' + (isGap
+          ? '<span class="badge provisional">Held</span> <span class="note">' + esc(p.gap.label) +
+            ' · ' + esc(SY.fmtDur(p.gap.mins)) + ' unknown</span>'
+          : '<span class="note">complete to ' + esc(p.watermarkLabel) + '</span>') + '</td>' +
+        '</tr>';
+    }
+    $('pprows').innerHTML = h;
+  }
+
+  function probesOnNode(node) {
+    var n = 0, i;
+    for (i = 0; i < A.probes.length; i++) if (A.probes[i].node === node) n++;
+    return n;
+  }
+
+  function pipeChart() {
+    /* largest first, so the one node that matters is the first bar and keeps
+       its axis label whatever the chart helper decides to thin. */
+    var sorted = A.pipeline.slice().sort(function (a, b) { return b.buffer_bytes - a.buffer_bytes; });
+    var groups = [], vals = [], i;
+    for (i = 0; i < sorted.length; i++) {
+      groups.push(sorted[i].node);
+      vals.push(sorted[i].buffer_bytes);
+    }
+    chart = C.render('#pipechart', {
+      type: 'bars', groups: groups,
+      series: [{ name: 'buffer bytes', values: vals }],
+      yFmt: 'compact', ratio: 0.26, minH: 170,
+      label: 'buffer bytes held per collector node, largest first'
+    });
+  }
+
+  /* =================================================== TAB 7 · LICENCE === */
+  function licence() {
+    var L = A.licence, h = '', i;
+    $('licmodel').textContent = L.model;
+    for (i = 0; i < L.tiers.length; i++) {
+      var t = L.tiers[i], on = t.state === 'ON';
+      h += '<div class="card ltier">' +
+        '<div class="ltop"><span class="ln">' + esc(t.name) + '</span>' +
+        '<span class="tstate' + (on ? ' on' : '') + '">' + esc(t.state) + '</span></div>' +
+        '<p class="note">' + esc(t.note) + '</p></div>';
+    }
+    $('lictiers').innerHTML = h;
+    $('licnote').textContent = L.note;
+    killPaint();
+  }
+
+  function killPaint() {
+    var n = $('killstate'), b = $('kill');
+    n.textContent = V.kill ? 'HALTED' : 'ARMED';
+    n.className = 'ksw ' + (V.kill ? 'halted' : 'armed');
+    b.textContent = V.kill ? 'Re-arm automated capture' : 'Halt automated capture';
+    b.className = V.kill ? 'btn' : 'btn pri';
+    b.setAttribute('aria-pressed', V.kill ? 'true' : 'false');
+    $('killnote').textContent = V.kill
+      ? 'Halted in this tab only. Collection, detection and scoring carry on; what stops is the '
+      + 'automated evidence capture that would otherwise run read-only commands on the estate. '
+      + 'An operator can still start a capture by hand.'
+      : 'Armed. On an episode the orchestrator freezes the window, pulls the per-node slices and '
+      + 'builds the hashed bundle. Halting it stops that and nothing else — collection, '
+      + 'detection, scoring and ticketing are unaffected.';
+  }
+
+  /* ============================================================== TABS === */
+  function tabBar() {
+    var h = '', i;
+    for (i = 0; i < TABS.length; i++) {
+      var on = V.tab === TABS[i].k;
+      h += '<button class="chip' + (on ? ' on' : '') + '" type="button" role="tab" ' +
+           'id="tab-' + TABS[i].k + '" data-tab="' + TABS[i].k + '" ' +
+           'aria-selected="' + (on ? 'true' : 'false') + '" ' +
+           'aria-controls="p-' + TABS[i].k + '" tabindex="' + (on ? '0' : '-1') + '">' +
+           esc(TABS[i].label) + '</button>';
+    }
+    $('tabs').innerHTML = h;
+  }
+
+  function showTab(k, focus) {
+    var i, found = false;
+    for (i = 0; i < TABS.length; i++) if (TABS[i].k === k) found = true;
+    if (!found) k = 'sources';
+    V.tab = k;
+    tabBar();
+    for (i = 0; i < TABS.length; i++) {
+      $('p-' + TABS[i].k).hidden = TABS[i].k !== k;
+    }
+    if (k === 'pipeline' && chart) chart.draw();
+    if (focus) { var b = $('tab-' + k); if (b) b.focus(); }
+    try {
+      if (window.history && window.history.replaceState) {
+        window.history.replaceState(null, '', '#' + k);
+      }
+    } catch (e) { /* file:// without history: the tab still switches */ }
+  }
+
+  /* ============================================================ RENDER === */
+  function renderStatic() {
+    A = SY.collectorAdmin();
+
+    PIPE = {};
+    BUFMAX = 1;
+    var i;
+    for (i = 0; i < A.pipeline.length; i++) {
+      PIPE[A.pipeline[i].node] = A.pipeline[i];
+      if (A.pipeline[i].buffer_bytes > BUFMAX) BUFMAX = A.pipeline[i].buffer_bytes;
+    }
+
+    tiles();
+    srail();
+    laneChips();
+    sourceTable();
+    $('snote').textContent = 'Every source above is collected without an APM agent and without an ' +
+      'application code change: ' + A.tiles.live + ' of ' + A.tiles.sources +
+      ' are live, and the rest are held at a named prerequisite rather than at a guess.';
+
+    vantChips();
+    probeTable();
+    parsers();
+    assertions();
+    nodeSelect();
+    thresholdRows();
+    pipeline();
+    licence();
+
+    S.setLineage(SY.lineage('collectors'));
+  }
+
+  /* ------------------------------------------------------ row expand/close */
+  function toggler(tbodyId, store, keyAttr) {
+    var body = $(tbodyId);
+    function toggle(tr) {
+      var det = $(tr.getAttribute('data-row'));
+      var isOpen = tr.className.indexOf('open') > -1;
+      var key = tr.getAttribute(keyAttr);
+      var base = tr.className.indexOf('gaprow') > -1 ? 'row-toggle gaprow' : 'row-toggle';
+      tr.className = isOpen ? base : base + ' open';
+      tr.setAttribute('aria-expanded', isOpen ? 'false' : 'true');
+      if (det) det.className = isOpen ? 'row-detail' : 'row-detail open';
+      if (isOpen) delete store[key]; else store[key] = 1;
+    }
+    body.addEventListener('click', function (ev) {
+      var n = ev.target;
+      while (n && n !== this) {
+        if (n.tagName === 'A') return;
+        if (n.className && String(n.className).indexOf('row-toggle') === 0) { toggle(n); return; }
+        n = n.parentNode;
+      }
+    });
+    body.addEventListener('keydown', function (ev) {
+      if (ev.key !== 'Enter' && ev.key !== ' ') return;
+      var n = ev.target;
+      if (n && n.className && String(n.className).indexOf('row-toggle') === 0) {
+        ev.preventDefault(); toggle(n);
+      }
+    });
+  }
+
+  /* --------------------------------------------------------------- boot */
+  S.ready(function () {
+    S.setLineage(SY.lineage('collectors'));
+    renderStatic();
+    context(S.getRange() || '24h');
+    pipeChart();
+
+    /* the range chips scope the context strip only */
+    S.onRange(function (ev) { context(ev.detail.range); });
+
+    /* ---------------------------------------------------------- tabs */
+    var initial = 'sources';
+    try {
+      var hs = String(window.location.hash || '').replace(/^#/, '');
+      if (hs) initial = hs;
+    } catch (e) { /* keep the default */ }
+    showTab(initial, false);
+
+    $('tabs').addEventListener('click', function (ev) {
+      var n = ev.target;
+      while (n && n !== this && !(n.getAttribute && n.getAttribute('data-tab'))) n = n.parentNode;
+      if (!n || n === this) return;
+      showTab(n.getAttribute('data-tab'), false);
+    });
+    $('tabs').addEventListener('keydown', function (ev) {
+      var k = ev.key, i, at = -1;
+      for (i = 0; i < TABS.length; i++) if (TABS[i].k === V.tab) at = i;
+      if (k === 'ArrowRight' || k === 'ArrowDown') { ev.preventDefault(); showTab(TABS[(at + 1) % TABS.length].k, true); }
+      else if (k === 'ArrowLeft' || k === 'ArrowUp') { ev.preventDefault(); showTab(TABS[(at - 1 + TABS.length) % TABS.length].k, true); }
+      else if (k === 'Home') { ev.preventDefault(); showTab(TABS[0].k, true); }
+      else if (k === 'End')  { ev.preventDefault(); showTab(TABS[TABS.length - 1].k, true); }
+    });
+
+    /* ------------------------------------------------------- sources */
+    $('srail').addEventListener('click', function (ev) {
+      var n = ev.target;
+      while (n && n !== this && !(n.getAttribute && n.getAttribute('data-st'))) n = n.parentNode;
+      if (!n || n === this) return;
+      var st = n.getAttribute('data-st');
+      V.state = (V.state === st) ? null : st;
+      srail(); sourceTable();
+    });
+    $('slane').addEventListener('click', function (ev) {
+      var n = ev.target;
+      while (n && n !== this && !(n.getAttribute && n.hasAttribute('data-l'))) n = n.parentNode;
+      if (!n || n === this) return;
+      var l = n.getAttribute('data-l');
+      V.lane = l ? l : null;
+      laneChips(); sourceTable();
+    });
+    $('sq').addEventListener('input', function () { V.sq = this.value.trim(); sourceTable(); });
+    $('sreset').addEventListener('click', function () {
+      V.sq = ''; V.state = null; V.lane = null; $('sq').value = '';
+      srail(); laneChips(); sourceTable();
+    });
+    toggler('srows', openS, 'data-node');
+
+    /* -------------------------------------------------------- probes */
+    $('pvant').addEventListener('click', function (ev) {
+      var n = ev.target;
+      while (n && n !== this && !(n.getAttribute && n.hasAttribute('data-v'))) n = n.parentNode;
+      if (!n || n === this) return;
+      var v = n.getAttribute('data-v');
+      V.vantage = v ? v : null;
+      vantChips(); probeTable();
+    });
+    $('pctl').addEventListener('click', function () {
+      V.controls = !V.controls; vantChips(); probeTable();
+    });
+    $('pq').addEventListener('input', function () { V.pq = this.value.trim(); probeTable(); });
+    $('preset').addEventListener('click', function () {
+      V.pq = ''; V.vantage = null; V.controls = true; $('pq').value = '';
+      vantChips(); probeTable();
+    });
+    toggler('prows', openP, 'data-id');
+
+    /* ---------------------------------------------------- assertions */
+    toggler('arows', openA, 'data-id');
+
+    /* ------------------------------------------------------- parsers */
+    $('prscopy').addEventListener('click', function () {
+      var n = $('prsstat');
+      var okc = copyText(A.parsers.sample);
+      n.textContent = okc
+        ? 'Sample line copied — ' + A.parsers.fields.length + ' fields, exactly as the parser reads it.'
+        : 'Copy is not available in this browser; select the line above instead.';
+      n.className = okc ? 'stat on' : 'stat';
+    });
+
+    /* ---------------------------------------------------- thresholds */
+    $('tnode').addEventListener('change', function () { V.tnode = this.value; thresholdRows(); });
+    $('tq').addEventListener('input', function () { V.tq = this.value.trim(); thresholdRows(); });
+    $('tdirty').addEventListener('click', function () { V.dirtyOnly = !V.dirtyOnly; thresholdRows(); });
+    $('trevert').addEventListener('click', function () {
+      EDITS = {}; thresholdRows();
+    });
+    $('trows').addEventListener('input', function (ev) {
+      var inp = ev.target;
+      if (!inp || inp.className.indexOf('tin') < 0) return;
+      var tr = inp.parentNode; while (tr && tr.tagName !== 'TR') tr = tr.parentNode;
+      if (!tr) return;
+      var key = tr.getAttribute('data-k'), field = inp.getAttribute('data-f');
+      var base = null, i;
+      for (i = 0; i < A.thresholds.length; i++) {
+        if (thresholdKey(A.thresholds[i]) === key) { base = A.thresholds[i]; break; }
+      }
+      if (!base) return;
+      var v = parseFloat(inp.value);
+      if (!isFinite(v)) return;                       /* an empty box is not an edit */
+      if (!EDITS[key]) EDITS[key] = { warn: null, crit: null };
+      EDITS[key][field] = v;
+      var same = (EDITS[key].warn == null || EDITS[key].warn === base.warn) &&
+                 (EDITS[key].crit == null || EDITS[key].crit === base.crit);
+      if (same) delete EDITS[key];
+      inp.className = (v !== base[field]) ? 'tin dirty' : 'tin';
+      var rev = tr.querySelector('button[data-revert]');
+      if (rev) rev.hidden = !EDITS[key];
+      thresholdCount();
+    });
+    $('trows').addEventListener('click', function (ev) {
+      var n = ev.target;
+      while (n && n !== this && !(n.getAttribute && n.getAttribute('data-revert'))) n = n.parentNode;
+      if (!n || n === this) return;
+      delete EDITS[n.getAttribute('data-revert')];
+      thresholdRows();
+    });
+
+    /* ------------------------------------------------------- licence */
+    $('kill').addEventListener('click', function () { V.kill = !V.kill; killPaint(); });
+  });
+})();
+</script>
+</body>
+</html>
