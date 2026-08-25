@@ -1,0 +1,831 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<link rel="icon" href="data:,"/>
+
+<!-- ===========================================================================
+     ADEPTIO Pulse — menu 6 · DOWNSTREAM API HEALTH
+     Built from menus/_template.html. Every figure comes from
+     PULSE_SYNTH.downstream(range, showInternal) — the page formats, sorts and
+     filters, it never computes a number of its own.
+     =========================================================================== -->
+
+<title>Downstream API Health &mdash; Adeptio Pulse</title>
+
+<link rel="stylesheet" href="../assets/tokens.css"/>
+<link rel="stylesheet" href="../assets/shell.css"/>
+<link rel="stylesheet" href="../assets/menus.css"/>
+
+<style>
+/* ------------------------------------------------------------- page-local
+   Five additions this screen needs and the shared kit does not carry.
+   Tokens only; status colours are used for status and nothing else. --------*/
+
+/* 1 · the callee grid — one small tile per downstream, denser than .tiles
+       because there are twelve of them and each carries three facts. */
+.dsgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(214px,1fr));gap:8px}
+.dstile{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+  padding:9px 11px 10px;display:flex;flex-direction:column;gap:4px;min-width:0;
+  cursor:pointer;text-align:left;font-family:var(--font);color:var(--ink2)}
+.dstile:hover{border-color:var(--chipline)}
+.dstile .dsn{display:flex;align-items:center;gap:7px;min-width:0}
+.dstile .dsh{font-family:var(--mono);font-size:11.5px;font-weight:650;color:var(--ink);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.dstile .dsm{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.dstile .dsm b{color:var(--ink2);font-weight:650}
+.dstile.warn{border-color:color-mix(in srgb,var(--warn) 45%,transparent)}
+.dstile.crit{border-color:color-mix(in srgb,var(--crit) 45%,transparent)}
+.dstile.sel{border-color:var(--accent);background:var(--panel2)}
+.dstile .dsx{font-size:10px;color:var(--muted);overflow-wrap:anywhere}
+.dstile .dsx .tp{font-weight:750;letter-spacing:.06em;text-transform:uppercase}
+
+/* .card sets display:flex, which beats the UA rule for [hidden] */
+.card[hidden]{display:none}
+.gap{flex:1 1 auto;min-width:4px}
+
+/* the focused-callee stat strip: the tile look without the tile chrome */
+.fstats{display:grid;grid-template-columns:repeat(auto-fit,minmax(158px,1fr));gap:10px}
+.fstats .mv{font-size:19px;font-weight:700;letter-spacing:-.02em;color:var(--ink);
+  font-variant-numeric:tabular-nums;line-height:1.25;margin-top:1px}
+
+/* the 5xx reading is a status reading, so it takes a status colour */
+.ev{font-weight:700;font-variant-numeric:tabular-nums}
+.ev.ok{color:var(--ok)} .ev.warn{color:var(--warn)}
+.ev.crit{color:var(--crit)} .ev.unk{color:var(--unk)}
+
+/* 2 · badge variants: external/internal callee, incident cross-link */
+.badge.ext{color:var(--maint);border-color:color-mix(in srgb,var(--maint) 42%,transparent)}
+.badge.inc{text-decoration:none;color:var(--warn);
+  border-color:color-mix(in srgb,var(--warn) 42%,transparent);
+  background:color-mix(in srgb,var(--warn) 12%,transparent)}
+.badge.inc.crit{color:var(--crit);border-color:color-mix(in srgb,var(--crit) 42%,transparent);
+  background:color-mix(in srgb,var(--crit) 12%,transparent)}
+.badge.inc:hover{border-color:currentColor}
+
+/* 3 · the "show internal services" switch — .field carries text inputs only */
+.chk{display:inline-flex;align-items:center;gap:8px;font-size:11.5px;font-weight:650;
+  color:var(--ink2);background:var(--panel);border:1px solid var(--line);
+  border-radius:9px;padding:5px 11px;cursor:pointer;white-space:nowrap}
+.chk:hover{border-color:var(--chipink);color:var(--ink)}
+.chk input{width:13px;height:13px;margin:0;accent-color:var(--accent);cursor:pointer}
+.chk .n{font-variant-numeric:tabular-nums;opacity:.62}
+
+/* 4 · column furniture for the endpoint table */
+.ptable td.ep,.ptable th.ep{min-width:280px}
+.ptable td.ep .epp{font-family:var(--mono);font-size:11.5px;color:var(--ink);
+  overflow-wrap:anywhere;white-space:normal}
+.ptable td.wr{white-space:normal}
+
+/* 5 · links inside a detail block sit on one line and do not inherit the row cursor */
+.dlinks{display:flex;gap:10px;flex-wrap:wrap;align-items:center;font-size:11px}
+.dlinks a{text-decoration:none;border-bottom:1px solid transparent}
+.dlinks a:hover{border-bottom-color:currentColor}
+.incrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:5px 0;
+  border-bottom:1px solid var(--line2);font-size:11.5px;color:var(--ink2)}
+.incrow:last-child{border-bottom:none}
+.incrow .il{color:var(--ink);font-weight:650}
+
+@media (prefers-reduced-motion:reduce){
+  .rt-c,.statusbar > i{transition:none}
+}
+</style>
+</head>
+
+<body data-shell="page"
+      data-title="Downstream API Health"
+      data-subtitle="computed from: L3 egress proxy + gateway access logs (caller_service, callee_host, endpoint, status, upstream_ms, retries) &middot; L2 proxy cluster counters &middot; no APM &middot; Aug 23 &ndash; 29, 2027"
+      data-ranges="1h,4h,12h,24h"
+      data-range="24h"
+      data-lineage="L3 egress forward-proxy and gateway access logs &middot; L2 proxy cluster counters">
+
+<div id="pulse-main">
+
+  <!-- ===================================================== window / filter -->
+  <div class="card">
+    <div class="toolbar">
+      <span class="clbl">Window</span>
+      <span class="mono" id="winlabel">&mdash;</span>
+      <span class="csep"></span>
+      <span class="note" id="wininfo"></span>
+      <div class="sp"></div>
+      <label class="chk" for="showint">
+        <input type="checkbox" id="showint" checked/>
+        <span>Show internal services</span><span class="n" id="showint-n"></span>
+      </label>
+      <a class="btn" id="winflow" href="../index.html">Open on the flow map</a>
+    </div>
+  </div>
+
+  <!-- ============================================================== callees -->
+  <section class="sect"><h2>Callees</h2>
+    <span class="sh">every host our services called in this window &mdash; select one to focus the endpoint list</span>
+    <span class="sp"></span>
+    <span class="note" id="calleecount"></span>
+  </section>
+
+  <div class="dsgrid" id="dsgrid" role="group" aria-label="Downstream callees"></div>
+
+  <div class="legend">
+    <span><i class="ok"></i>5xx &lt; 0.1%</span>
+    <span><i class="warn"></i>0.1&ndash;1%</span>
+    <span><i class="crit"></i>&ge; 1%</span>
+    <span><i class="unk"></i>no data</span>
+    <span class="csep"></span>
+    <span class="muted">calls and 5xx come from the egress log; a callee we never called in this window is not listed.</span>
+  </div>
+
+  <!-- ================================================== focused callee card -->
+  <div class="card" id="focus" hidden>
+    <header>
+      <h3 id="fname">&mdash;</h3>
+      <span class="ch" id="fhost"></span>
+      <span id="fbadges"></span>
+      <span class="gap"></span>
+      <button class="btn" type="button" id="fclear">Clear selection</button>
+    </header>
+    <div class="fstats" id="fstats"></div>
+    <div class="grid2">
+      <div class="card flat"><header><h3>Calls</h3><span class="ch" id="fcallsch">per 5-min bucket</span></header>
+        <div class="chartbox" id="fcalls"></div></div>
+      <div class="card flat"><header><h3>Callee latency</h3><span class="ch">upstream_ms, mean per bucket</span></header>
+        <div class="chartbox" id="flat"></div></div>
+    </div>
+    <div><div class="label muted">Cross-links</div><div class="dlinks" id="flinks"></div></div>
+  </div>
+
+  <!-- =============================================================== totals -->
+  <section class="sect"><h2>Totals</h2>
+    <span class="sh">every outbound call in the window, across the callees shown above</span></section>
+  <section class="tiles" id="tiles" aria-label="Outbound call totals"></section>
+
+  <!-- ============================== status distribution + incident windows -->
+  <div class="grid-2-1">
+    <div class="card">
+      <header><h3>HTTP status distribution</h3>
+        <span class="ch" id="distch">status returned by the callee</span></header>
+      <div id="dist"></div>
+      <p class="note">2xx is a green band, 4xx amber, 5xx red. The status here is the callee's
+        <span class="mono">upstream_status</span>, not the status our own service finally returned to the app.</p>
+    </div>
+    <div class="card">
+      <header><h3>Incident windows in range</h3><span class="ch" id="incch"></span></header>
+      <div id="incs"></div>
+    </div>
+  </div>
+
+  <!-- ======================================================== top endpoints -->
+  <section class="sect"><h2>Top endpoints</h2>
+    <span class="sh">one row per caller&rarr;callee endpoint &middot; expand for status codes and the series</span>
+    <span class="sp"></span>
+    <span class="note" id="shown"></span>
+  </section>
+
+  <div class="card">
+    <div class="toolbar">
+      <span class="clbl">Filter</span>
+      <label class="field"><span class="fl">Text</span>
+        <input type="text" id="q" placeholder="endpoint, caller or callee" aria-label="Filter endpoints"/></label>
+      <span class="csep"></span>
+      <button class="btn" type="button" id="expand">Expand all</button>
+      <button class="btn" type="button" id="collapse">Collapse all</button>
+      <div class="sp"></div>
+      <button class="btn" type="button" id="reset">Reset</button>
+    </div>
+  </div>
+
+  <div class="card pad0">
+    <div class="twrap" style="--tmax:76vh">
+      <table class="ptable" style="--tmin:900px">
+        <thead>
+          <tr>
+            <th class="ep sortable" data-sort="endpoint" scope="col">Endpoint<span class="sarr"></span></th>
+            <th scope="col">Caller</th>
+            <th scope="col">Callee</th>
+            <th class="num sortable" data-sort="calls" scope="col">Calls<span class="sarr"></span></th>
+            <th class="num sortable" data-sort="s5xx" scope="col">5xx<span class="sarr"></span></th>
+            <th class="num sortable" data-sort="err" scope="col">Error rate<span class="sarr"></span></th>
+            <th class="num sortable" data-sort="lat" scope="col">Avg latency<span class="sarr"></span></th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <div id="none" class="empty" hidden>No endpoint matches this filter. Clear the filter box or the callee selection.</div>
+  </div>
+
+  <!-- ============================================================= honesty -->
+  <section class="sect"><h2>How this page counts</h2>
+    <span class="sh">three rules that keep an egress number honest</span></section>
+  <div class="grid3">
+    <div class="card"><header><h3>Callee time, not request time</h3><span class="ch">upstream_ms</span></header>
+      <p class="note" id="n-lat"></p></div>
+    <div class="card"><header><h3>Retries are counted</h3><span class="ch">one request, two 503s</span></header>
+      <p class="note">A retried call is a second row in the egress log. Both are counted, so a caller that
+        hides a failure behind a retry still shows the callee's two 503s here &mdash; the endpoint's
+        <b>Calls</b> is attempts against the callee, not requests from the customer.</p></div>
+    <div class="card"><header><h3>Internal callees are in scope</h3><span class="ch">the toggle</span></header>
+      <p class="note" id="n-int"></p></div>
+  </div>
+
+</div><!-- /#pulse-main -->
+
+<!-- ===================================================== LOAD ORDER ======= -->
+<script src="../data/manifest.js"></script>
+<script src="../data/rcameta.js"></script>
+<script src="../data/tickets.js"></script>
+<script src="../data/registry.js"></script>
+<script src="../data/spine.js"></script>
+<script src="../assets/synth.js"></script>
+<script src="../assets/charts.js"></script>
+<script src="../assets/shell.js"></script>
+
+<script>
+/* ------------------------------------------------------------------ page */
+(function () {
+  "use strict";
+
+  var C   = window.PULSE_CHARTS,
+      S   = window.PULSE_SHELL,
+      SY  = window.PULSE_SYNTH,
+      REG = window.PULSE_REG,
+      TK  = window.ADEPTIO_TICKETS || { byWindow: {} },
+      DA  = window.ADEPTIO_DATA;
+
+  var esc = C.esc;
+  var $ = function (id) { return document.getElementById(id); };
+
+  /* view state — selection, filter and sort live on the page; every number
+     lives in the payload. Changing any of these re-orders or hides rows. */
+  var V = { showInternal: true, sel: null, q: '', sort: 'calls', dir: -1 };
+  var DEF_DIR = { endpoint: 1, calls: -1, s5xx: -1, err: -1, lat: -1 };
+  var open = {};        /* endpoint rows currently expanded, kept across renders */
+  var cur = null;       /* the payload on screen                                 */
+
+  /* --------------------------------------------------------------- format */
+  function num(v)  { return v == null ? 'NO DATA' : SY.fmtNum(v); }
+  function comp(v) { return v == null ? 'NO DATA' : SY.fmtCompact(v); }
+  function pct(v, dp) { return v == null ? 'NO DATA' : SY.fmtPct(v, dp == null ? 2 : dp); }
+  function ms(v)   { return v == null ? 'NO DATA' : SY.fmtMs(v); }
+
+  /* a status code maps to a status band: 2xx ok, 4xx warn, 5xx crit */
+  function codeKey(code) {
+    var c = String(code).charAt(0);
+    return c === '2' ? 'ok' : c === '4' ? 'warn' : c === '5' ? 'crit' : 'unk';
+  }
+  function bandOf(row) { return row.state === 'unknown' ? 'unk' : (row.band || 'unk'); }
+
+  /* a stable, unique DOM id for a caller->callee endpoint */
+  function epId(e) {
+    return 'e-' + String(e.downstream + '-' + e.caller + '-' + e.endpoint)
+      .toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  }
+
+  /* incident windows overlapping the visible range. The coupling is registry
+     metadata (the same map the spine reads); every number stays in the payload. */
+  function incidentsInRange(rng, keys) {
+    var out = [], k, i;
+    for (k in DA.INC) {
+      if (!Object.prototype.hasOwnProperty.call(DA.INC, k)) continue;
+      var w = DA.INC[k];
+      if (w[w.length - 1] < rng.t0 || w[0] > rng.t1) continue;
+      var meta = DA.INCMETA[k] || [k, 'warn'], hit = [];
+      for (i = 0; i < keys.length; i++) {
+        var m = REG.byDownstream[keys[i]];
+        if (m && m.inc && m.inc[k]) hit.push(keys[i]);
+      }
+      out.push({ key: k, label: meta[0], sev: meta[1],
+                 t0: w[0], peak: w[1], t1: w[w.length - 1],
+                 peakLabel: SY.dstamp(w[1]),
+                 ticket: (TK.byWindow || {})[k] || null, callees: hit });
+    }
+    out.sort(function (a, b) {
+      if (a.sev !== b.sev) return a.sev === 'crit' ? -1 : 1;
+      return a.peak - b.peak;
+    });
+    return out;
+  }
+  function incidentsFor(key) {
+    var all = cur ? cur.incidents : [], out = [], i;
+    for (i = 0; i < all.length; i++) if (all[i].callees.indexOf(key) > -1) out.push(all[i]);
+    return out;
+  }
+  function incBadges(list) {
+    var h = '', i;
+    for (i = 0; i < list.length; i++) {
+      h += '<a class="badge inc' + (list[i].sev === 'crit' ? ' crit' : '') + '" ' +
+           'href="../index.html#t=' + list[i].peak + '" ' +
+           'title="' + esc('WK34 · Incident ' + list[i].key + ' - ' + list[i].label +
+                           ' - peak ' + list[i].peakLabel +
+                           ', open on the flow map at this time') + '">' +
+           esc('W34·' + list[i].key) + ' ' + esc(list[i].peakLabel) + '</a>';
+    }
+    return h;
+  }
+  function incLinks(list) {
+    var h = '', i;
+    for (i = 0; i < list.length; i++) {
+      h += '<a href="../index.html#t=' + list[i].peak + '">Flow map at ' + esc('WK34 · Incident ' + list[i].key) +
+           ' peak (' + esc(list[i].peakLabel) + ')</a>';
+      if (list[i].ticket) {
+        h += '<a href="../incident-trace.html#' + esc(list[i].ticket) + '">' +
+             esc(list[i].ticket) + ' &mdash; ' + esc(list[i].label) + '</a>';
+      }
+    }
+    return h;
+  }
+
+  /* ------------------------------------------------------------ callee grid */
+  function grid(d) {
+    var h = '', i;
+    for (i = 0; i < d.tiles.length; i++) {
+      var t = d.tiles[i], band = bandOf(t), sel = V.sel === t.key;
+      var incs = incidentsFor(t.key);
+      var incTxt = '';
+      for (var j = 0; j < incs.length; j++) incTxt += (j ? ', ' : '') + 'Incident ' + incs[j].key;
+      h += '<button type="button" class="dstile ' + esc(band) + (sel ? ' sel' : '') + '" ' +
+           'data-ds="' + esc(t.key) + '" aria-pressed="' + (sel ? 'true' : 'false') + '" ' +
+           'title="' + esc(t.name + ' (' + t.host + ':' + t.port + ') - ' + t.type +
+                           ' - called by ' + t.callers.join(', ') +
+                           (incs.length ? ' - WK34 · ' + incTxt + ' in range' : '')) + '">' +
+        '<div class="dsn"><span class="sdot ' + esc(band) + '"></span>' +
+        '<span class="dsh">' + esc(t.name) + '</span>' +
+        (t.provisional ? '<span class="badge provisional">Prov</span>' : '') + '</div>' +
+        '<div class="dsm"><span class="ds-calls"><b>' + esc(comp(t.calls)) + '</b> calls</span>' +
+        '<span>5xx <span class="ev ' + esc(band) + ' ds-rate">' + esc(pct(t.s5xxRate, 2)) + '</span></span>' +
+        '</div>' +
+        '<div class="dsx"><span class="tp">' + esc(t.type) + '</span> &middot; ' + esc(t.host) +
+        (incs.length ? ' &middot; <span class="tp">window ' + esc(incTxt) + '</span>' : '') + '</div>' +
+        '</button>';
+    }
+    $('dsgrid').innerHTML = h;
+
+    var ext = 0;
+    for (i = 0; i < d.tiles.length; i++) if (d.tiles[i].type === 'external') ext++;
+    $('calleecount').textContent = d.tiles.length + ' callees · ' + ext + ' external · ' +
+      (d.tiles.length - ext) + ' internal';
+  }
+
+  /* ----------------------------------------------------------------- tiles */
+  function tiles(d) {
+    var t = d.totals;
+    var band5 = SY.errBand(t.s5xxRate), band4 = SY.errBand(t.s4xxRate);
+    var h = '';
+
+    h += '<div class="tile plain" id="tile-calls"><div class="label"><span>Total calls</span></div>' +
+         '<div class="value"><span class="v">' + esc(comp(t.calls)) + '</span></div>' +
+         '<div class="sub">' + esc(num(t.calls)) + ' outbound attempts &middot; <b>' +
+         esc(String(d.range.buckets)) + '</b> 5-min buckets</div>' +
+         '<div class="tilefoot"><span class="note">' + esc(d.showInternal ? 'internal + external' : 'external only') +
+         '</span></div></div>';
+
+    h += '<div class="tile ' + esc(band5) + '" id="tile-5rate"><div class="label"><span>5xx error rate</span></div>' +
+         '<div class="value"><span class="v">' + esc(pct(t.s5xxRate, 2)) + '</span></div>' +
+         '<div class="sub">callee returned 5xx or timed out</div>' +
+         '<div class="tilefoot"><span class="pf ' + (band5 === 'ok' ? 'pass' : band5 === 'unk' ? 'na' : 'fail') + '">' +
+         (band5 === 'ok' ? 'In band' : band5 === 'unk' ? 'No data' : band5 === 'warn' ? 'Watch' : 'Out of band') +
+         '</span><span class="note">band 0.1% / 1%</span></div></div>';
+
+    h += '<div class="tile ' + esc(band4) + '" id="tile-4rate"><div class="label"><span>4xx rate</span></div>' +
+         '<div class="value"><span class="v">' + esc(pct(t.s4xxRate, 2)) + '</span></div>' +
+         '<div class="sub">callee rejected the call &middot; business, not availability</div>' +
+         '<div class="tilefoot"><span class="note">counted, never mixed into 5xx</span></div></div>';
+
+    /* C2: this used band5. The 4xx count beside it is plain, so one row carried
+       two counts of the same kind in two different colours. The rate tiles above
+       already say how the window is doing; a count is a count. */
+    h += '<div class="tile plain" id="tile-5count"><div class="label"><span>5xx count</span></div>' +
+         '<div class="value"><span class="v">' + esc(comp(t.s5xx)) + '</span></div>' +
+         '<div class="sub">' + esc(num(t.s5xx)) + ' failed attempts</div>' +
+         '<div class="tilefoot"><span class="note">retries counted separately</span></div></div>';
+
+    h += '<div class="tile plain" id="tile-4count"><div class="label"><span>4xx count</span></div>' +
+         '<div class="value"><span class="v">' + esc(comp(t.s4xx)) + '</span></div>' +
+         '<div class="sub">' + esc(num(t.s4xx)) + ' rejected attempts</div>' +
+         '<div class="tilefoot"><span class="note">4xx is the callee&rsquo;s verdict on our request</span></div></div>';
+
+    $('tiles').innerHTML = h;
+  }
+
+  /* ------------------------------------------------------- status codes
+     The bar is the shared component; the legend is written here so every count
+     is formatted by the synth helpers, exactly as the tables and tiles are —
+     the component's own legend compacts the count and rounds the share to one
+     decimal, which prints a real 0.02% slice as "0.0%". */
+  function statusBlock(list, label) {
+    if (!list || !list.length) {
+      return '<div class="note">NO DATA &mdash; no call was observed in this window.</div>';
+    }
+    var rows = [], leg = '', i;
+    for (i = 0; i < list.length; i++) {
+      rows.push({ key: codeKey(list[i].code), label: String(list[i].code), value: list[i].count });
+      leg += '<span><i class="sdot ' + esc(codeKey(list[i].code)) + '"></i>' + esc(String(list[i].code)) +
+             ' <b>' + esc(SY.fmtNum(list[i].count)) + '</b> ' +
+             '<span class="muted">' + esc(SY.fmtPct(list[i].share, 2)) + '</span></span>';
+    }
+    return C.statusBar(rows, { tall: true, label: label }) +
+           '<div class="sb-legend">' + leg + '</div>';
+  }
+
+  function dist(d) {
+    var tot = 0, i;
+    for (i = 0; i < d.statusDistribution.length; i++) tot += d.statusDistribution[i].count;
+    $('dist').innerHTML = statusBlock(d.statusDistribution,
+      'HTTP status distribution across every outbound call');
+    $('distch').textContent = d.statusDistribution.length
+      ? d.statusDistribution.length + ' codes · ' + SY.fmtNum(tot) + ' calls'
+      : 'no data';
+  }
+
+  /* ------------------------------------------------------ incident windows */
+  function incidents(d) {
+    var list = d.incidents, h = '', i;
+    if (!list.length) {
+      h = '<p class="note">No incident window from <span class="mono">data/manifest.js</span> overlaps ' +
+          esc(d.range.label) + '. The egress numbers above are a quiet window.</p>';
+    } else {
+      for (i = 0; i < list.length; i++) {
+        var it = list[i];
+        h += '<div class="incrow"><span class="pill ' + (it.sev === 'crit' ? 'crit' : 'warn') + '">' +
+             esc('WK34 · Incident ' + it.key) + '</span><span class="il">' + esc(it.label) + '</span>' +
+             '<span class="muted mono">peak ' + esc(it.peakLabel) + '</span>' +
+             '<span class="gap"></span>' +
+             '<span class="dlinks"><a href="../index.html#t=' + it.peak + '">Open on the flow map</a>' +
+             (it.ticket ? '<a href="../incident-trace.html#' + esc(it.ticket) + '">' + esc(it.ticket) + '</a>' : '') +
+             '</span></div>' +
+             '<div class="note" style="padding-bottom:4px">' +
+             (it.callees.length
+                ? 'callees coupled to this window: <b>' + esc(it.callees.join(', ')) + '</b>'
+                : 'no callee on this page is coupled to this window') + '</div>';
+      }
+    }
+    $('incs').innerHTML = h;
+    $('incch').textContent = list.length + ' of 9 windows · ' + d.range.label;
+  }
+
+  /* --------------------------------------------------------- focused callee */
+  function focus(d) {
+    var box = $('focus'), t = null, i;
+    for (i = 0; i < d.tiles.length; i++) if (d.tiles[i].key === V.sel) t = d.tiles[i];
+    if (!t) { box.hidden = true; return; }
+    box.hidden = false;
+
+    var band = bandOf(t), incs = incidentsFor(t.key);
+    $('fname').textContent = t.name;
+    $('fhost').textContent = t.host + ':' + t.port + ' · called by ' + t.callers.join(', ');
+    $('fbadges').innerHTML =
+      '<span class="badge' + (t.type === 'external' ? ' ext' : '') + '">' + esc(t.type) + '</span> ' +
+      '<span class="pill ' + esc(band) + '">' + (band === 'ok' ? 'In band' : band === 'warn' ? 'Watch' :
+        band === 'crit' ? 'Out of band' : 'No data') + '</span> ' +
+      (t.provisional ? '<span class="badge provisional">Provisional ' +
+        esc(SY.fmtPct(t.coverage * 100, 1)) + '</span> ' : '') + incBadges(incs);
+
+    var okCalls = t.calls - t.s5xx - t.s4xx;
+    $('fstats').innerHTML =
+      '<div><div class="label muted">Calls</div><div class="mv">' +
+        '<span class="f-calls">' + esc(comp(t.calls)) + '</span></div>' +
+        '<div class="note">' + esc(num(t.calls)) + ' attempts</div></div>' +
+      '<div><div class="label muted">5xx</div><div class="mv">' +
+        '<span class="ev ' + esc(band) + ' f-rate">' + esc(pct(t.s5xxRate, 2)) + '</span></div>' +
+        '<div class="note">' + esc(num(t.s5xx)) + ' failed attempts</div></div>' +
+      '<div><div class="label muted">4xx</div><div class="mv">' +
+        '<span class="f-4rate">' + esc(pct(t.s4xxRate, 2)) + '</span></div>' +
+        '<div class="note">' + esc(num(t.s4xx)) + ' rejected</div></div>' +
+      '<div><div class="label muted">Avg latency</div><div class="mv">' +
+        '<span class="f-lat">' + esc(ms(t.avgLatency)) + '</span></div>' +
+        '<div class="note">callee time (upstream_ms)</div></div>' +
+      (t.dlr == null ? '' :
+        '<div><div class="label muted">Delivery receipts</div><div class="mv">' +
+        '<span class="f-dlr">' + esc(pct(t.dlr, 2)) + '</span></div>' +
+        '<div class="note">DLR rate reported by the aggregator</div></div>') +
+      /* the bar's green segment is the remainder of the payload's own three
+         figures; only payload numbers are printed, never the remainder. */
+      '<div><div class="label muted">Outcome mix</div>' +
+        C.statusBar({ ok: okCalls, warn: t.s4xx, crit: t.s5xx },
+                    { thin: true, fmt: 'compact', label: t.name + ' outcome mix' }) +
+        '<div class="note">' + esc(num(t.s4xx)) + ' 4xx and ' + esc(num(t.s5xx)) +
+        ' 5xx out of ' + esc(num(t.calls)) + ' calls</div></div>' +
+      '<div><div class="label muted">Coverage</div><div class="mv">' +
+        '<span class="ev ' + (t.state === 'ok' ? 'ok' : 'unk') + '">' +
+        esc(SY.fmtPct(t.coverage * 100, 2)) + '</span></div>' +
+        '<div class="note">' + (t.state === 'ok' ? 'every bucket produced evidence'
+          : t.state === 'unknown' ? 'too little evidence to state a rate for this window'
+          : 'some buckets produced no evidence; the figures are provisional') + '</div></div>';
+
+    $('fcallsch').textContent = 'per 5-min bucket · ' + d.range.label;
+
+    var links = '<a href="../index.html#t=' + d.range.t1 + '">Open the flow map at ' +
+                esc(SY.dstamp(d.range.t1)) + '</a>' +
+                '<a href="dependencies.html">Callers of this host &mdash; Dependencies</a>' +
+                incLinks(incs);
+    $('flinks').innerHTML = links;
+
+    drawFocusCharts();
+  }
+
+  function drawFocusCharts() {
+    if (!cur || $('focus').hidden) return;
+    var t = null, i;
+    for (i = 0; i < cur.tiles.length; i++) if (cur.tiles[i].key === V.sel) t = cur.tiles[i];
+    if (!t) return;
+    C.render('#fcalls', {
+      type: 'line', responsive: false, ratio: .34, maxH: 210, yMin: 0,
+      series: [{ name: 'calls', values: t.series.calls, area: true }],
+      yFmt: 'compact', xLabels: t.series.labels, label: t.name + ' calls per bucket'
+    });
+    C.render('#flat', {
+      type: 'line', responsive: false, ratio: .34, maxH: 210, yMin: 0,
+      series: [{ name: 'upstream_ms', values: t.series.latency, cls: 's3' }],
+      yFmt: 'ms', xLabels: t.series.labels, label: t.name + ' callee latency'
+    });
+  }
+
+  /* ------------------------------------------------------------ sort chips */
+  function sortHeads() {
+    var ths = document.querySelectorAll('.ptable thead th.sortable'), j;
+    for (j = 0; j < ths.length; j++) {
+      var sk = ths[j].getAttribute('data-sort'), sel = sk === V.sort;
+      var base = 'sortable' + (ths[j].className.indexOf('num') > -1 ? ' num' : '') +
+                 (ths[j].className.indexOf('ep') > -1 ? ' ep' : '');
+      ths[j].className = sel ? base + ' sorted' : base;
+      var arr = ths[j].querySelector('.sarr');
+      if (arr) arr.textContent = sel ? (V.dir === 1 ? '\u2191' : '\u2193') : '';
+      ths[j].setAttribute('aria-sort', sel ? (V.dir === 1 ? 'ascending' : 'descending') : 'none');
+    }
+  }
+
+  /* --------------------------------------------------------- rows: filter */
+  function visible(d) {
+    var q = V.q.toLowerCase(), out = [], i;
+    for (i = 0; i < d.topEndpoints.length; i++) {
+      var e = d.topEndpoints[i];
+      if (V.sel && e.downstream !== V.sel) continue;
+      if (q) {
+        var hay = (e.endpoint + ' ' + e.caller + ' ' + e.downstreamName + ' ' + e.type).toLowerCase();
+        if (hay.indexOf(q) < 0) continue;
+      }
+      out.push(e);
+    }
+    return out;
+  }
+
+  function sortRows(list) {
+    var dir = V.dir, key = V.sort, copy = list.slice();
+    copy.sort(function (a, b) {
+      var x, y;
+      if (key === 'endpoint') return dir * (a.endpoint + a.caller).localeCompare(b.endpoint + b.caller);
+      if (key === 's5xx')      { x = a.s5xx; y = b.s5xx; }
+      else if (key === 'err')  { x = a.errorRate == null ? -1 : a.errorRate; y = b.errorRate == null ? -1 : b.errorRate; }
+      else if (key === 'lat')  { x = a.avgLatency == null ? -1 : a.avgLatency; y = b.avgLatency == null ? -1 : b.avgLatency; }
+      else                     { x = a.calls; y = b.calls; }
+      if (x === y) return a.endpoint.localeCompare(b.endpoint);
+      return dir * (x - y);
+    });
+    return copy;
+  }
+
+  /* ----------------------------------------------------------- rows: markup */
+  function rowMarkup(e, rng) {
+    var id = epId(e), isOpen = !!open[id];
+    var band = e.provisional && e.calls === 0 ? 'unk' : (e.band || 'unk');
+    var incs = incidentsFor(e.downstream);
+    var h = '';
+
+    h += '<tr class="row-toggle' + (isOpen ? ' open' : '') + '" data-row="' + id + '" ' +
+         'data-ep="' + esc(id) + '" tabindex="0" role="button" ' +
+         'aria-expanded="' + (isOpen ? 'true' : 'false') + '" aria-controls="' + id + '">';
+
+    h += '<td class="ep nm"><span class="rt-c">&#9656;</span>' +
+         '<span class="epp">' + esc(e.endpoint) + '</span>' +
+         (e.provisional ? ' <span class="badge provisional">Provisional</span>' : '') +
+         (incs.length ? ' ' + incBadges(incs) : '') + '</td>';
+    h += '<td class="mono">' + esc(e.caller) + '</td>';
+    h += '<td class="wr"><span class="sdot ' + esc(band) + '"></span> ' + esc(e.downstreamName) +
+         '<span class="sub">' + esc(e.type) + '</span></td>';
+    h += '<td class="num c-calls" title="' + esc(num(e.calls)) + ' calls">' + esc(comp(e.calls)) + '</td>';
+    h += '<td class="num c-5xx">' + (e.s5xx ? esc(num(e.s5xx)) : '<span class="muted">0</span>') + '</td>';
+    h += '<td class="num c-err"><span class="ev ' + esc(band) + '">' + esc(pct(e.errorRate, 3)) + '</span></td>';
+    h += '<td class="num c-lat">' + esc(ms(e.avgLatency)) + '</td>';
+    h += '</tr>';
+
+    /* ------------------------------------------------------------- detail */
+    var codes = statusBlock(e.statusBar, e.endpoint + ' status codes');
+
+    h += '<tr class="row-detail' + (isOpen ? ' open' : '') + '" id="' + id + '"><td colspan="7">' +
+      '<div class="label muted">Status codes</div>' + codes +
+      '<div class="label muted" style="margin-top:11px">Calls &amp; latency over time</div>' +
+      '<div class="grid2" style="margin-top:6px">' +
+        '<div><div class="note">calls per 5-min bucket</div><div class="chartbox" id="c-' + id + '"></div></div>' +
+        '<div><div class="note">callee latency (upstream_ms)</div><div class="chartbox" id="l-' + id + '"></div></div>' +
+      '</div>' +
+      '<div class="dgrid" style="margin-top:11px">' +
+        '<div><div class="label muted">Caller &rarr; callee</div>' +
+          '<div class="mono">' + esc(e.caller) + ' &rarr; ' + esc(e.downstreamName) + '</div>' +
+          '<div class="note">' + esc(e.type) + ' callee &middot; ' + esc(rng.label) + '</div></div>' +
+        '<div><div class="label muted">Attempts</div>' +
+          '<div><b>' + esc(num(e.calls)) + '</b> calls &middot; <b>' + esc(num(e.s5xx)) + '</b> 5xx</div>' +
+          '<div class="note">error rate ' + esc(pct(e.errorRate, 3)) + ' &middot; avg ' + esc(ms(e.avgLatency)) + '</div></div>' +
+        '<div><div class="label muted">Coverage</div>' +
+          '<div class="ev ' + (e.provisional ? 'unk' : 'ok') + '">' + esc(SY.fmtPct(e.coverage * 100, 2)) + '</div>' +
+          '<div class="note">' + (e.provisional
+            ? 'some buckets produced no evidence; the figures are provisional'
+            : 'every bucket in this window produced evidence') + '</div></div>' +
+        '<div style="grid-column:1/-1"><div class="label muted">Cross-links</div><div class="dlinks">' +
+          '<a href="../index.html#t=' + rng.t1 + '">Open the flow map at ' + esc(SY.dstamp(rng.t1)) + '</a>' +
+          '<a href="dependencies.html">Callers of ' + esc(e.downstreamName) + '</a>' +
+          incLinks(incs) + '</div></div>' +
+      '</div></td></tr>';
+
+    return h;
+  }
+
+  function table(d) {
+    var list = sortRows(visible(d)), h = '', i;
+    for (i = 0; i < list.length; i++) h += rowMarkup(list[i], d.range);
+    $('rows').innerHTML = h;
+    $('none').hidden = list.length > 0;
+    $('shown').textContent = 'showing ' + list.length + ' of ' + d.topEndpoints.length +
+      ' endpoints' + (V.sel ? ' · callee ' + V.sel : '');
+    drawRowCharts();
+  }
+
+  /* charts inside an expanded row are drawn only when the row is open: a
+     display:none container measures 0 and would size its labels to a guess. */
+  function drawRowCharts() {
+    if (!cur) return;
+    var list = visible(cur), i;
+    for (i = 0; i < list.length; i++) {
+      var e = list[i], id = epId(e);
+      if (!open[id]) continue;
+      if (!$('c-' + id)) continue;
+      /* yMin 0 on both: a count is read from zero, and a flat few-millisecond
+         cache series would otherwise get an axis whose four ticks all round to
+         the same "3 ms" once niceScale collapses onto a near-constant range. */
+      C.render('#c-' + id, {
+        type: 'line', responsive: false, ratio: .32, maxH: 200, yMin: 0,
+        series: [{ name: 'calls', values: e.series.calls, area: true }],
+        yFmt: 'compact', xLabels: e.series.labels, label: e.endpoint + ' calls per bucket'
+      });
+      C.render('#l-' + id, {
+        type: 'line', responsive: false, ratio: .32, maxH: 200, yMin: 0,
+        series: [{ name: 'upstream_ms', values: e.series.latency, cls: 's3' }],
+        yFmt: 'ms', xLabels: e.series.labels, label: e.endpoint + ' callee latency'
+      });
+    }
+  }
+
+  /* --------------------------------------------------------------- render */
+  function render(rangeKey) {
+    var d = SY.downstream(rangeKey, V.showInternal);
+    cur = d;
+    d.incidents = incidentsInRange(d.range, d.tiles.map(function (t) { return t.key; }));
+
+    /* selection must exist in the current payload */
+    if (V.sel) {
+      var found = false, i;
+      for (i = 0; i < d.tiles.length; i++) if (d.tiles[i].key === V.sel) found = true;
+      if (!found) V.sel = null;
+    }
+
+    $('winlabel').textContent = d.range.label;
+    $('wininfo').textContent = d.range.buckets + ' 5-min buckets · ' + d.tiles.length +
+      ' callees · ' + d.topEndpoints.length + ' endpoints';
+    $('winflow').setAttribute('href', '../index.html#t=' + d.range.t1);
+    $('showint-n').textContent = d.showInternal ? 'on' : 'off';
+
+    grid(d);
+    tiles(d);
+    dist(d);
+    incidents(d);
+    focus(d);
+    sortHeads();
+    table(d);
+
+    $('n-lat').textContent = d.note;
+    $('n-int').textContent = 'Internal callees (databases, cache, broker, the core interface) are the ' +
+      'majority of the call volume and the first place a latency ramp shows. The toggle removes them so ' +
+      'the third-party bill can be read on its own; the totals follow the toggle, so a number here is ' +
+      'always the sum of exactly the callees on screen.';
+
+    S.setLineage(SY.lineage('downstream'));
+  }
+
+  function repaint() {
+    if (!cur) return;
+    grid(cur); focus(cur); sortHeads(); table(cur);
+  }
+
+  /* --------------------------------------------------------- interactions */
+  function toggleRow(tr) {
+    var id = tr.getAttribute('data-row'), det = $(id);
+    var isOpen = tr.className.indexOf('open') > -1;
+    tr.className = isOpen ? 'row-toggle' : 'row-toggle open';
+    tr.setAttribute('aria-expanded', isOpen ? 'false' : 'true');
+    if (det) det.className = isOpen ? 'row-detail' : 'row-detail open';
+    if (isOpen) delete open[id]; else { open[id] = 1; drawRowCharts(); }
+  }
+
+  function selectCallee(key) {
+    V.sel = (V.sel === key) ? null : key;
+    repaint();
+  }
+
+  S.ready(function () {
+    S.setLineage(SY.lineage('downstream'));
+
+    /* a deep link from another menu may name a callee: downstream.html#d=biller-hub */
+    function fromHash() {
+      var hash = (window.location.hash || '').replace(/^#/, '');
+      if (hash.indexOf('d=') !== 0) return false;
+      var want = decodeURIComponent(hash.slice(2));
+      if (!REG.byDownstream[want] || V.sel === want) return false;
+      V.sel = want;
+      return true;
+    }
+    fromHash();
+
+    render(S.getRange() || '24h');
+
+    /* the same link followed while already on this page changes only the hash,
+       so the browser fires hashchange instead of reloading */
+    window.addEventListener('hashchange', function () { if (fromHash()) repaint(); });
+
+    /* range chips */
+    S.onRange(function (ev) { render(ev.detail.range); });
+
+    /* show internal services */
+    $('showint').addEventListener('change', function () {
+      V.showInternal = !!this.checked;
+      render(S.getRange() || '24h');
+    });
+
+    /* callee tiles select / deselect */
+    $('dsgrid').addEventListener('click', function (ev) {
+      var n = ev.target;
+      while (n && n !== this && !(n.getAttribute && n.getAttribute('data-ds'))) n = n.parentNode;
+      if (!n || n === this) return;
+      selectCallee(n.getAttribute('data-ds'));
+    });
+
+    $('fclear').addEventListener('click', function () { V.sel = null; repaint(); });
+
+    /* sortable headers */
+    document.querySelector('.ptable thead').addEventListener('click', function (ev) {
+      var n = ev.target;
+      while (n && n !== this && !(n.getAttribute && n.getAttribute('data-sort'))) n = n.parentNode;
+      if (!n || n === this) return;
+      var k = n.getAttribute('data-sort');
+      if (V.sort === k) V.dir = -V.dir; else { V.sort = k; V.dir = DEF_DIR[k] || 1; }
+      sortHeads(); table(cur);
+    });
+
+    /* filter box */
+    $('q').addEventListener('input', function () { V.q = this.value.trim(); table(cur); });
+
+    /* expand / collapse all */
+    $('expand').addEventListener('click', function () {
+      var list = visible(cur), i;
+      for (i = 0; i < list.length; i++) open[epId(list[i])] = 1;
+      table(cur);
+    });
+    $('collapse').addEventListener('click', function () { open = {}; table(cur); });
+
+    $('reset').addEventListener('click', function () {
+      V.q = ''; V.sel = null; V.sort = 'calls'; V.dir = DEF_DIR.calls; open = {};
+      $('q').value = '';
+      repaint();
+    });
+
+    /* expandable rows — pointer and keyboard; links inside a row stay links */
+    var body = $('rows');
+    body.addEventListener('click', function (ev) {
+      var n = ev.target;
+      while (n && n !== this) {
+        if (n.tagName === 'A') return;
+        if (n.className && String(n.className).indexOf('row-toggle') === 0) { toggleRow(n); return; }
+        n = n.parentNode;
+      }
+    });
+    body.addEventListener('keydown', function (ev) {
+      if (ev.key !== 'Enter' && ev.key !== ' ') return;
+      var n = ev.target;
+      if (n && n.className && String(n.className).indexOf('row-toggle') === 0) {
+        ev.preventDefault(); toggleRow(n);
+      }
+    });
+
+    /* one debounced resize handler for every chart on the page: the row and
+       focus charts are built with responsive:false so they cannot pile up
+       listeners on the window each time the table re-renders. */
+    var tid = null;
+    window.addEventListener('resize', function () {
+      if (tid) window.clearTimeout(tid);
+      tid = window.setTimeout(function () { drawFocusCharts(); drawRowCharts(); }, 160);
+    });
+  });
+})();
+</script>
+</body>
+</html>

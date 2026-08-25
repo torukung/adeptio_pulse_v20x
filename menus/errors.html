@@ -1,0 +1,968 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<link rel="icon" href="data:,"/>
+
+<!-- ===========================================================================
+     ADEPTIO Pulse — menu 8 · ERRORS EXPLORER
+     Built from menus/_template.html. Every figure comes from
+     PULSE_SYNTH.errorsExplorer(range, filters) — the page formats, it never
+     computes. Filters are passed INTO synth so the payload and the screen can
+     never disagree about what "business" or "technical" means.
+     =========================================================================== -->
+
+<title>Errors Explorer &mdash; Adeptio Pulse</title>
+
+<link rel="stylesheet" href="../assets/tokens.css"/>
+<link rel="stylesheet" href="../assets/shell.css"/>
+<link rel="stylesheet" href="../assets/menus.css"/>
+
+<style>
+/* ------------------------------------------------------------- page-local
+   Five additions this screen needs that the shared kit does not carry.
+   Tokens only; status colours are used for status only (here: business =
+   warn, technical = crit, no-evidence = unk — the same mapping the payload
+   uses, stated in the legend under every bar). ---------------------------*/
+
+/* 1 · top-services bars — the screenshot's bar chart, laid out horizontally so
+      a twelve-service estate stays readable at 768 px without rotated text */
+.svcbars{display:flex;flex-direction:column;gap:2px;min-width:0}
+.sb{display:grid;grid-template-columns:minmax(118px,1.5fr) minmax(80px,3fr) auto auto;
+  gap:10px;align-items:center;width:100%;padding:5px 7px;border:0;border-radius:7px;
+  background:none;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.sb:hover{background:var(--panel2)}
+.sb.on{background:var(--chipbg);box-shadow:inset 0 0 0 1px var(--chipline)}
+.sb-n{min-width:0;font-size:12px;font-weight:650;color:var(--ink);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sb-n em{font-style:normal;font-family:var(--mono);font-size:10.5px;color:var(--muted);margin-left:6px}
+.sb-bar{display:flex;height:13px;min-width:0;border-radius:3px;overflow:hidden;
+  background:var(--panel2);box-shadow:inset 0 0 0 1px var(--line2)}
+.sb-bar i{display:block;height:100%}
+.sb-bar i.b{background:var(--warn)}
+.sb-bar i.t{background:var(--crit)}
+.sb-v{min-width:60px;text-align:right;font-size:12px;font-weight:650;color:var(--ink2);
+  font-variant-numeric:tabular-nums}
+.sb-s{min-width:50px;text-align:right;font-size:11px;color:var(--muted);
+  font-variant-numeric:tabular-nums}
+@media (max-width:700px){
+  .sb{grid-template-columns:minmax(0,1fr) auto auto}
+  .sb-n{grid-column:1;grid-row:1} .sb-v{grid-column:2;grid-row:1} .sb-s{grid-column:3;grid-row:1}
+  .sb-bar{grid-column:1/-1;grid-row:2;height:10px}
+}
+/* C2: between 700 and ~820 px the name column is a few pixels short and the
+   longest labels ellipsed ("Notification Service notification" -> 173 px into
+   164). The mono key repeats what the name already says, so it steps aside
+   there rather than eating the name. The title attribute keeps both reachable. */
+@media (max-width:860px){
+  .sb-n em{display:none}
+}
+
+/* 2 · the two-level breakdown inside an expanded service row:
+      EXCEPTIONS THROWN -> recent occurrences */
+.exhead{margin:13px 0 6px;font-size:9.5px;font-weight:750;letter-spacing:.07em;
+  text-transform:uppercase;color:var(--muted)}
+.exlist{display:flex;flex-direction:column;gap:3px}
+.exrow{display:grid;grid-template-columns:14px minmax(0,1fr) auto auto auto;gap:9px;
+  align-items:center;padding:6px 9px;border:1px solid transparent;border-radius:6px;
+  background:var(--panel2);cursor:pointer}
+.exrow:hover{border-color:var(--line)}
+.exrow.open{border-color:var(--chipline);background:var(--chipbg)}
+.exc{min-width:0;font-family:var(--mono);font-size:11px;color:var(--ink);overflow-wrap:anywhere}
+.exn{font-size:11.5px;font-weight:700;color:var(--ink2);font-variant-numeric:tabular-nums}
+.exs{min-width:48px;text-align:right;font-size:10.5px;color:var(--muted);
+  font-variant-numeric:tabular-nums}
+.exocc{display:none;padding:7px 10px 11px 32px}
+.exocc.open{display:block}
+.occ{display:grid;grid-template-columns:104px 210px minmax(160px,1fr) 68px;gap:11px;
+  padding:5px 0;border-bottom:1px solid var(--line2);font-size:11px}
+.occ:last-child{border-bottom:none}
+.occ .oa{color:var(--muted);font-variant-numeric:tabular-nums}
+.occ .oe{font-family:var(--mono);color:var(--ink2);overflow-wrap:anywhere}
+.occ .om{color:var(--ink2);overflow-wrap:anywhere}
+.occ .od{text-align:right;color:var(--muted);font-variant-numeric:tabular-nums}
+
+/* 3 · badge variants: severity class, incident cross-link, evidence tag */
+.badge.biz{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 40%,transparent);
+  background:color-mix(in srgb,var(--warn) 11%,transparent)}
+.badge.tec{color:var(--crit);border-color:color-mix(in srgb,var(--crit) 40%,transparent);
+  background:color-mix(in srgb,var(--crit) 11%,transparent)}
+.badge.tech{font-family:var(--mono);letter-spacing:0;text-transform:none;font-weight:600;
+  color:var(--ink2)}
+.badge.inc{text-decoration:none;color:var(--warn);
+  border-color:color-mix(in srgb,var(--warn) 42%,transparent);
+  background:color-mix(in srgb,var(--warn) 12%,transparent)}
+.badge.inc.crit{color:var(--crit);border-color:color-mix(in srgb,var(--crit) 42%,transparent);
+  background:color-mix(in srgb,var(--crit) 12%,transparent)}
+.badge.inc:hover{border-color:currentColor}
+
+/* 4 · a count that carries a status reading takes the status colour; a zero
+      never does — a green or red nought is the false reading this page exists
+      to prevent */
+.rv{font-variant-numeric:tabular-nums;font-weight:650}
+.rv.warn{color:var(--warn)} .rv.crit{color:var(--crit)}
+.rv.zero{color:var(--muted);font-weight:400}
+.dlinks{display:flex;gap:11px;flex-wrap:wrap;align-items:center;font-size:11px}
+.dlinks a{text-decoration:none;border-bottom:1px solid transparent}
+.dlinks a:hover{border-bottom-color:currentColor}
+.eps{display:flex;gap:6px;flex-wrap:wrap;margin-top:3px}
+
+/* 5 · filter summary line and the small print under the two tables */
+.fsum{margin:9px 2px 0;font-size:11px;color:var(--muted)}
+.fsum b{color:var(--ink2);font-weight:650;font-variant-numeric:tabular-nums}
+.fsum .k{font-family:var(--mono);color:var(--ink2)}
+
+@media (prefers-reduced-motion:reduce){
+  .rt-c,.statusbar > i,.sb,.exrow{transition:none}
+}
+</style>
+</head>
+
+<body data-shell="page"
+      data-title="Errors Explorer"
+      data-subtitle="computed from: L3 application logs (exception.type, exception.message, error.fingerprint, error_code) &middot; L3 gateway rows (status) &middot; no APM &middot; Aug 23 &ndash; 29, 2027"
+      data-ranges="1h,4h,24h,yesterday,7d"
+      data-range="24h"
+      data-lineage="L3 application logs (exception.type, error_code) + gateway 4xx/5xx rows">
+
+<div id="pulse-main">
+
+  <!-- ===================================================== window / range -->
+  <div class="card">
+    <div class="toolbar">
+      <span class="clbl">Window</span>
+      <span class="mono" id="winlabel">&mdash;</span>
+      <span class="csep"></span>
+      <span class="note" id="wininfo"></span>
+      <div class="sp"></div>
+      <span class="note" id="wininc"></span>
+      <a class="btn" id="winflow" href="../index.html">Open on the flow map</a>
+    </div>
+  </div>
+
+  <!-- ================================================================ tiles -->
+  <section class="tiles" id="tiles" aria-label="Headline figures"></section>
+
+  <!-- ============================================================== filters -->
+  <div class="card">
+    <div class="toolbar">
+      <span class="clbl">Severity</span>
+      <div class="chips" id="sevchips" role="group" aria-label="Severity"></div>
+      <span class="csep"></span>
+      <label class="field"><span class="fl">Service</span>
+        <select id="svcsel" aria-label="Filter by service"></select></label>
+      <label class="field"><span class="fl">Endpoint</span>
+        <input type="text" id="epq" placeholder="/v1/otp" aria-label="Filter by endpoint substring"/></label>
+      <div class="sp"></div>
+      <button class="btn" type="button" id="reset">Reset filters</button>
+    </div>
+    <div class="toolbar">
+      <span class="clbl">Status</span>
+      <div class="chips" id="statchips" role="group" aria-label="HTTP status code"></div>
+      <div class="sp"></div>
+      <span class="note">Status narrows the <b>result-code table</b> &mdash; the HTTP status each
+        B-/T- code maps to. The population tiles stay on the whole window.</span>
+    </div>
+    <p class="fsum" id="fsum"></p>
+  </div>
+
+  <!-- ========================================================= top services -->
+  <section class="sect"><h2>Top services</h2>
+    <span class="sh">where the errors are &mdash; business and technical stacked in one bar</span>
+    <span class="sp"></span>
+    <span class="note" id="topnote"></span>
+  </section>
+
+  <div class="card">
+    <header><h3>Errors by service</h3><span class="ch" id="topch"></span></header>
+    <div class="svcbars" id="topsvc"></div>
+    <div class="legend">
+      <span><i class="warn"></i>business &mdash; 4xx and domain declines carried on HTTP 200</span>
+      <span><i class="crit"></i>technical &mdash; 5xx, upstream timeouts, 499 client aborts</span>
+      <span class="csep"></span>
+      <span class="muted">click a bar to hold the page on that service</span>
+    </div>
+    <div style="margin-top:11px" id="mix"></div>
+  </div>
+
+  <!-- =============================================== exception counters chart -->
+  <div class="card">
+    <header><h3>Exception counters over time</h3><span class="ch" id="trendch"></span></header>
+    <div class="chartbox" id="trend"></div>
+    <p class="note" id="trendnote"></p>
+  </div>
+
+  <!-- ============================================================= services -->
+  <section class="sect"><h2 id="svch">Services</h2>
+    <span class="sh">open a service to see the exceptions behind its count, then an exception to see what it threw</span>
+    <span class="sp"></span>
+    <span class="note" id="svcnote"></span>
+  </section>
+
+  <div class="card pad0">
+    <div class="twrap" style="--tmax:64vh">
+      <table class="ptable" style="--tmin:900px">
+        <thead>
+          <tr>
+            <th class="sortable" data-sort="name" tabindex="0" scope="col">Service<span class="sarr"></span></th>
+            <th class="num sortable" data-sort="count" tabindex="0" scope="col">Errors<span class="sarr"></span></th>
+            <th class="num sortable" data-sort="business" tabindex="0" scope="col">Business<span class="sarr"></span></th>
+            <th class="num sortable" data-sort="technical" tabindex="0" scope="col">Technical<span class="sarr"></span></th>
+            <th class="num sortable" data-sort="share" tabindex="0" scope="col">Share<span class="sarr"></span></th>
+            <th class="num sortable" data-sort="groups" tabindex="0" scope="col">Exceptions<span class="sarr"></span></th>
+            <th scope="col">Trend</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <div class="empty" id="none" hidden>No service carries an error under these filters. Widen the range or clear a filter.</div>
+  </div>
+
+  <!-- ========================================================= result codes -->
+  <section class="sect"><h2>Result codes</h2>
+    <span class="sh">the B-/T- taxonomy the application returns &mdash; kept in its own column, never merged with the HTTP status</span>
+    <span class="sp"></span>
+    <span class="note" id="codenote"></span>
+  </section>
+
+  <div class="card pad0">
+    <div class="twrap" style="--tmax:56vh">
+      <table class="ptable" style="--tmin:880px">
+        <thead>
+          <tr>
+            <th class="sortable" data-csort="code" tabindex="0" scope="col">Code<span class="sarr"></span></th>
+            <th class="sortable" data-csort="type" tabindex="0" scope="col">Type<span class="sarr"></span></th>
+            <th class="sortable" data-csort="svc" tabindex="0" scope="col">Service<span class="sarr"></span></th>
+            <th class="num sortable" data-csort="http" tabindex="0" scope="col">HTTP<span class="sarr"></span></th>
+            <th scope="col">Message</th>
+            <th class="num sortable" data-csort="count" tabindex="0" scope="col">Count<span class="sarr"></span></th>
+            <th class="num sortable" data-csort="share" tabindex="0" scope="col">Share<span class="sarr"></span></th>
+          </tr>
+        </thead>
+        <tbody id="codes"></tbody>
+      </table>
+    </div>
+    <div class="empty" id="cnone" hidden>No result code fired in this window under these filters.</div>
+  </div>
+
+  <!-- ============================================================== honesty -->
+  <section class="sect"><h2>How an error is classified</h2>
+    <span class="sh">what the split shows, and the three places a status-code metric lies</span></section>
+
+  <div class="grid2">
+    <div class="card">
+      <header><h3>The rule</h3><span class="ch">shipped with the payload</span></header>
+      <p class="note" id="rule"></p>
+    </div>
+    <div class="card">
+      <header><h3>An HTTP 200 can be the error</h3><span class="ch">the decline no status metric sees</span></header>
+      <p class="note" id="silent"></p>
+      <div class="dlinks" id="silentlinks" style="margin-top:8px"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <header><h3>Coverage</h3><span class="ch">a missing hour is not a quiet hour</span></header>
+    <p class="note" id="gapnote"></p>
+  </div>
+
+</div><!-- /#pulse-main -->
+
+<!-- ===================================================== LOAD ORDER =======
+     1 · data      manifest (topology + INC) -> rcameta (owners) -> tickets
+     2 · registry  the account-agnostic reference model  (window.PULSE_REG)
+     3 · spine     the seeded canonical week              (window.PULSE_SPINE)
+     4 · synth     the synthesis API every page reads     (window.PULSE_SYNTH)
+     5 · charts    inline-SVG helpers                     (window.PULSE_CHARTS)
+     6 · shell     builds the frame, fires 'pulse:range'  (window.PULSE_SHELL)
+     ======================================================================== -->
+<script src="../data/manifest.js"></script>
+<script src="../data/rcameta.js"></script>
+<script src="../data/tickets.js"></script>
+<script src="../data/registry.js"></script>
+<script src="../data/spine.js"></script>
+<script src="../assets/synth.js"></script>
+<script src="../assets/charts.js"></script>
+<script src="../assets/shell.js"></script>
+
+<script>
+/* ------------------------------------------------------------------ page */
+(function () {
+  "use strict";
+
+  var C   = window.PULSE_CHARTS,
+      S   = window.PULSE_SHELL,
+      SY  = window.PULSE_SYNTH,
+      REG = window.PULSE_REG,
+      TK  = window.ADEPTIO_TICKETS || { byWindow: {} },
+      DA  = window.ADEPTIO_DATA;
+
+  var esc = C.esc;
+  var $ = function (id) { return document.getElementById(id); };
+  function has(o, k) { return Object.prototype.hasOwnProperty.call(o, k); }
+
+  /* view state. Filters are passed to synth, never applied by the page, so a
+     screenshot of this page and a call to errorsExplorer() with the same
+     arguments are the same thing. */
+  var V = { range: '24h', sev: 'all', svc: null, ep: '', status: [],
+            sort: 'count', dir: -1, csort: 'count', cdir: -1 };
+  var open = {};        /* expanded service rows      */
+  var openG = {};       /* expanded exception groups  */
+  var cur = null;       /* the payload on screen      */
+  var trend = null;     /* the chart handle           */
+  var epTimer = null;
+
+  var SORT_LBL = { name: 'service', count: 'errors', business: 'business', technical: 'technical',
+                   share: 'share', groups: 'exception groups' };
+  var CSORT_LBL = { code: 'code', type: 'type', svc: 'service', http: 'HTTP status',
+                    count: 'count', share: 'share' };
+
+  /* registry metadata the payload does not repeat: the exception message
+     template, and which incident windows a service is coupled to. Neither is
+     a number — every figure still comes from the payload. */
+  var EG = (function () { var m = {}, i; for (i = 0; i < REG.errorGroups.length; i++) m[REG.errorGroups[i].id] = REG.errorGroups[i]; return m; }());
+  var SVC_INC = (function () {
+    var m = {}, i, k, g;
+    for (i = 0; i < REG.errorGroups.length; i++) {
+      g = REG.errorGroups[i]; m[g.svc] = m[g.svc] || {};
+      for (k in g.inc) if (has(g.inc, k)) m[g.svc][k] = 1;
+    }
+    for (i = 0; i < REG.resultCodes.length; i++) {
+      g = REG.resultCodes[i]; m[g.svc] = m[g.svc] || {};
+      for (k in g.inc) if (has(g.inc, k)) m[g.svc][k] = 1;
+    }
+    return m;
+  }());
+
+  /* --------------------------------------------------------------- format */
+  function num(v)  { return v == null ? 'NO DATA' : SY.fmtNum(v); }
+  function pct(v)  { return v == null ? 'NO DATA' : SY.fmtPct(v, 2); }
+  function ms(v)   { return v == null ? 'NO DATA' : SY.fmtMs(v); }
+  /* a count is coloured only when it is not zero: a red 0 reads as a verdict */
+  function cnt(v, band) {
+    return '<span class="rv ' + (v ? band : 'zero') + '">' + esc(num(v)) + '</span>';
+  }
+  /* the shared status bar names its bands OK/Warn/Critical; on this page the
+     two bands mean business and technical, so they are named that way */
+  function mixRows(business, technical) {
+    return [{ key: 'warn', label: 'Business (4xx)', value: business },
+            { key: 'crit', label: 'Technical (5xx)', value: technical }];
+  }
+
+  /* ------------------------------------------------------ incident windows */
+  function incidents(rng, svcKey) {
+    var out = [], k, w, meta, coupled = svcKey ? (SVC_INC[svcKey] || {}) : null;
+    for (k in DA.INC) {
+      if (!has(DA.INC, k)) continue;
+      if (coupled && !coupled[k]) continue;
+      w = DA.INC[k];
+      if (w[w.length - 1] < rng.t0 || w[0] > rng.t1) continue;
+      meta = DA.INCMETA[k] || [k, 'warn'];
+      out.push({ key: k, label: meta[0], sev: meta[1], peak: w[1],
+                 peakLabel: SY.dstamp(w[1]), ticket: (TK.byWindow || {})[k] || null });
+    }
+    out.sort(function (a, b) {
+      if (a.sev !== b.sev) return a.sev === 'crit' ? -1 : 1;
+      return a.peak - b.peak;
+    });
+    return out;
+  }
+  function incBadges(list) {
+    var h = '', i;
+    for (i = 0; i < list.length; i++) {
+      h += '<a class="badge inc' + (list[i].sev === 'crit' ? ' crit' : '') + '" ' +
+           'href="../index.html#t=' + list[i].peak + '" ' +
+           'title="' + esc('WK34 · Incident ' + list[i].key + ' — ' + list[i].label +
+                           ' · peak ' + list[i].peakLabel +
+                           ' — open on the flow map at this time') + '">' +
+           esc('W34·' + list[i].key) + ' ' + esc(list[i].peakLabel) + '</a>';
+    }
+    return h;
+  }
+  function incLinks(list) {
+    var h = '', i;
+    for (i = 0; i < list.length; i++) {
+      h += '<a href="../index.html#t=' + list[i].peak + '">Open on the flow map at ' +
+           esc('WK34 · Incident ' + list[i].key) + ' peak (' + esc(list[i].peakLabel) + ')</a>';
+      if (list[i].ticket) {
+        h += '<a href="../incident-trace.html#' + esc(list[i].ticket) + '">Incident trace ' +
+             esc(list[i].ticket) + '</a>';
+      }
+    }
+    return h;
+  }
+
+  /* ============================================================== payload */
+  function load() {
+    return SY.errorsExplorer(V.range, {
+      severity: V.sev,
+      service: V.svc,
+      endpoint: V.ep || null,
+      status: V.status.slice()
+    });
+  }
+
+  /* ============================================================ window bar */
+  function paintWindow() {
+    var r = cur.range, incs = incidents(r, null);
+    $('winlabel').textContent = r.label;
+    $('wininfo').innerHTML = num(r.buckets) + ' five-minute buckets &middot; exception counters roll up hourly';
+    $('wininc').innerHTML = incs.length
+      ? 'incident windows in view: ' + incBadges(incs)
+      : '<span class="muted">no incident window opens inside this range</span>';
+
+    var t = r.t1, lead = null, i;
+    for (i = 0; i < incs.length; i++) if (!lead && incs[i].sev === 'crit') lead = incs[i];
+    if (lead) t = lead.peak;
+    $('winflow').setAttribute('href', '../index.html#t=' + t);
+    $('winflow').textContent = lead
+      ? 'Open on the flow map at WK34 · Incident ' + lead.key + ' peak'
+      : 'Open on the flow map at ' + SY.dstamp(t);
+  }
+
+  /* ================================================================= tiles */
+  function paintTiles() {
+    var f = cur.filters, T = cur.tiles;
+    var bizSub = f.severity === 'technical'
+      ? 'excluded by the severity filter'
+      : 'a rule said no &mdash; 4xx and declines carried on <b>HTTP 200</b>';
+    var techSub = f.severity === 'business'
+      ? 'excluded by the severity filter'
+      : '5xx, upstream timeouts and <b>499</b> client aborts';
+    var filtered = f.severity !== 'all' || f.service || f.endpoint || f.status.length;
+    var tiles = [
+      { c: 'plain', l: 'Total errors', v: num(T.total), u: '',
+        s: 'business + technical &middot; <b>' + esc(cur.range.label) + '</b>',
+        p: (!T.total && filtered) ? ['na', 'No match'] : null },
+      { c: 'warn', l: 'Business (4xx)', v: num(T.business), u: '', s: bizSub,
+        p: f.severity === 'technical' ? ['na', 'Filtered out'] : null },
+      { c: 'crit', l: 'Technical (5xx)', v: num(T.technical), u: '', s: techSub,
+        p: f.severity === 'business' ? ['na', 'Filtered out'] : null },
+      { c: 'plain', l: 'Services affected', v: String(T.servicesAffected), u: '',
+        s: 'of ' + REG.services.length + ' services in the estate', p: null }
+    ];
+    var h = '', i;
+    for (i = 0; i < tiles.length; i++) {
+      var t = tiles[i];
+      h += '<div class="tile ' + t.c + '">' +
+           '<div class="label"><span>' + esc(t.l) + '</span></div>' +
+           '<div class="value"><span class="v">' + esc(t.v) + '</span>' +
+             (t.u ? '<u>' + esc(t.u) + '</u>' : '') + '</div>' +
+           '<div class="sub">' + t.s + '</div>' +
+           '<div class="tilefoot">' +
+             (t.p ? '<span class="pf ' + t.p[0] + '">' + esc(t.p[1]) + '</span>' : '') +
+           '</div></div>';
+    }
+    $('tiles').innerHTML = h;
+  }
+
+  /* =============================================================== filters */
+  function paintFilters() {
+    var f = cur.filters, i;
+
+    var sev = [['all', 'All'], ['business', 'Business (4xx)'], ['technical', 'Technical (5xx)']];
+    var h = '';
+    for (i = 0; i < sev.length; i++) {
+      var on = f.severity === sev[i][0];
+      h += '<button class="chip' + (on ? ' on' : '') + '" type="button" data-sev="' + sev[i][0] + '" ' +
+           'aria-pressed="' + (on ? 'true' : 'false') + '">' + esc(sev[i][1]) + '</button>';
+    }
+    $('sevchips').innerHTML = h;
+
+    h = '<button class="chip' + (V.status.length ? '' : ' on') + '" type="button" data-st="" ' +
+        'aria-pressed="' + (V.status.length ? 'false' : 'true') + '">Any</button>';
+    for (i = 0; i < cur.statusChips.length; i++) {
+      var code = cur.statusChips[i], sel = V.status.indexOf(code) > -1;
+      h += '<button class="chip' + (sel ? ' on' : '') + '" type="button" data-st="' + esc(code) + '" ' +
+           'aria-pressed="' + (sel ? 'true' : 'false') + '">' + esc(code) + '</button>';
+    }
+    $('statchips').innerHTML = h;
+
+    var bits = [];
+    bits.push('severity <b>' + esc(f.severity) + '</b>');
+    bits.push('service <b>' + esc(f.service || 'all') + '</b>');
+    bits.push('endpoint ' + (f.endpoint ? '<span class="k">' + esc(f.endpoint) + '</span>' : '<b>any</b>'));
+    bits.push('status ' + (f.status.length ? '<span class="k">' + esc(f.status.join(' ')) + '</span>' : '<b>any</b>'));
+    $('fsum').innerHTML = 'Passed to <span class="k">errorsExplorer(' + esc(cur.range.key) +
+      ', filters)</span> &mdash; ' + bits.join(' &middot; ') + '. The payload answers with <b>' +
+      cur.services.length + '</b> service rows, <b>' + cur.resultCodes.length +
+      '</b> result codes and <b>' + cur.topServices.length + '</b> top-service bars.';
+  }
+
+  /* ========================================================== top services */
+  function paintTop() {
+    var byKey = {}, i;
+    for (i = 0; i < cur.services.length; i++) byKey[cur.services[i].key] = cur.services[i];
+
+    var maxCount = 0;
+    for (i = 0; i < cur.topServices.length; i++) maxCount = Math.max(maxCount, cur.topServices[i].count);
+
+    var h = '';
+    for (i = 0; i < cur.topServices.length; i++) {
+      var ts = cur.topServices[i], s = byKey[ts.svc] || { business: 0, technical: 0 };
+      var w = maxCount ? (ts.count / maxCount) * 100 : 0;
+      var bw = ts.count ? (s.business / ts.count) * w : 0;
+      var tw = ts.count ? (s.technical / ts.count) * w : 0;
+      h += '<button class="sb' + (V.svc === ts.svc ? ' on' : '') + '" type="button" data-svc="' + esc(ts.svc) + '" ' +
+           'title="' + esc(ts.name + ' · ' + num(ts.count) + ' errors · ' + pct(ts.share) +
+                          ' of the window — click to hold the page on this service') + '">' +
+           /* C2: title so the full name is still reachable when the 768 column
+              ellipses it (e.g. "Notification Service notification" at 173/164px) */
+           '<span class="sb-n" title="' + esc(ts.name + ' · ' + ts.svc) + '">' +
+           esc(ts.name) + '<em>' + esc(ts.svc) + '</em></span>' +
+           '<span class="sb-bar">' +
+             '<i class="b" style="width:' + bw.toFixed(2) + '%"></i>' +
+             '<i class="t" style="width:' + tw.toFixed(2) + '%"></i>' +
+           '</span>' +
+           '<span class="sb-v">' + esc(num(ts.count)) + '</span>' +
+           '<span class="sb-s">' + esc(pct(ts.share)) + '</span>' +
+           '</button>';
+    }
+    $('topsvc').innerHTML = h || '<div class="empty">Nothing to rank under these filters.</div>';
+    $('topch').textContent = cur.topServices.length + ' of ' + cur.services.length +
+      ' services with errors · ' + cur.range.label;
+    $('topnote').innerHTML = 'Bar length is the service’s share of the window; the split inside it is the ' +
+      'payload’s own business / technical counts.';
+
+    /* the whole-window mix, from the tiles the payload already computed */
+    $('mix').innerHTML = C.statusBar(mixRows(cur.tiles.business, cur.tiles.technical),
+      { tall: true, legend: true, fmt: function (v) { return SY.fmtNum(v); },
+        label: 'business versus technical across the window' });
+  }
+
+  /* ============================================== exception counters chart */
+  function paintTrend() {
+    var top = cur.services.slice(0, 4), series = [], i, longest = 0;
+    for (i = 0; i < top.length; i++) {
+      if (!top[i].spark || !top[i].spark.length) continue;
+      longest = Math.max(longest, top[i].spark.length);
+      series.push({ name: top[i].key, values: top[i].spark, area: i === 0 });
+    }
+    var box = $('trend');
+
+    if (!series.length || longest < 3) {
+      box.innerHTML = '';
+      $('trendch').textContent = cur.range.label;
+      $('trendnote').innerHTML = longest
+        ? 'This range holds <b>' + longest + '</b> hourly counter bucket' + (longest === 1 ? '' : 's') +
+          ' — too few to draw a shape. Widen the range to 4 h or more.'
+        : 'No exception counter fired under these filters.';
+      trend = null;
+      return;
+    }
+
+    var h0 = Math.floor(cur.range.t0 / 12), h1 = Math.floor(cur.range.t1 / 12);
+    var labels = [], k;
+    for (k = 0; k < 5; k++) labels.push(SY.dstamp((h0 + Math.round((h1 - h0) * (k / 4))) * 12));
+
+    trend = C.render('#trend', {
+      type: 'line', responsive: false, ratio: .28, minH: 170, maxH: 260,
+      series: series, yFmt: 'compact', yMin: 0, xLabels: labels,
+      label: 'exception counters per hour for the four services with the most errors'
+    });
+    $('trendch').textContent = series.length + ' services · ' + longest + ' hourly buckets · ' + cur.range.label;
+    $('trendnote').innerHTML = 'One point per hour, straight from each service’s <span class="k">spark</span> ' +
+      'series in the payload. Over a range longer than 48 hours the payload averages neighbouring hours ' +
+      'so the series stays under 48 points &mdash; the shape is honest, the peak is flattened.';
+  }
+
+  /* ========================================================= services table */
+  function sortedServices() {
+    var list = cur.services.slice();
+    var k = V.sort, dir = V.dir;
+    list.sort(function (a, b) {
+      var x, y;
+      if (k === 'name') { x = a.name.toLowerCase(); y = b.name.toLowerCase(); return x < y ? -dir : x > y ? dir : 0; }
+      if (k === 'groups') { x = a.groupCount; y = b.groupCount; }
+      else { x = a[k]; y = b[k]; }
+      if (x === y) return b.count - a.count;
+      return (x < y ? -1 : 1) * dir;
+    });
+    return list;
+  }
+
+  function occBlock(g) {
+    var h = '', i;
+    if (g.occurrences.length) {
+      for (i = 0; i < g.occurrences.length; i++) {
+        var o = g.occurrences[i];
+        h += '<div class="occ">' +
+             '<span class="oa">' + esc(o.age) + '</span>' +
+             '<span class="oe">' + esc(o.endpoint) + '</span>' +
+             '<span class="om">' + esc(o.message) + '</span>' +
+             '<span class="od">' + esc(ms(o.duration)) + '</span>' +
+             '</div>';
+      }
+    } else {
+      h += '<p class="note">Counters only in this window: the group fired ' + esc(num(g.count)) +
+           ' time' + (g.count === 1 ? '' : 's') + ' but no stack-trace sample shipped inside the range. ' +
+           'Counts survive when traces cannot — that is the point of counting them separately.</p>';
+    }
+    var meta = EG[g.id];
+    h += '<div class="eps">' +
+         '<span class="badge tech">' + esc(g.id) + '</span>' +
+         (meta ? '<span class="badge tech">' + esc(meta.msg) + '</span>' : '');
+    for (i = 0; i < g.endpoints.length; i++) h += '<span class="badge tech">' + esc(g.endpoints[i]) + '</span>';
+    h += '</div>';
+    if (g.unknownHours) {
+      h += '<p class="note"><span class="badge provisional">Provisional</span> ' + g.unknownHours +
+           ' hourly bucket' + (g.unknownHours === 1 ? '' : 's') + ' in this range carry no data at all ' +
+           '(' + esc(REG.gap.label) + ', ' + esc(REG.gap.node) + ' node: ' + esc(REG.gap.reason) +
+           '). Those hours are unknown, not zero, and they are left out of the count above.</p>';
+    }
+    return h;
+  }
+
+  function exList(s) {
+    var h = '<div class="exhead">Exceptions thrown (' + s.groupCount + ')</div><div class="exlist">', i;
+    if (!s.groups.length) {
+      return '<div class="exhead">Exceptions thrown (0)</div>' +
+             '<p class="note">No application-log group fired for this service in the window. The count above ' +
+             'is the gateway’s own 4xx / 5xx population.</p>';
+    }
+    for (i = 0; i < s.groups.length; i++) {
+      var g = s.groups[i], id = 'x-' + g.id, on = !!openG[g.id];
+      h += '<div class="exrow' + (on ? ' open' : '') + '" data-ex="' + esc(g.id) + '" ' +
+           'id="r-' + esc(g.id) + '" tabindex="0" role="button" aria-controls="' + id + '" ' +
+           'aria-expanded="' + (on ? 'true' : 'false') + '">' +
+           '<span class="rt-c">&#9656;</span>' +
+           '<span class="exc">' + esc(g.cls) +
+             (g.unknownHours ? ' <span class="badge provisional">Provisional</span>' : '') + '</span>' +
+           '<span class="badge ' + (g.kind === 'business' ? 'biz">Business' : 'tec">Technical') + '</span>' +
+           '<span class="exn">' + esc(num(g.count)) + '</span>' +
+           '<span class="exs">' + esc(pct(g.share)) + '</span>' +
+           '</div>' +
+           '<div class="exocc' + (on ? ' open' : '') + '" id="' + id + '">' + occBlock(g) + '</div>';
+    }
+    if (s.groupCount > s.groups.length) {
+      h += '<p class="note">' + (s.groupCount - s.groups.length) + ' smaller group' +
+           (s.groupCount - s.groups.length === 1 ? '' : 's') + ' not listed — the payload ships the top ten.</p>';
+    }
+    return h + '</div>';
+  }
+
+  function detail(s) {
+    var svcDef = REG.bySvc[s.key] || {}, incs = incidents(cur.range, s.key);
+    var h = '<div class="dgrid">' +
+      '<div><div class="label muted">Business vs technical</div>' +
+        C.statusBar(mixRows(s.business, s.technical),
+                    { legend: true, fmt: function (v) { return SY.fmtNum(v); },
+                      label: s.name + ' business versus technical' }) + '</div>' +
+      '<div><div class="label muted">Deploy</div><div class="mono">' + esc(svcDef.deploy || '—') + '</div>' +
+        '<div class="eps">' + (s.node ? '<span class="badge tech">node ' + esc(s.node) + '</span>' : '') +
+        '<span class="badge tech">' + s.groupCount + ' exception groups</span></div></div>' +
+      '<div><div class="label muted">Cross-links</div><div class="dlinks">' +
+        '<a href="../index.html#t=' + cur.range.t1 + '">Flow map at ' + esc(SY.dstamp(cur.range.t1)) + '</a>' +
+        incLinks(incs) + '</div></div>' +
+      '</div>';
+    if (!s.count && s.groupCount) {
+      h += '<p class="note"><span class="badge tech">counters only</span> No gateway row is attributed to ' +
+           esc(s.name) + ' in this window — it sits behind the ingress, so it has no 4xx / 5xx ' +
+           'population of its own. Its application log still counts the exceptions below.</p>';
+    }
+    return h + exList(s);
+  }
+
+  function paintTable() {
+    var list = sortedServices(), h = '', i;
+    for (i = 0; i < list.length; i++) {
+      var s = list[i], id = 's-' + s.key, on = !!open[s.key];
+      var spark = (s.spark && s.spark.length >= 3)
+        ? C.sparkline(s.spark, { w: 92, h: 20, label: s.name + ' exception counters per hour' })
+        : '<span class="muted">&mdash;</span>';
+      h += '<tr class="row-toggle' + (on ? ' open' : '') + '" data-row="' + id + '" data-svc="' + esc(s.key) + '" ' +
+             'tabindex="0" role="button" aria-expanded="' + (on ? 'true' : 'false') + '">' +
+           '<td class="nm"><span class="rt-c">&#9656;</span>' + esc(s.name) +
+             '<span class="sub">' + esc(s.key) +
+             (!s.count && s.groupCount ? ' &middot; counters only' : '') + '</span></td>' +
+           '<td class="num c-count">' + esc(num(s.count)) + '</td>' +
+           '<td class="num c-biz">' + cnt(s.business, 'warn') + '</td>' +
+           '<td class="num c-tech">' + cnt(s.technical, 'crit') + '</td>' +
+           '<td class="num c-share">' + esc(pct(s.share)) + '</td>' +
+           '<td class="num c-groups">' + s.groupCount + '</td>' +
+           '<td>' + spark + '</td></tr>' +
+           '<tr class="row-detail' + (on ? ' open' : '') + '" id="' + id + '"><td colspan="7">' +
+           (on ? detail(s) : '') + '</td></tr>';
+    }
+    $('rows').innerHTML = h;
+    $('none').hidden = list.length > 0;
+    $('svch').textContent = 'Services (' + cur.services.length + ')';
+    $('svcnote').innerHTML = 'sorted by <b>' + esc(SORT_LBL[V.sort] || V.sort) + '</b> ' +
+      (V.dir === 1 ? 'ascending' : 'descending') + ' &middot; every figure is the payload’s';
+    sortHeads();
+  }
+
+  /* ===================================================== result-code table */
+  function sortedCodes() {
+    var list = cur.resultCodes.slice(), k = V.csort, dir = V.cdir;
+    list.sort(function (a, b) {
+      var x, y;
+      if (k === 'code' || k === 'type' || k === 'svc') {
+        x = String(a[k]).toLowerCase(); y = String(b[k]).toLowerCase();
+        return x < y ? -dir : x > y ? dir : 0;
+      }
+      x = a[k]; y = b[k];
+      if (x === y) return b.count - a.count;
+      return (x < y ? -1 : 1) * dir;
+    });
+    return list;
+  }
+
+  function paintCodes() {
+    var list = sortedCodes(), h = '', i, biz = 0, tech = 0, silent = 0;
+    for (i = 0; i < list.length; i++) {
+      var c = list[i], svcDef = REG.bySvc[c.svc] || {};
+      if (c.type === 'Business') biz++; else tech++;
+      if (c.http === 200) silent++;
+      h += '<tr>' +
+           '<td class="code">' + esc(c.code) + '</td>' +
+           '<td><span class="badge ' + (c.type === 'Business' ? 'biz' : 'tec') + '">' + esc(c.type) + '</span></td>' +
+           '<td class="nm">' + esc(svcDef.name || c.svc) + '<span class="sub">' + esc(c.svc) + '</span></td>' +
+           '<td class="num mono">' + c.http +
+             (c.http === 200 ? ' <span class="badge">silent</span>' : '') + '</td>' +
+           '<td class="wrap">' + esc(c.message) + '</td>' +
+           '<td class="num">' + esc(num(c.count)) + '</td>' +
+           '<td class="num">' + esc(pct(c.share)) + '</td></tr>';
+    }
+    $('codes').innerHTML = h;
+    $('cnone').hidden = list.length > 0;
+    $('codenote').innerHTML = list.length + ' codes fired &middot; <b>' + biz + '</b> business, <b>' + tech +
+      '</b> technical, <b>' + silent + '</b> carried on an HTTP 200 &middot; sorted by <b>' +
+      esc(CSORT_LBL[V.csort] || V.csort) + '</b> ' + (V.cdir === 1 ? 'ascending' : 'descending');
+    sortHeads();
+  }
+
+  /* ================================================================ notes */
+  function paintNotes() {
+    $('rule').textContent = cur.rule;
+
+    /* the silent-decline card quotes the payload's own biggest 200-carried code */
+    var best = null, i;
+    for (i = 0; i < cur.resultCodes.length; i++) {
+      if (cur.resultCodes[i].http !== 200) continue;
+      if (!best || cur.resultCodes[i].count > best.count) best = cur.resultCodes[i];
+    }
+    var A = incidents(cur.range, 'payment').filter(function (x) { return x.key === 'A'; });
+    if (best) {
+      $('silent').innerHTML = 'In this window <span class="k">' + esc(best.code) + '</span> (' +
+        esc(best.message) + ', ' + esc(REG.bySvc[best.svc] ? REG.bySvc[best.svc].name : best.svc) +
+        ') declined <b>' + esc(num(best.count)) + '</b> requests on a <b>200 OK</b>. A success-rate ' +
+        'metric counts every one of them as a success; only the result code sees the customer being told no.';
+    } else {
+      $('silent').innerHTML = 'No 200-carried decline fired under these filters. When one does, it is invisible ' +
+        'to every status-code metric — the response was a 200 and the customer was still told no.';
+    }
+    $('silentlinks').innerHTML = A.length
+      ? incLinks(A)
+      : '<a href="../index.html#t=' + cur.range.t1 + '">Open the flow map at ' + esc(SY.dstamp(cur.range.t1)) + '</a>';
+
+    /* coverage: does any group in view carry unknown hours? */
+    var unkGroups = 0, unkSvcs = {}, s, g, j;
+    for (i = 0; i < cur.services.length; i++) {
+      s = cur.services[i];
+      for (j = 0; j < s.groups.length; j++) {
+        g = s.groups[j];
+        if (g.unknownHours) { unkGroups++; unkSvcs[s.name] = 1; }
+      }
+    }
+    var names = [], k;
+    for (k in unkSvcs) if (has(unkSvcs, k)) names.push(k);
+    var tail = ' &mdash; ' + esc(SY.disclaimer) + '.';
+    $('gapnote').innerHTML = (unkGroups
+      ? '<span class="badge provisional">Provisional</span> ' + unkGroups + ' exception group' +
+        (unkGroups === 1 ? '' : 's') + ' on ' + esc(names.join(', ')) + ' lost hourly buckets to the ' +
+        esc(REG.gap.label) + ' collector gap (' + esc(REG.gap.mins) + ' minutes, ' + esc(REG.gap.node) +
+        ' node: ' + esc(REG.gap.reason) + '). Those hours are marked unknown and excluded from the counts ' +
+        'on this page — an error page that draws a missing hour as a quiet hour invents a good night.'
+      : 'Every hourly bucket in this range reported. The one deliberate hole in the week &mdash; ' +
+        esc(REG.gap.label) + ' on the ' + esc(REG.gap.node) + ' node &mdash; falls outside it; widen the ' +
+        'range to 7d to see it marked provisional rather than silently counted as zero.') + tail;
+  }
+
+  /* ========================================================== sort headers */
+  function sortHeads() {
+    var ths = document.querySelectorAll('.ptable thead th.sortable'), j;
+    for (j = 0; j < ths.length; j++) {
+      var th = ths[j];
+      var isCode = !!th.getAttribute('data-csort');
+      var key = isCode ? th.getAttribute('data-csort') : th.getAttribute('data-sort');
+      var sel = isCode ? (key === V.csort) : (key === V.sort);
+      var dir = isCode ? V.cdir : V.dir;
+      var base = 'sortable' + (th.className.indexOf('num') > -1 ? ' num' : '');
+      th.className = sel ? base + ' sorted' : base;
+      var arr = th.querySelector('.sarr');
+      if (arr) arr.textContent = sel ? (dir === 1 ? '↑' : '↓') : '';
+      th.setAttribute('aria-sort', sel ? (dir === 1 ? 'ascending' : 'descending') : 'none');
+    }
+  }
+
+  /* ================================================================ render */
+  function render(rangeKey) {
+    if (rangeKey) V.range = rangeKey;
+    cur = load();
+    paintWindow();
+    paintTiles();
+    paintFilters();
+    paintTop();
+    paintTrend();
+    paintTable();
+    paintCodes();
+    paintNotes();
+  }
+  /* filters only: the chart and the tables change, the window strip does not */
+  function refilter() { render(null); }
+
+  /* --------------------------------------------------------- interactions */
+  function toggleRow(tr) {
+    var key = tr.getAttribute('data-svc');
+    if (open[key]) delete open[key]; else open[key] = 1;
+    paintTable();
+    var again = document.querySelector('#rows tr.row-toggle[data-svc="' + key + '"]');
+    if (again) again.focus();
+  }
+  function toggleGroup(el) {
+    var id = el.getAttribute('data-ex');
+    if (openG[id]) delete openG[id]; else openG[id] = 1;
+    paintTable();
+    var again = document.getElementById('r-' + id);
+    if (again) again.focus();
+  }
+  function up(node, stop, attr) {
+    while (node && node !== stop && !(node.getAttribute && node.getAttribute(attr))) node = node.parentNode;
+    return (node && node !== stop) ? node : null;
+  }
+  function selectSvc(key) {
+    V.svc = (V.svc === key) ? null : key;
+    open = {}; openG = {};
+    $('svcsel').value = V.svc || '';
+    refilter();
+  }
+
+  S.ready(function () {
+    S.setLineage(SY.lineage('errors'));
+
+    /* the service select is the estate register, not a payload artefact */
+    var opts = '<option value="">All services</option>', i;
+    for (i = 0; i < REG.services.length; i++) {
+      opts += '<option value="' + esc(REG.services[i].key) + '">' + esc(REG.services[i].name) +
+              ' (' + esc(REG.services[i].key) + ')</option>';
+    }
+    $('svcsel').innerHTML = opts;
+
+    render(S.getRange() || '24h');
+
+    /* range chips */
+    S.onRange(function (ev) { open = {}; openG = {}; render(ev.detail.range); });
+
+    /* severity chips */
+    $('sevchips').addEventListener('click', function (ev) {
+      var n = up(ev.target, this, 'data-sev');
+      if (!n) return;
+      V.sev = n.getAttribute('data-sev');
+      openG = {};
+      refilter();
+    });
+
+    /* status chips — multi-select, "Any" clears */
+    $('statchips').addEventListener('click', function (ev) {
+      var n = up(ev.target, this, 'data-st');
+      if (!n) return;
+      var code = n.getAttribute('data-st');
+      if (!code) V.status = [];
+      else {
+        var at = V.status.indexOf(code);
+        if (at > -1) V.status.splice(at, 1); else V.status.push(code);
+      }
+      refilter();
+    });
+
+    /* service select */
+    $('svcsel').addEventListener('change', function () {
+      V.svc = this.value || null;
+      open = {}; openG = {};
+      refilter();
+    });
+
+    /* endpoint substring — debounced so a fast typist does not queue windows */
+    $('epq').addEventListener('input', function () {
+      var val = this.value.trim();
+      if (epTimer) clearTimeout(epTimer);
+      epTimer = setTimeout(function () { V.ep = val; open = {}; openG = {}; refilter(); }, 220);
+    });
+    $('epq').addEventListener('keydown', function (ev) {
+      if (ev.key !== 'Enter') return;
+      ev.preventDefault();
+      if (epTimer) clearTimeout(epTimer);
+      V.ep = this.value.trim(); open = {}; openG = {}; refilter();
+    });
+
+    /* reset */
+    $('reset').addEventListener('click', function () {
+      V.sev = 'all'; V.svc = null; V.ep = ''; V.status = [];
+      V.sort = 'count'; V.dir = -1; V.csort = 'count'; V.cdir = -1;
+      open = {}; openG = {};
+      $('epq').value = '';
+      $('svcsel').value = '';
+      refilter();
+    });
+
+    /* top-services bars select a service */
+    $('topsvc').addEventListener('click', function (ev) {
+      var n = up(ev.target, this, 'data-svc');
+      if (n) selectSvc(n.getAttribute('data-svc'));
+    });
+
+    /* service rows and the exception rows inside them */
+    var body = $('rows');
+    body.addEventListener('click', function (ev) {
+      if (ev.target && ev.target.tagName === 'A') return;         /* cross-links win */
+      var g = up(ev.target, this, 'data-ex');
+      if (g) { toggleGroup(g); return; }
+      var n = up(ev.target, this, 'data-row');
+      if (n) toggleRow(n);
+    });
+    body.addEventListener('keydown', function (ev) {
+      if (ev.key !== 'Enter' && ev.key !== ' ') return;
+      var t = ev.target;
+      if (t && t.getAttribute && t.getAttribute('data-ex')) { ev.preventDefault(); toggleGroup(t); return; }
+      if (t && t.getAttribute && t.getAttribute('data-row')) { ev.preventDefault(); toggleRow(t); }
+    });
+
+    /* sortable headers — pointer and keyboard, both tables */
+    function headSort(ev) {
+      if (ev.type === 'keydown' && ev.key !== 'Enter' && ev.key !== ' ') return;
+      var n = ev.target;
+      while (n && n !== this && !(n.getAttribute &&
+             (n.getAttribute('data-sort') || n.getAttribute('data-csort')))) n = n.parentNode;
+      if (!n || n === this) return;
+      if (ev.type === 'keydown') ev.preventDefault();
+      var ck = n.getAttribute('data-csort');
+      if (ck) {
+        if (V.csort === ck) V.cdir = -V.cdir; else { V.csort = ck; V.cdir = (ck === 'code' || ck === 'type' || ck === 'svc') ? 1 : -1; }
+        paintCodes();
+      } else {
+        var k = n.getAttribute('data-sort');
+        if (V.sort === k) V.dir = -V.dir; else { V.sort = k; V.dir = (k === 'name') ? 1 : -1; }
+        paintTable();
+      }
+    }
+    var heads = document.querySelectorAll('.ptable thead'), hi;
+    for (hi = 0; hi < heads.length; hi++) {
+      heads[hi].addEventListener('click', headSort);
+      heads[hi].addEventListener('keydown', headSort);
+    }
+
+    /* one debounced resize handler: the charts are built with responsive:false
+       so repainting cannot pile listeners up */
+    var rtid = null;
+    window.addEventListener('resize', function () {
+      if (rtid) clearTimeout(rtid);
+      rtid = setTimeout(function () { if (trend) trend.draw(); }, 160);
+    });
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,1049 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<link rel="icon" href="data:,"/>
+
+<!-- ===========================================================================
+     ADEPTIO Pulse — WEEKLY SLA CRITICAL  (menu 1 · spec screen sources/04_rId9.jpg)
+     Week chips WK31-WK34 (top bar) · Weekly/Custom mode · Copy + CSV ·
+     three headline tiles · metric tabs that switch the table column ·
+     six critical-service rows (expandable, carrying the cross-links) ·
+     4-week trend bars · the denominator note.
+     The chips keep their WK keys; the dates they stand for are 2027, Mon-Sun:
+     WK31 Aug 2-8 · WK32 Aug 9-15 · WK33 Aug 16-22 · WK34 Aug 23-29.
+
+     Every figure comes from PULSE_SYNTH.weeklySLA(wk):
+       · current week (WK34 = Aug 23 - 29, 2027) -> tiles{}, rows[], average{}, coverage{}
+       · anchor weeks WK31-33 (Aug 2 - 22, 2027) -> the retained anchors in the SAME payload:
+         trend[] (estate) and rows[].trend[] (per service). The 5-minute spine
+         holds ONE week, so the anchor weeks are shown as anchors and say so
+         rather than borrowing WK34's outage under a WK31 label.
+     Per-service availability is PULSE_SYNTH.probeAvailability(t0,t1,[svc]) —
+     the L1 lane, the same function weeklySLA uses for its own tile.
+     Nothing on this page is recomputed from the spine by the page itself.
+     Classic scripts only — opens straight off disk (file://).
+     =========================================================================== -->
+
+<title>Weekly SLA Critical &mdash; Adeptio Pulse</title>
+
+<link rel="stylesheet" href="../assets/tokens.css"/>
+<link rel="stylesheet" href="../assets/shell.css"/>
+<link rel="stylesheet" href="../assets/menus.css"/>
+
+<style>
+/* ------------------------------------------------------------- PAGE-LOCAL
+   Five things the shared kit does not carry: the week stepper, a source line
+   inside a tile, the pass/fail tally beside a section heading, the link list
+   in an expanded row, and a [hidden] rule for components that set their own
+   display. Tokens only — no new colours, no status colour used as chrome. */
+.card[hidden],.note[hidden],.badge[hidden],a[hidden],tr[hidden],
+section.sect[hidden]{display:none}
+
+/* the row the page's stated tie-break selects */
+.ptable tbody tr.hilite td{background:var(--panel2)}
+.ptable tbody tr.hilite td:first-child{box-shadow:inset 2px 0 0 var(--chipink)}
+
+/* week stepper — chrome buttons either side of the window label */
+.wknav{display:inline-flex;align-items:center;gap:6px;min-width:0}
+.wknav .wkb{padding:4px 9px;font-size:13px;line-height:1;font-weight:700}
+.wknav .wkb[disabled]{opacity:.4;cursor:not-allowed}
+.wklbl{font-size:12px;font-weight:650;color:var(--ink);white-space:nowrap;
+  padding:0 4px;font-variant-numeric:tabular-nums}
+.wklbl .wksub{color:var(--muted);font-weight:400}
+
+/* the lane a tile's number came from, printed under it */
+.tile .tsrc{font-size:10px;line-height:1.5;color:var(--muted);overflow-wrap:anywhere}
+.tile .value.nodata{font-size:15px;letter-spacing:.04em;color:var(--unk)}
+
+/* pass / fail tally beside the section heading */
+.pfsum{display:inline-flex;align-items:center;gap:12px;flex-wrap:wrap;
+  font-size:11px;color:var(--muted)}
+.pfsum span{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.pfsum b{color:var(--ink2);font-weight:700;font-variant-numeric:tabular-nums}
+
+/* expanded row: a definition grid plus a row of cross-links */
+.rlinks{display:flex;flex-wrap:wrap;gap:14px;margin-top:11px;
+  padding-top:10px;border-top:1px solid var(--line)}
+a.tlink{color:var(--chipink);text-decoration:none;border-bottom:1px solid var(--chipline);
+  font-size:11.5px;white-space:nowrap}
+a.tlink:hover{border-bottom-color:var(--chipink)}
+.dgrid .label{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+.dgrid .dv{font-size:12.5px;color:var(--ink);font-variant-numeric:tabular-nums;margin-top:2px}
+.dgrid .dv.mono{font-family:var(--mono);font-size:11.5px}
+
+/* the "what the three numbers mean" callout */
+.deflist{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.deflist > div{min-width:0}
+.deflist .dt{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--muted);margin-bottom:3px}
+.deflist .dd{font-size:11.5px;line-height:1.65;color:var(--ink2);overflow-wrap:anywhere}
+.deflist .dd code{font-family:var(--mono);font-size:11px;color:var(--ink)}
+
+.tdash{color:var(--muted)}
+.stat{font-size:11px;color:var(--muted);min-height:1em}
+.stat.on{color:var(--chipink)}
+
+/* the SLA table: 6 columns at desktop width. Below 820 the Target column is
+   dropped — it is the same constant on every row and is already stated in the
+   tiles, the metric note and the definitions card — so the Pass/Fail column,
+   which is the point of the screen, stays on screen instead of scrolling off. */
+#slatable{--tmin:760px}
+@media (max-width:820px){
+  #slatable{--tmin:600px}
+  #slatable thead th:nth-child(2),
+  #slatable tbody tr.row-toggle td:nth-child(2),
+  #slatable tfoot td:nth-child(2){display:none}
+}
+@media (max-width:768px){
+  .wklbl{white-space:normal}
+  .wklbl .wksub{display:block}
+}
+@media (prefers-reduced-motion:reduce){
+  .rt-c{transition:none}
+}
+</style>
+</head>
+
+<body data-shell="page"
+      data-title="Weekly SLA Critical"
+      data-subtitle="computed from: L3 gateway access log &middot; L1 synthetic probes &middot; no APM &middot; Aug 23 &ndash; 29, 2027"
+      data-ranges="WK31,WK32,WK33,WK34"
+      data-range="WK34"
+      data-lineage="L3 gateway access log: ts_utc_ms, svc, route_template, status, dur_ms, T_ms - L1 probe_success at hops no log can see - mapping tables service&#8594;critical, route&#8594;service. Success = countIf(status &lt; 500)/count(); response time = countIf(dur_ms &lt;= T_ms)/count(); availability = probe ratio with the assertion in the numerator.">
+
+<div id="pulse-main">
+
+  <!-- ============================================================ CONTROLS -->
+  <div class="card">
+    <div class="toolbar">
+      <span class="clbl">Report</span>
+      <div class="chips" id="modechips" role="group" aria-label="Reporting mode"></div>
+      <span class="csep" aria-hidden="true"></span>
+      <div class="wknav" id="wknav">
+        <button class="btn wkb" type="button" id="wkprev" aria-label="Previous week">&#8249;</button>
+        <span class="wklbl" id="wklbl">&nbsp;</span>
+        <button class="btn wkb" type="button" id="wknext" aria-label="Next week">&#8250;</button>
+      </div>
+      <div class="sp"></div>
+      <button class="btn" type="button" id="btncopy">Copy</button>
+      <button class="btn pri" type="button" id="btncsv">CSV</button>
+    </div>
+    <div class="toolbar">
+      <span class="note" id="modenote">&nbsp;</span>
+      <div class="sp"></div>
+      <span class="stat" id="iostat" role="status" aria-live="polite"></span>
+    </div>
+  </div>
+
+  <!-- =============================================================== TILES -->
+  <section class="tiles" id="tiles" aria-label="Headline figures"></section>
+
+  <!-- ====================================================== COVERAGE STRIP -->
+  <div class="card" id="covcard">
+    <div class="toolbar">
+      <span class="pill" id="covpill">&nbsp;</span>
+      <span class="badge provisional" id="covprov" hidden>Provisional</span>
+      <span class="note" id="covtxt">&nbsp;</span>
+      <div class="sp"></div>
+      <a class="tlink" id="lnkflow" href="../index.html">Open on the flow map</a>
+      <a class="tlink" id="lnkticket" href="../incident-trace.html" hidden>Incident trace</a>
+    </div>
+  </div>
+
+  <!-- ==================================================== INCIDENT WINDOWS -->
+  <section class="sect" id="incsect"><h2>What shaped this week</h2>
+    <span class="sh" id="incsh">the incident windows inside the reported range</span></section>
+  <div class="card pad0" id="inccard">
+    <div class="twrap">
+      <table class="ptable" style="--tmin:640px">
+        <thead>
+          <tr>
+            <th scope="col">Window</th>
+            <th scope="col">Severity</th>
+            <th scope="col">Peak</th>
+            <th scope="col">Span</th>
+            <th scope="col">Open at this time</th>
+          </tr>
+        </thead>
+        <tbody id="incrows"></tbody>
+      </table>
+    </div>
+  </div>
+  <p class="note" id="incnote">&nbsp;</p>
+
+  <!-- =========================================================== THE TABLE -->
+  <section class="sect">
+    <h2>Critical services</h2>
+    <span class="sh" id="scount">6 critical services</span>
+    <span class="sp"></span>
+    <span class="pfsum" id="pfsum"></span>
+  </section>
+
+  <div class="card">
+    <div class="toolbar">
+      <span class="clbl">Metric</span>
+      <div class="chips" id="mtabs" role="group" aria-label="Table metric"></div>
+      <div class="sp"></div>
+      <span class="note" id="metricsrc">&nbsp;</span>
+    </div>
+  </div>
+
+  <div class="card pad0">
+    <div class="twrap">
+      <table class="ptable" id="slatable">
+        <thead>
+          <tr>
+            <th scope="col" class="sortable" data-k="service" tabindex="0"
+                title="Sort by service">Service<span class="sarr">&#9660;</span></th>
+            <th scope="col" class="num">Target</th>
+            <th scope="col" class="num sortable" data-k="prev" tabindex="0"
+                id="hprev" title="Sort by the previous week">&mdash;<span class="sarr">&#9660;</span></th>
+            <th scope="col" class="num sortable" data-k="cur" tabindex="0"
+                id="hcur" title="Sort by the selected week">&mdash;<span class="sarr">&#9660;</span></th>
+            <th scope="col" class="num sortable" data-k="delta" tabindex="0"
+                title="Sort by delta">Delta<span class="sarr">&#9660;</span></th>
+            <th scope="col">Status</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+        <tfoot>
+          <tr>
+            <td class="nm" id="favg">&mdash;</td>
+            <td class="num tdash">&mdash;</td>
+            <td class="num" id="fprev">&mdash;</td>
+            <td class="num" id="fcur">&mdash;</td>
+            <td class="num" id="fdelta">&mdash;</td>
+            <td id="fstatus">&mdash;</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+  <p class="note" id="tnote">&nbsp;</p>
+
+  <!-- =========================================================== 4-W TREND -->
+  <div class="card">
+    <header><h3>4-week trend</h3><span class="ch" id="trendch">&nbsp;</span></header>
+    <div class="chartbox" id="chtrend"></div>
+    <div class="legend">
+      <span><i class="line" style="background:var(--warn)"></i><span id="trendthr">target</span></span>
+      <span>shorter is better &mdash; each bar is the distance from 100&nbsp;%</span>
+    </div>
+    <p class="note" id="trendnote">&nbsp;</p>
+  </div>
+
+  <!-- ========================================================= DENOMINATOR -->
+  <section class="sect"><h2>How the three numbers are defined</h2>
+    <span class="sh">the denominator rules the SLA engine applies, from the payload</span></section>
+  <div class="card">
+    <div class="deflist" id="deflist"></div>
+    <p class="note" id="denote">&nbsp;</p>
+  </div>
+
+  <p class="note" id="disc">&nbsp;</p>
+
+</div><!-- /#pulse-main -->
+
+<!-- ===================================================== LOAD ORDER =======
+     1 · data      manifest -> rcameta -> tickets
+     2 · registry  the account-agnostic reference model   (window.PULSE_REG)
+     3 · spine     the seeded canonical week              (window.PULSE_SPINE)
+     4 · synth     the synthesis API this page reads      (window.PULSE_SYNTH)
+     5 · charts    inline-SVG helpers                     (window.PULSE_CHARTS)
+     6 · shell     builds the frame, fires 'pulse:range'  (window.PULSE_SHELL)
+     ======================================================================== -->
+<script src="../data/manifest.js"></script>
+<script src="../data/rcameta.js"></script>
+<script src="../data/tickets.js"></script>
+<script src="../data/registry.js"></script>
+<script src="../data/spine.js"></script>
+<script src="../assets/synth.js"></script>
+<script src="../assets/charts.js"></script>
+<script src="../assets/shell.js"></script>
+
+<script>
+/* ------------------------------------------------------------------- page */
+(function () {
+  "use strict";
+  var C = window.PULSE_CHARTS, S = window.PULSE_SHELL, SY = window.PULSE_SYNTH;
+  var TICKETS = (window.ADEPTIO_TICKETS && window.ADEPTIO_TICKETS.byWindow) || {};
+  var $ = function (id) { return document.getElementById(id); };
+  var esc = C.esc;
+
+  var WEEKS   = ['WK31', 'WK32', 'WK33', 'WK34'];
+
+  /* ------------------------------------------------------- week date ranges
+     Display only. The WK keys above are the identity used by S.getRange(),
+     data-ranges and every comparison — they never change. This map is what a
+     reader is shown when a key alone is not enough: the anchor weeks of 2027,
+     Mon-Sun. data/registry.js weeks[] carries the same strings in a `range`
+     field; that is preferred when present so the two cannot drift. */
+  var WEEKRANGE = { WK31: 'Aug 2 – 8', WK32: 'Aug 9 – 15',
+                    WK33: 'Aug 16 – 22', WK34: 'Aug 23 – 29' };
+  var WEEKYEAR  = '2027';
+  var ANCHOR_SPAN = 'Aug 2 – 22';        /* WK31-WK33 together, for prose only */
+  function wkRange(key) {
+    var ws = (window.PULSE_REG && window.PULSE_REG.weeks) || [], i;
+    for (i = 0; i < ws.length; i++) if (ws[i].key === key && ws[i].range) return ws[i].range;
+    return WEEKRANGE[key] || '';
+  }
+  /* the incident windows keep their letters as identity; these are the labels a
+     reader sees, never a lookup key (byWindow, INC, INCMETA stay keyed on it).
+     incShort() is for the coverage-strip cross-link, which is nowrap and
+     already carries a stamp and the window name — spelling the week out there
+     runs it past a narrow viewport, so it hangs the full form on its title. */
+  function incLabel(key) { return 'WK34 · Incident ' + key; }
+  function incShort(key) { return 'W34·' + key; }
+
+  var METRICS = [
+    { k: 'success',      label: 'Success Rate',  tile: 'success' },
+    { k: 'responseTime', label: 'Response Time', tile: 'responseTime' },
+    { k: 'availability', label: 'Availability',  tile: 'availability' }
+  ];
+  var MODES = [{ k: 'weekly', label: 'Weekly' }, { k: 'custom', label: 'Custom' }];
+
+  var state = { mode: 'weekly', metric: 'success' };
+  var sort  = { k: 'service', dir: 1 };
+  var view  = null;                 /* the matrix currently on screen */
+  var availCache = {};              /* svc -> probeAvailability() result */
+
+  function has(v) { return v !== null && v !== undefined && isFinite(v); }
+  function pct(v) { return has(v) ? SY.fmtPct(v, 2) : null; }
+  function bandTxt(b) {
+    return b === 'ok' ? 'OK' : b === 'warn' ? 'Warn' : b === 'crit' ? 'Critical' : 'No data';
+  }
+  function deltaHtml(d) {
+    if (!has(d)) return '<span class="tdash">&mdash;</span>';
+    var cls = d > 0.0005 ? 'good' : (d < -0.0005 ? 'bad' : 'flat');
+    return '<span class="delta ' + cls + '">' + esc(SY.fmtDelta(d, 2)) + '</span>';
+  }
+  function metricOf(k) {
+    for (var i = 0; i < METRICS.length; i++) if (METRICS[i].k === k) return METRICS[i];
+    return METRICS[0];
+  }
+  function weekIndex(key) {
+    for (var i = 0; i < WEEKS.length; i++) if (WEEKS[i] === key) return i;
+    return WEEKS.length - 1;
+  }
+
+  /* ---------------------------------------------------------- the windows
+     The incident registry is data/manifest.js INC / INCMETA — the same nine
+     windows the front page bands, so the two screens describe one week. Peak
+     index and ticket key are read, never invented: the ticket comes through
+     ADEPTIO_TICKETS.byWindow exactly as the flow map's RCA pop-up finds it.
+     PULSE_SYNTH.incidentAt() cannot rank them here: every window sits at the
+     apex of its own ramp over a full week, so all nine score sev 1.0 and it
+     returns whichever key it met first. The page therefore states its own
+     tie-break in the open: crit severity first, then the latest peak — which
+     is F, the core outage the week's three failing tiles are made of. */
+  function weekIncidents(t0, t1) {
+    var D = window.ADEPTIO_DATA || {}, INC = D.INC || {}, META = D.INCMETA || {};
+    var out = [], k;
+    for (k in INC) {
+      if (!Object.prototype.hasOwnProperty.call(INC, k)) continue;
+      var wnd = INC[k], a = wnd[0], b = wnd[wnd.length - 1];
+      if (b < t0 || a > t1) continue;
+      var m = META[k] || [k, 'warn'];
+      out.push({ key: k, label: m[0], severity: m[1], t0: a, t1: b, peak: wnd[1],
+                 peakLabel: SY.dstamp(wnd[1]), span: SY.dstamp(a) + ' – ' + SY.dstamp(b),
+                 mins: (b - a + 1) * 5, ticket: TICKETS[k] || null });
+    }
+    out.sort(function (x, y) { return x.peak - y.peak; });
+    return out;
+  }
+  function worstWindow(list) {
+    var best = null, i;
+    for (i = 0; i < list.length; i++) {
+      var c = list[i];
+      if (!best) { best = c; continue; }
+      var cc = c.severity === 'crit' ? 1 : 0, bc = best.severity === 'crit' ? 1 : 0;
+      if (cc > bc || (cc === bc && c.peak > best.peak)) best = c;
+    }
+    return best;
+  }
+
+  /* -------------------------------------------------- week chip date tips
+     The top-bar chips are built by the shell from data-ranges and keep their
+     WK labels. This only hangs a title on each one so hovering a key answers
+     "which week is that?" — no label, no key and no layout is touched. */
+  function weekChipTips() {
+    var host = document.getElementById('prange');
+    if (!host) return;
+    var btns = host.querySelectorAll('[data-range]'), i, k, r;
+    for (i = 0; i < btns.length; i++) {
+      k = btns[i].getAttribute('data-range');
+      r = wkRange(k);
+      if (r) btns[i].setAttribute('title', k + ' · ' + r + ', ' + WEEKYEAR + ' (Mon–Sun)');
+    }
+  }
+
+  /* ------------------------------------------------------------------ chips */
+  function chipRow(host, items, active, onPick) {
+    var h = '', i;
+    for (i = 0; i < items.length; i++) {
+      var on = items[i].k === active;
+      h += '<button class="chip' + (on ? ' on' : '') + '" type="button" data-k="' + esc(items[i].k) +
+           '" aria-pressed="' + (on ? 'true' : 'false') + '">' + esc(items[i].label) + '</button>';
+    }
+    host.innerHTML = h;
+    if (!host.getAttribute('data-wired')) {
+      host.setAttribute('data-wired', '1');
+      host.addEventListener('click', function (ev) {
+        var n = ev.target;
+        while (n && n !== host && !(n.getAttribute && n.getAttribute('data-k'))) n = n.parentNode;
+        if (n && n !== host) onPick(n.getAttribute('data-k'));
+      });
+    }
+  }
+
+  /* ======================================================== THE VIEW MODEL
+     One place decides, for the selected week and metric, what each row shows
+     and where the figure came from. Everything it returns is a field of the
+     weeklySLA payload (or of PULSE_SYNTH.probeAvailability for the L1 lane);
+     nothing here re-derives a rate from the spine. */
+  function buildView(w, wkKey) {
+    var j = weekIndex(wkKey), current = !!w.week.current, m = state.metric, i;
+    var prevKey = j > 0 ? WEEKS[j - 1] : null;
+    var v = {
+      w: w, wk: wkKey, j: j, current: current, metric: m,
+      prevLabel: prevKey || '—', curLabel: wkKey,
+      target: w.target, rows: [], pass: 0, fail: 0, na: 0,
+      tile: null, foot: null,
+      incidents: current ? weekIncidents(w.week.t0, w.week.t1) : []
+    };
+    v.worst = v.incidents.length ? worstWindow(v.incidents) : null;
+
+    /* ---- the headline figure for this metric ---- */
+    if (current) {
+      var t = w.tiles[m];
+      v.tile = { value: t.value, pass: t.pass, band: t.band, state: t.state,
+                 provisional: t.provisional, coverage: t.coverage, source: t.source };
+    } else {
+      var a = w.trend[j], pv = has(a[m]) ? a[m] : null;
+      v.tile = { value: pv, pass: has(pv) ? pv >= w.target : null, band: SY.slaBand(pv),
+                 state: has(pv) ? 'ok' : 'unknown', provisional: false, coverage: null,
+                 source: 'retained weekly anchor for ' + wkKey + ' (the 5-minute spine covers ' +
+                         'the current week only)' };
+    }
+
+    /* ---- per-service rows ---- */
+    for (i = 0; i < w.rows.length; i++) {
+      var r = w.rows[i], cur = null, prev = null, del = null, retained = true, st = null;
+      var cov = current ? r.coverage : null, covProv = current ? !!r.provisional : false;
+
+      if (m === 'success') {
+        if (current) { cur = r.cur; prev = r.prev; del = r.delta; st = r.state; }
+        else {
+          cur  = has(r.trend[j].value) ? r.trend[j].value : null;
+          prev = (j > 0 && has(r.trend[j - 1].value)) ? r.trend[j - 1].value : null;
+          del  = (has(cur) && has(prev)) ? +(cur - prev).toFixed(3) : null;
+          st   = 'ok';
+        }
+      } else if (m === 'responseTime') {
+        if (current) { cur = r.responseTime; st = r.state; }
+        else retained = false;
+      } else {                                            /* availability — L1 lane */
+        if (current) {
+          if (!availCache[r.svc]) availCache[r.svc] = SY.probeAvailability(w.week.t0, w.week.t1, [r.svc]);
+          var pa = availCache[r.svc];
+          cur = pa.pct;
+          st  = pa.pct == null ? 'unknown' : 'ok';
+          /* the availability column is the L1 lane, so it reports the PROBE
+             coverage, not the access-log coverage the other two columns use. */
+          cov = pa.coverage; covProv = !!pa.provisional;
+        } else retained = false;
+      }
+
+      var band = (st === 'unknown' || !has(cur)) ? 'unk' : SY.slaBand(cur);
+      var pass = (retained && has(cur)) ? (cur >= w.target) : null;
+      if (pass === true) v.pass++; else if (pass === false) v.fail++; else v.na++;
+
+      v.rows.push({
+        key: w.rows[i].key, service: w.rows[i].service, svc: w.rows[i].svc, node: w.rows[i].node,
+        target: w.rows[i].target, cur: cur, prev: prev, delta: del,
+        band: band, pass: pass, retained: retained,
+        state: (retained && has(cur)) ? 'ok' : 'unknown',
+        provisional: covProv,
+        requests: current ? w.rows[i].requests : null,
+        errors: current ? w.rows[i].errors : null,
+        responseTime: current ? w.rows[i].responseTime : null,
+        successCur: current ? w.rows[i].cur : (has(w.rows[i].trend[j].value) ? w.rows[i].trend[j].value : null),
+        coverage: cov,
+        coverageLane: m === 'availability' ? 'L1 probes' : 'L3 access log',
+        unknownBuckets: current ? w.rows[i].unknownBuckets : null,
+        trend: w.rows[i].trend
+      });
+    }
+    /* a column of em dashes under a bare "WK33" reads as a broken table, so
+       the header says which of the two reasons it is. */
+    var anyPrev = false;
+    for (i = 0; i < v.rows.length; i++) if (has(v.rows[i].prev)) { anyPrev = true; break; }
+    v.prevLabel = !prevKey ? 'no prior week' : (anyPrev ? prevKey : prevKey + ' · not retained');
+
+    /* ---- the summary row under the table ---- */
+    if (m === 'success' && current) {
+      v.foot = { label: w.average.label, cur: w.average.cur, prev: w.average.prev,
+                 delta: w.average.delta, band: w.average.status,
+                 note: 'equal-weighted mean of the six critical services' };
+    } else if (m === 'success') {
+      v.foot = { label: 'Estate anchor', cur: w.trend[j].success,
+                 prev: j > 0 ? w.trend[j - 1].success : null, delta: null,
+                 band: SY.slaBand(w.trend[j].success),
+                 note: 'the retained estate anchor for ' + wkKey + ', not a mean of the rows above' };
+    } else if (current) {
+      v.foot = { label: m === 'availability' ? 'Estate (all non-control probes)' : 'Estate (all 36 routes)',
+                 cur: w.tiles[m].value, prev: null, delta: null, band: w.tiles[m].band,
+                 note: m === 'availability'
+                   ? 'the same figure as the tile — every probe check in the week, not a mean of the rows'
+                   : 'the same figure as the tile — every route in the week, not a mean of the rows' };
+    } else {
+      v.foot = { label: 'Estate anchor', cur: w.trend[j][m], prev: j > 0 ? w.trend[j - 1][m] : null,
+                 delta: null, band: SY.slaBand(w.trend[j][m]),
+                 note: 'the retained estate anchor for ' + wkKey };
+    }
+    return v;
+  }
+
+  /* ================================================================ RENDER */
+  function render() {
+    var wkKey = S.getRange() || 'WK34';
+    var w = SY.weeklySLA(wkKey);
+    var v = buildView(w, wkKey);
+    view = v;
+
+    chipRow($('modechips'), MODES, state.mode, function (k) {
+      state.mode = k;
+      if (k === 'custom' && S.getRange() !== 'WK34') { S.setRange('WK34'); return; }
+      render();
+    });
+    chipRow($('mtabs'), METRICS.map(function (m) { return { k: m.k, label: m.label }; }),
+      state.metric, function (k) { state.metric = k; render(); });
+
+    renderWindow(v);
+    renderTiles(v);
+    renderCoverage(v);
+    renderIncidents(v);
+    $('incsect').hidden = !v.incidents.length;
+    renderTable(v);
+    renderTrend(v);
+    renderDefs(v);
+
+    S.setLineage(SY.lineage('sla-weekly') || w.lineage);   /* identical strings; the call is the contract */
+    $('disc').innerHTML = 'Reported window <b>' + esc(w.week.label_range) + '</b> &mdash; ' +
+      esc(SY.disclaimer) + '.';
+  }
+
+  /* ------------------------------------------------------------ the window */
+  function renderWindow(v) {
+    var custom = state.mode === 'custom';
+    $('wklbl').innerHTML = custom
+      ? 'Last 7 days <span class="wksub">' + esc(v.w.week.label_range) + '</span>'
+      : esc(v.wk) + ' <span class="wksub">' + esc(v.w.week.label_range) + '</span>';
+    $('wkprev').disabled = custom || v.j <= 0;
+    $('wknext').disabled = custom || v.j >= WEEKS.length - 1;
+
+    $('modenote').innerHTML = custom
+      ? 'Custom range = the last 7 days = <b>' + esc(v.w.week.label_range) + '</b>, which is the same window as ' +
+        '<b>WK34</b> (' + esc(wkRange('WK34')) + '). The seeded spine holds exactly one week, so a custom range ' +
+        'cannot reach further back — the figures below are identical to the Weekly view of WK34 by construction, ' +
+        'not by coincidence.'
+      : (v.current
+        ? 'WK34 (' + esc(wkRange('WK34')) + ') is the <b>current</b> week: every figure is computed from the ' +
+          '5-minute spine over ' + esc(v.w.week.label_range) + '.'
+        : esc(v.wk) + ' (' + esc(wkRange(v.wk)) + ') is a <b>seeded anchor week</b>. The 5-minute spine covers ' +
+          'the current week only, so this view shows the anchors the payload retains for ' + esc(v.wk) +
+          ' — estate availability / success / response time, and success rate per service.');
+  }
+
+  /* ------------------------------------------------------------------ tiles */
+  function renderTiles(v) {
+    var w = v.w, h = '', i;
+    var defs = [
+      { k: 'availability', label: 'Availability' },
+      { k: 'success',      label: 'Success rate' },
+      { k: 'responseTime', label: 'Response time' }
+    ];
+    for (i = 0; i < defs.length; i++) {
+      var k = defs[i].k, t, src, prevV = null;
+      if (v.current) { t = { value: w.tiles[k].value, pass: w.tiles[k].pass, band: w.tiles[k].band,
+                             state: w.tiles[k].state, provisional: w.tiles[k].provisional };
+                       src = w.tiles[k].source; }
+      else { var av = w.trend[v.j][k];
+             t = { value: has(av) ? av : null, pass: has(av) ? av >= w.target : null,
+                   band: SY.slaBand(av), state: has(av) ? 'ok' : 'unknown', provisional: false };
+             src = 'retained weekly anchor for ' + v.wk; }
+      prevV = v.j > 0 && has(w.trend[v.j - 1][k]) ? w.trend[v.j - 1][k] : null;
+
+      var nodata = t.state === 'unknown' || !has(t.value);
+      var cls = nodata ? 'unk' : t.band;
+      var val = nodata ? '<div class="value nodata">NO DATA</div>'
+                       : '<div class="value">' + esc(SY.fmtPct(t.value, 2).replace('%', '')) + '<u>%</u></div>';
+      var pf  = nodata ? '<span class="pf na">No data</span>'
+                       : (t.pass ? '<span class="pf pass">Pass</span>' : '<span class="pf fail">Fail</span>');
+      var sub = 'target &ge;' + esc(SY.fmtPct(w.target, 2)) + ' &middot; <b>' + esc(v.wk) + '</b>';
+      if (has(t.value) && has(prevV)) {
+        sub += ' &middot; vs ' + esc(WEEKS[v.j - 1]) + ' ' +
+               deltaHtml(+(t.value - prevV).toFixed(3));
+      }
+      h += '<div class="tile ' + cls + '">' +
+             '<div class="label"><span>' + esc(defs[i].label) + '</span>' +
+             (t.provisional ? '<span class="badge provisional">Provisional</span>' : '') + '</div>' +
+             val +
+             '<div class="sub">' + sub + '</div>' +
+             '<div class="tsrc">' + esc(src) + '</div>' +
+             '<div class="tilefoot">' + pf + '</div>' +
+           '</div>';
+    }
+    $('tiles').innerHTML = h;
+  }
+
+  /* ------------------------------------------------- coverage + cross-links */
+  function renderCoverage(v) {
+    var w = v.w, cov = w.coverage, gap = cov.gap;
+    var inc = v.worst;
+    var pill = $('covpill'), prov = $('covprov');
+
+    if (!v.current) {
+      pill.className = 'pill unk'; pill.textContent = 'Anchor week';
+      prov.hidden = true;
+      $('covtxt').innerHTML = 'No 5-minute buckets are retained for ' + esc(v.wk) +
+        ', so coverage, request counts and the collector gap are reported for the current week only.';
+    } else {
+      var cs = SY.covState(cov.ratio);
+      pill.className = 'pill ' + (cs.nodata ? 'unk' : (cs.provisional ? 'warn' : 'ok'));
+      pill.textContent = cs.nodata ? 'No data' : (cs.provisional ? 'Provisional' : 'Coverage OK');
+      prov.hidden = !cov.provisional;
+      $('covtxt').innerHTML =
+        'Coverage <b>' + esc(SY.fmtPct(cov.ratio * 100, 2)) + '</b> &middot; ' +
+        '<b>' + esc(SY.fmtNum(cov.unknownBuckets)) + '</b> unknown buckets &middot; ' +
+        'collector gap on <b>' + esc(gap.label) + '</b> (' + esc(gap.svc) + ' &mdash; ' + esc(gap.reason) + '). ' +
+        'Buckets inside the gap are unknown, never zero.';
+    }
+
+    var t = inc ? inc.peak : w.week.t1;
+    $('lnkflow').href = '../index.html#t=' + t;
+    $('lnkflow').textContent = inc
+      ? 'Open on the flow map at ' + inc.peakLabel + ' (' + incShort(inc.key) + ' — ' + inc.label + ')'
+      : 'Open on the flow map at ' + SY.dstamp(t);
+    $('lnkflow').title = inc ? incLabel(inc.key) + ' — ' + inc.label : '';
+    var tk = inc ? inc.ticket : null;
+    if (tk) {
+      $('lnkticket').hidden = false;
+      $('lnkticket').href = '../incident-trace.html#' + tk;
+      $('lnkticket').textContent = 'Incident trace ' + tk;
+    } else { $('lnkticket').hidden = true; }
+    $('covcard').setAttribute('data-inc', inc ? inc.key : '');
+  }
+
+  /* ------------------------------------------------- the week's incidents */
+  function renderIncidents(v) {
+    var list = v.incidents, h = '', i, crit = 0;
+    for (i = 0; i < list.length; i++) {
+      var n = list[i], isWorst = v.worst && n.key === v.worst.key;
+      if (n.severity === 'crit') crit++;
+      h += '<tr' + (isWorst ? ' class="hilite"' : '') + '>' +
+             '<td class="nm"><span class="sdot ' + (n.severity === 'crit' ? 'crit' : 'warn') +
+               '" aria-hidden="true"></span> ' + esc(incLabel(n.key)) +
+               '<span class="sub">' + esc(n.label) + (isWorst ? ' &middot; deepest window this week' : '') + '</span></td>' +
+             '<td><span class="pill ' + (n.severity === 'crit' ? 'crit' : 'warn') + '">' +
+               (n.severity === 'crit' ? 'Critical' : 'Warn') + '</span></td>' +
+             '<td class="mono">' + esc(n.peakLabel) + '</td>' +
+             '<td class="mono">' + esc(n.span) + '<span class="sub">' + esc(SY.fmtDur(n.mins)) + '</span></td>' +
+             '<td><a class="tlink" href="../index.html#t=' + n.peak + '">Flow map</a>' +
+               (n.ticket ? ' &nbsp;<a class="tlink" href="../incident-trace.html#' + esc(n.ticket) + '">' +
+                 esc(n.ticket) + '</a>' : '') + '</td>' +
+           '</tr>';
+    }
+    $('incrows').innerHTML = h;
+    $('incsh').textContent = list.length + ' incident windows · ' + crit + ' critical';
+    $('inccard').hidden = !list.length;
+    $('incnote').innerHTML = v.current
+      ? 'Windows and peak indices come from <code>data/manifest.js</code> INC &mdash; the same nine bands the ' +
+        'front page paints, so a ticket and the band that produced it cannot drift. Tickets are resolved through ' +
+        '<code>ADEPTIO_TICKETS.byWindow</code>. Every window sits at the apex of its own ramp when the range is a ' +
+        'whole week, so severity alone cannot rank them: this page breaks the tie by <b>critical first, then the ' +
+        'latest peak</b>, which selects <b>' + (v.worst ? esc(incLabel(v.worst.key)) : '&mdash;') + '</b>.'
+      : 'Incident windows are indices into the current week; the anchor weeks retain summary figures only.';
+  }
+
+  /* ------------------------------------------------------------------ table */
+  function sortRows(rows) {
+    var k = sort.k, d = sort.dir;
+    return rows.slice().sort(function (a, b) {
+      if (k === 'service') return d * (a.service < b.service ? -1 : a.service > b.service ? 1 : 0);
+      var A = has(a[k]) ? a[k] : -Infinity, B = has(b[k]) ? b[k] : -Infinity;
+      if (A === B) return a.service < b.service ? -1 : 1;
+      return d * (A - B);
+    });
+  }
+
+  function renderTable(v) {
+    var w = v.w, m = metricOf(v.metric), i;
+
+    $('hprev').innerHTML = esc(v.prevLabel) + '<span class="sarr">&#9660;</span>';
+    $('hcur').innerHTML  = esc(v.curLabel) + '<span class="sarr">&#9660;</span>';
+    $('scount').textContent = w.criticalCount + ' critical services · ' + m.label;
+    $('metricsrc').textContent = v.tile.source;
+
+    var hs = document.querySelectorAll('#slatable thead th.sortable'), th;
+    for (i = 0; i < hs.length; i++) {
+      th = hs[i];
+      var on = th.getAttribute('data-k') === sort.k;
+      th.className = (th.getAttribute('data-k') === 'service' ? '' : 'num ') + 'sortable' + (on ? ' sorted' : '');
+      th.setAttribute('aria-sort', on ? (sort.dir > 0 ? 'ascending' : 'descending') : 'none');
+      var arr = th.querySelector('.sarr');
+      if (arr) arr.innerHTML = on ? (sort.dir > 0 ? '&#9650;' : '&#9660;') : '&#9660;';
+    }
+
+    $('pfsum').innerHTML =
+      '<span><span class="sdot ok"></span><b>' + v.pass + '</b> pass</span>' +
+      '<span><span class="sdot crit"></span><b>' + v.fail + '</b> fail</span>' +
+      (v.na ? '<span><span class="sdot unk"></span><b>' + v.na + '</b> not retained</span>' : '');
+
+    var inc = v.worst;
+    var tk  = inc ? inc.ticket : null;
+    var dd  = drillMap();
+    var rows = sortRows(v.rows), h = '';
+
+    for (i = 0; i < rows.length; i++) {
+      var r = rows[i], id = 'd-' + r.key;
+      var nodata = !r.retained || !has(r.cur);
+      var curTxt = nodata ? '<span class="pill unk">' + (r.retained ? 'No data' : 'Not retained') + '</span>'
+                          : esc(SY.fmtPct(r.cur, 2));
+      var prevTxt = has(r.prev) ? esc(SY.fmtPct(r.prev, 2)) : '<span class="tdash">&mdash;</span>';
+      var stTxt = nodata ? '<span class="pf na">No data</span>'
+                         : (r.pass ? '<span class="pf pass">Pass</span>' : '<span class="pf fail">Fail</span>');
+
+      h += '<tr class="row-toggle" data-row="' + id + '" tabindex="0" role="button" aria-expanded="false" ' +
+           'aria-controls="' + id + '">' +
+             '<td class="nm"><span class="rt-c">&#9656;</span><span class="sdot ' + r.band +
+               '" aria-hidden="true"></span> ' + esc(r.service) +
+               '<span class="sub">' + esc(r.svc) + ' &middot; node ' + esc(r.node) + '</span></td>' +
+             '<td class="num tdash">' + esc(SY.fmtPct(r.target, 2)) + '</td>' +
+             '<td class="num">' + prevTxt + '</td>' +
+             '<td class="num">' + curTxt + '</td>' +
+             '<td class="num">' + deltaHtml(r.delta) + '</td>' +
+             '<td>' + stTxt +
+               (r.provisional ? ' <span class="badge provisional">Provisional</span>' : '') + '</td>' +
+           '</tr>' +
+           '<tr class="row-detail" id="' + id + '"><td colspan="6">' + detailHtml(r, v, inc, tk, dd) + '</td></tr>';
+    }
+    $('rows').innerHTML = h;
+
+    /* summary row */
+    var f = v.foot;
+    $('favg').innerHTML = esc(f.label) + '<span class="sub">' + esc(f.note) + '</span>';
+    $('fprev').innerHTML = has(f.prev) ? esc(SY.fmtPct(f.prev, 2)) : '<span class="tdash">&mdash;</span>';
+    $('fcur').innerHTML  = has(f.cur) ? esc(SY.fmtPct(f.cur, 2)) : '<span class="tdash">&mdash;</span>';
+    $('fdelta').innerHTML = deltaHtml(f.delta);
+    $('fstatus').innerHTML = has(f.cur)
+      ? (f.cur >= w.target ? '<span class="pf pass">Pass</span>' : '<span class="pf fail">Fail</span>')
+      : '<span class="pf na">No data</span>';
+
+    /* footnote */
+    var n = '';
+    if (v.metric === 'success') {
+      n = 'Success rate = <code>countIf(status &lt; 500)/count()</code> over every route mapped to the ' +
+          'journey. The per-service figures for the three prior weeks are the seeded anchors the payload ' +
+          'retains; only the current week is recomputed from 5-minute buckets.';
+    } else if (v.metric === 'responseTime') {
+      n = 'Response time = <code>countIf(dur_ms &lt;= T_ms)/count()</code>, with T_ms taken per journey ' +
+          '(Login 1500, Home 2500, Pay Bill 4500, Top-up 4500, Package 2500, Redeem 2500). ' +
+          'The payload retains no per-service response-time anchor for the prior weeks, so that column and ' +
+          'the delta read &mdash; rather than a number nobody measured.';
+    } else {
+      n = 'Availability is the L1 probe ratio for the service that owns the journey, with the assertion in ' +
+          'the numerator and the three control monitors excluded. Pay Bill and Top-up share the ' +
+          '<b>payment</b> service, so they share its probes and therefore its figure. ' +
+          'No per-service availability anchor is retained for the prior weeks.';
+    }
+    $('tnote').innerHTML = n;
+  }
+
+  /* the expanded row: context + every cross-link this page owes the reader */
+  function detailHtml(r, v, inc, tk, dd) {
+    var w = v.w, d = dd[r.key] || null;
+    var cells = [];
+    cells.push(['Success rate (' + v.wk + ')', has(r.successCur) ? SY.fmtPct(r.successCur, 3) : '—', '']);
+    if (v.current) {
+      cells.push(['Response time', has(r.responseTime) ? SY.fmtPct(r.responseTime, 3) : '—', '']);
+      cells.push(['Transactions', SY.fmtNum(r.requests), '']);
+      cells.push(['5xx (technical)', SY.fmtNum(r.errors), '']);
+      cells.push(['Coverage (' + r.coverageLane + ')', has(r.coverage) ? (SY.fmtPct(r.coverage * 100, 2) +
+        (v.metric !== 'availability' && r.unknownBuckets ? ' · ' + r.unknownBuckets + ' unknown buckets' : '')) : '—', '']);
+    } else {
+      cells.push(['Retained for ' + v.wk, 'weekly success anchor only', '']);
+    }
+    if (d) cells.push(['Drill-down scope', d.groupCount + ' group' + (d.groupCount === 1 ? '' : 's') +
+      ' · ' + d.apiCount + ' APIs', 'mono']);
+    cells.push(['Owning service', r.svc + ' · map node ' + r.node, 'mono']);
+
+    var g = '', i;
+    for (i = 0; i < cells.length; i++) {
+      g += '<div><div class="label muted">' + esc(cells[i][0]) + '</div>' +
+           '<div class="dv ' + cells[i][2] + '">' + esc(cells[i][1]) + '</div></div>';
+    }
+
+    var links = '<a class="tlink" href="sla-drilldown.html#j=' + esc(r.key) + '">Drill down by day and API</a>' +
+                '<a class="tlink" href="kpi-live.html#j=' + esc(r.key) + '&amp;r=24h">KPI Live &mdash; ' + esc(r.service) + '</a>' +
+                '<a class="tlink" href="journey.html#j=' + esc(r.key) + '">Customer journey</a>';
+    if (v.current && r.band !== 'ok' && inc) {
+      links += '<a class="tlink" href="../index.html#t=' + inc.peak + '">Open on the flow map at ' +
+               esc(inc.peakLabel) + ' (' + esc(incLabel(inc.key)) + ')</a>';
+      if (tk) links += '<a class="tlink" href="../incident-trace.html#' + esc(tk) + '">Incident trace ' + esc(tk) + '</a>';
+    }
+    return '<div class="dgrid">' + g + '</div><div class="rlinks">' + links + '</div>';
+  }
+
+  /* journey subtotals are used for the cross-link scope ONLY — never for a
+     number on this page (the brief is explicit; weeklySLA owns the figures). */
+  var _dd = null;
+  function drillMap() {
+    if (_dd) return _dd;
+    _dd = {};
+    try {
+      var d = SY.drilldown(7), i;
+      for (i = 0; i < d.journeys.length; i++) {
+        _dd[d.journeys[i].key] = { groupCount: d.journeys[i].groupCount, apiCount: d.journeys[i].apiCount };
+      }
+    } catch (e) { _dd = {}; }
+    return _dd;
+  }
+
+  /* ------------------------------------------------------------------ trend
+     barsGrouped anchors its y-axis at zero, and at that scale 99.2 % and
+     99.9 % are the same bar. The trend therefore plots the DISTANCE FROM
+     100 % in percentage points, which separates the weeks honestly and puts
+     the 0.10 pp the 99.90 % target allows on the dashed line. The exact
+     percentages stay in the table above. */
+  function gap(v) { return has(v) ? +(100 - v).toFixed(3) : null; }
+
+  function renderTrend(v) {
+    var w = v.w, m = metricOf(v.metric), i, k, series, groups, note;
+
+    if (v.metric === 'success') {
+      /* same order as the table, so the eye can walk from one to the other;
+         oldest week in the faintest chrome, current week in the accent. */
+      var ordered = sortRows(v.rows), CLS = ['s4', 's2', 's3', 's1'];
+      groups = [];
+      for (i = 0; i < ordered.length; i++) groups.push(ordered[i].service);
+      series = [];
+      for (k = 0; k < WEEKS.length; k++) {
+        var vals = [];
+        for (i = 0; i < ordered.length; i++) vals.push(gap(ordered[i].trend[k].value));
+        series.push({ name: WEEKS[k] + (w.trend[k].current ? ' (current)' : ''),
+                      values: vals, cls: CLS[k] });
+      }
+      /* ANCHOR_SPAN is the span WK31-WK33 covers together (Aug 2 - Aug 22),
+         which no single weeks[] range field states; the per-week ranges are on
+         the chip tooltips. */
+      note = 'Per-service success rate for four weeks, drawn as the gap to 100&nbsp;%. ' +
+             'WK34 (' + esc(wkRange('WK34')) + ') is the computed week; WK31&ndash;WK33 (' +
+             esc(ANCHOR_SPAN) + ') are the seeded anchors the payload retains.';
+    } else {
+      groups = [];
+      for (k = 0; k < WEEKS.length; k++) groups.push(WEEKS[k] + (w.trend[k].current ? ' (current)' : ''));
+      var vv = [];
+      for (k = 0; k < WEEKS.length; k++) vv.push(gap(w.trend[k][v.metric]));
+      series = [{ name: m.label, values: vv, cls: 's1' }];
+      note = 'Estate ' + m.label.toLowerCase() + ' for four weeks, drawn as the gap to 100&nbsp;%. ' +
+             'The payload retains no per-service anchor for this metric before WK34 (' + esc(wkRange('WK34')) +
+             '), so the trend is shown at estate level rather than split six ways.';
+    }
+
+    $('trendch').textContent = m.label + ' · gap to 100% (percentage points)';
+    $('trendthr').textContent = 'target gap ' + (100 - w.target).toFixed(2) + 'pp (= ' + SY.fmtPct(w.target, 2) + ')';
+    $('trendnote').innerHTML = note;
+
+    C.render('#chtrend', {
+      type: 'bars', groups: groups, series: series,
+      threshold: +(100 - w.target).toFixed(2),
+      thresholdLabel: 'target',           /* short: the legend below spells it out */
+      yFmt: function (x) { return has(x) ? x.toFixed(2) + 'pp' : '—'; },
+      legend: series.length > 1, maxXTicks: 12, ratio: 0.28, minH: 190, maxH: 280,
+      label: m.label + ' 4-week trend, gap to 100 percent'
+    });
+  }
+
+  /* ------------------------------------------------------------ definitions */
+  function renderDefs(v) {
+    var w = v.w, dn = w.denominator;
+    var items = [
+      ['Availability', w.tiles.availability.source],
+      ['Success rate', w.tiles.success.source],
+      ['Response time', w.tiles.responseTime.source],
+      ['Target', 'every critical service carries the same objective: ' + SY.fmtPct(w.target, 2) +
+        '. A service is Pass when its figure for the selected week is at or above it.']
+    ];
+    var h = '', i;
+    for (i = 0; i < items.length; i++) {
+      h += '<div><div class="dt">' + esc(items[i][0]) + '</div><div class="dd">' + esc(items[i][1]) + '</div></div>';
+    }
+    $('deflist').innerHTML = h;
+    $('denote').innerHTML = esc(dn.note) + ' Excludes 499: <b>' + (dn.excludes499 ? 'yes' : 'no') +
+      '</b> &middot; 429 counted as technical: <b>' + (dn.count429AsTechnical ? 'yes' : 'no') +
+      '</b> &middot; probe traffic excluded: <b>' + (dn.excludeSynthetic ? 'yes' : 'no') + '</b>.';
+  }
+
+  /* ==================================================== COPY / CSV EXPORT */
+  function matrix(v) {
+    var w = v.w, cc = w.csvColumns, i, r;
+    var head = [cc[0], cc[1], v.prevLabel, v.curLabel, cc[4], cc[5], cc[6], cc[7]];
+    var body = [], rows = sortRows(v.rows);
+    for (i = 0; i < rows.length; i++) {
+      r = rows[i];
+      body.push([
+        r.service,
+        has(r.target) ? r.target.toFixed(2) : '',
+        has(r.prev) ? r.prev.toFixed(3) : '',
+        has(r.cur) ? r.cur.toFixed(3) : (r.retained ? 'no data' : 'not retained'),
+        has(r.delta) ? r.delta.toFixed(3) : '',
+        !has(r.cur) ? 'no data' : (r.pass ? 'pass' : 'fail'),
+        has(r.coverage) ? (r.coverage * 100).toFixed(2) : '',
+        r.provisional ? 'true' : 'false'
+      ]);
+    }
+    var f = v.foot;
+    body.push([f.label, '', has(f.prev) ? f.prev.toFixed(3) : '',
+               has(f.cur) ? f.cur.toFixed(3) : '', has(f.delta) ? f.delta.toFixed(3) : '',
+               has(f.cur) ? (f.cur >= w.target ? 'pass' : 'fail') : 'no data', '', '']);
+    return { head: head, body: body };
+  }
+
+  function csvCell(s) {
+    s = String(s == null ? '' : s);
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }
+  function toCsv(mx) {
+    var out = [mx.head.map(csvCell).join(',')], i;
+    for (i = 0; i < mx.body.length; i++) out.push(mx.body[i].map(csvCell).join(','));
+    return out.join('\r\n') + '\r\n';
+  }
+  function toTsv(mx) {
+    var out = [mx.head.join('\t')], i;
+    for (i = 0; i < mx.body.length; i++) out.push(mx.body[i].join('\t'));
+    return out.join('\n') + '\n';
+  }
+
+  function say(msg, ok) {
+    var n = $('iostat');
+    n.textContent = msg;
+    n.className = ok ? 'stat on' : 'stat';
+  }
+
+  function copyText(txt) {
+    var done = false;
+    try {
+      var ta = document.createElement('textarea');
+      ta.value = txt;
+      ta.setAttribute('readonly', 'readonly');
+      ta.style.position = 'fixed'; ta.style.top = '-2000px'; ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      done = !!document.execCommand('copy');
+      document.body.removeChild(ta);
+    } catch (e) { done = false; }
+    if (!done && navigator.clipboard && navigator.clipboard.writeText) {
+      try { navigator.clipboard.writeText(txt); done = true; } catch (e2) { done = false; }
+    }
+    return done;
+  }
+
+  function fileName(v, ext) {
+    return 'pulse-sla-' + v.wk.toLowerCase() + '-' + v.metric.toLowerCase() + '.' + ext;
+  }
+
+  function doCopy() {
+    if (!view) return;
+    var mx = matrix(view);
+    say(copyText(toTsv(mx))
+      ? (mx.body.length + ' rows copied as tab-separated text — paste into a sheet.')
+      : 'Copy is not available in this browser; use CSV instead.', true);
+  }
+
+  function doCsv() {
+    if (!view) return;
+    var mx = matrix(view), txt = toCsv(mx), name = fileName(view, 'csv');
+    try {
+      var blob = new Blob([txt], { type: 'text/csv;charset=utf-8' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url; a.download = name; a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(function () {
+        try { URL.revokeObjectURL(url); } catch (e) {}
+        if (a.parentNode) a.parentNode.removeChild(a);
+      }, 250);
+      say('CSV written — ' + name + ' (' + mx.body.length + ' rows, columns from csvColumns).', true);
+    } catch (e) {
+      say(copyText(txt)
+        ? 'Download was blocked, so the CSV is on the clipboard instead.'
+        : 'Download was blocked and the clipboard is unavailable.', false);
+    }
+  }
+
+  /* ================================================================= WIRING */
+  function toggleRow(tr) {
+    var det = document.getElementById(tr.getAttribute('data-row'));
+    var open = tr.className.indexOf('open') > -1;
+    tr.className = open ? 'row-toggle' : 'row-toggle open';
+    tr.setAttribute('aria-expanded', open ? 'false' : 'true');
+    if (det) det.className = open ? 'row-detail' : 'row-detail open';
+  }
+
+  function wire() {
+    $('rows').addEventListener('click', function (ev) {
+      if (ev.target && ev.target.tagName === 'A') return;
+      var n = ev.target;
+      while (n && n !== this && !(n.className && String(n.className).indexOf('row-toggle') === 0)) n = n.parentNode;
+      if (n && n !== this) toggleRow(n);
+    });
+    $('rows').addEventListener('keydown', function (ev) {
+      if (ev.key !== 'Enter' && ev.key !== ' ' && ev.key !== 'Spacebar') return;
+      var n = ev.target;
+      if (n && n.className && String(n.className).indexOf('row-toggle') === 0) { ev.preventDefault(); toggleRow(n); }
+    });
+
+    var thead = document.querySelector('#slatable thead');
+    function doSort(th) {
+      var k = th.getAttribute('data-k');
+      if (!k) return;
+      if (sort.k === k) sort.dir = -sort.dir; else { sort.k = k; sort.dir = (k === 'service') ? 1 : -1; }
+      render();
+    }
+    thead.addEventListener('click', function (ev) {
+      var n = ev.target;
+      while (n && n !== this && n.tagName !== 'TH') n = n.parentNode;
+      if (n && n !== this) doSort(n);
+    });
+    thead.addEventListener('keydown', function (ev) {
+      if (ev.key !== 'Enter' && ev.key !== ' ' && ev.key !== 'Spacebar') return;
+      var n = ev.target;
+      if (n && n.tagName === 'TH') { ev.preventDefault(); doSort(n); }
+    });
+
+    $('wkprev').addEventListener('click', function () {
+      var j = weekIndex(S.getRange() || 'WK34');
+      if (j > 0) S.setRange(WEEKS[j - 1]);
+    });
+    $('wknext').addEventListener('click', function () {
+      var j = weekIndex(S.getRange() || 'WK34');
+      if (j < WEEKS.length - 1) S.setRange(WEEKS[j + 1]);
+    });
+    $('btncopy').addEventListener('click', doCopy);
+    $('btncsv').addEventListener('click', doCsv);
+  }
+
+  /* first paint + every week change */
+  S.ready(function () { wire(); weekChipTips(); render(); });
+  S.onRange(function (ev) {
+    if (state.mode === 'custom' && ev.detail.range !== 'WK34') state.mode = 'weekly';
+    render();
+  });
+})();
+</script>
+</body>
+</html>

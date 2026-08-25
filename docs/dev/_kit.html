@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<link rel="icon" href="data:,"/>
+<!-- scaffolding lives in docs/dev/, the shipped pages live in the site root and
+     in menus/ + admin/. This <base> points every relative URL — the ones below
+     and the ones assets/shell.js builds for the nav — back at the site root, so
+     the page works unchanged from here. Shipped pages carry no <base>. -->
+<base href="../../"/>
+<title>Component kit &mdash; Adeptio Pulse</title>
+<!-- QA reference page: every shared component with dummy data, in the page
+     frame the menus wear. Loads only files that exist today (no registry.js /
+     spine.js / synth.js), so it must render with zero console errors. -->
+<!-- LABEL CONVENTIONS (v2.0.2) — copy these forms, they are what the shipped
+     pages use:
+       day marks   the demo week is WK34 of 2027, Mon Aug 23 -> Sun Aug 29, so
+                   timeline day 1..7 renders "Aug 23".."Aug 29". A stamp is
+                   "Aug 25 14:05" — date + time, NEVER a year.
+       the year    stated ONCE per screen, in the header/subtitle, as
+                   "Aug 23 - 29, 2027", and only where day marks are shown.
+       week keys   WK31..WK34 unchanged; WK34 = Aug 23 - 29.
+       incidents   displayed "WK34 · Incident F — CORE OUTAGE", compact "W34·F"
+                   only where a cell genuinely cannot fit the full name. The
+                   KEY stays a bare letter (INC / INCMETA / byWindow / incKey);
+                   INC-10xx values are ticket numbers, not window letters.
+     PULSE_SYNTH.dayLabel(d) / .incDisplay(k) / .incShort(k) produce these on a
+     page that loads synth.js; this kit hard-codes them because it does not. -->
+<link rel="stylesheet" href="assets/tokens.css"/>
+<link rel="stylesheet" href="assets/shell.css"/>
+<link rel="stylesheet" href="assets/menus.css"/>
+</head>
+<body data-shell="page"
+      data-title="Component kit"
+      data-subtitle="every shared component with dummy data &middot; QA reference &middot; Aug 23 &ndash; 29, 2027 &middot; no APM"
+      data-ranges="1h,4h,12h,24h,7d"
+      data-range="24h"
+      data-lineage="nothing &mdash; this page is dummy data for layout QA only">
+
+<div id="pulse-main">
+
+  <section class="sect"><h2>Tiles</h2><span class="sh">.tiles / .tile &middot; label &middot; value &middot; sub &middot; pass-fail pill</span></section>
+  <section class="tiles" id="k-tiles" aria-label="Tiles"></section>
+
+  <section class="sect"><h2>Chips</h2><span class="sh">.chips / .chip &middot; selected, counted, disabled</span></section>
+  <div class="card">
+    <div class="toolbar">
+      <span class="clbl">Severity</span>
+      <div class="chips">
+        <button class="chip on" type="button" aria-pressed="true">All<span class="n">61</span></button>
+        <button class="chip" type="button" aria-pressed="false">P1<span class="n">3</span></button>
+        <button class="chip" type="button" aria-pressed="false">P2<span class="n">11</span></button>
+        <button class="chip" type="button" aria-pressed="false">P3<span class="n">28</span></button>
+        <button class="chip sm" type="button">P4<span class="n">19</span></button>
+        <span class="csep"></span>
+        <button class="chip" type="button" disabled>Archived</button>
+      </div>
+      <div class="sp"></div>
+      <label class="field"><span class="fl">Endpoint</span><input type="text" placeholder="/v1/bills/…" aria-label="Filter by endpoint"/></label>
+      <button class="btn" type="button">Reset</button>
+      <button class="btn pri" type="button">Export</button>
+    </div>
+  </div>
+
+  <section class="sect"><h2>Status pills, dots, deltas, badges</h2><span class="sh">status colours are used for status only</span></section>
+  <div class="card">
+    <div class="toolbar">
+      <span class="pill ok">OK</span><span class="pill warn">Warn</span>
+      <span class="pill crit">Critical</span><span class="pill unk">No data</span>
+      <span class="pill maint">Maintenance</span><span class="pill plain">P3</span>
+      <span class="pill ok lg">Pass</span>
+      <span class="csep"></span>
+      <span class="sdot ok"></span><span class="sdot warn"></span><span class="sdot crit"></span><span class="sdot unk"></span>
+      <span class="csep"></span>
+      <span class="delta up">+127%</span><span class="delta down">&minus;4.1%</span><span class="delta flat">0.0%</span>
+      <span class="csep"></span>
+      <span class="badge">WoW</span>
+      <span class="badge provisional">Provisional</span>
+      <span class="badge lens">2 of 3 lenses</span>
+      <span class="badge src">errors-explorer</span>
+    </div>
+  </div>
+
+  <section class="sect"><h2>Tables</h2><span class="sh">.twrap &gt; .ptable &middot; sticky header &middot; zebra &middot; expandable .row-toggle rows</span></section>
+  <div class="card pad0">
+    <div class="twrap" style="--tmax:320px">
+      <table class="ptable" style="--tmin:720px">
+        <thead>
+          <tr>
+            <th>Service</th><th class="num">Requests</th><th class="num">Errors</th>
+            <th class="num">Error rate</th><th class="num">p95</th><th>Result code</th><th>Status</th><th>7-day</th>
+          </tr>
+        </thead>
+        <tbody id="k-rows"></tbody>
+        <tfoot><tr><td>Total</td><td class="num">1,284,910</td><td class="num">4,118</td><td class="num">0.32%</td>
+          <td class="num">412 ms</td><td class="code">&mdash;</td><td><span class="pill warn">Warn</span></td><td></td></tr></tfoot>
+      </table>
+    </div>
+  </div>
+  <p class="note">Rows with a caret expand in place (<code>.row-toggle</code> &rarr; <code>.row-detail</code>). Wide tables scroll inside <code>.twrap</code>, never the page.</p>
+
+  <section class="sect"><h2>Status distribution &amp; uptime</h2><span class="sh">.statusbar &middot; .uptime-bars &middot; both from PULSE_CHARTS</span></section>
+  <div class="grid2">
+    <div class="card">
+      <header><h3>Status distribution</h3><span class="ch">last 24 h &middot; all routes</span></header>
+      <div id="k-sbar"></div>
+    </div>
+    <div class="card">
+      <header><h3>Synthetic monitors</h3><span class="ch">one bar per 5-min interval</span></header>
+      <div class="twrap plain">
+        <table class="ptable" style="--tmin:420px">
+          <thead><tr><th>Monitor</th><th>Vantage</th><th class="num">Uptime</th><th>Intervals</th></tr></thead>
+          <tbody id="k-mon"></tbody>
+        </table>
+      </div>
+      <div class="legend">
+        <span><i class="ok"></i>100%</span><span><i class="warn"></i>&ge;80%</span>
+        <span><i class="crit"></i>&lt;80%</span><span><i class="unk"></i>no data</span>
+      </div>
+    </div>
+  </div>
+
+  <section class="sect"><h2>Charts</h2><span class="sh">inline SVG &middot; viewBox-sized &middot; tokens through CSS classes</span></section>
+  <div class="grid2">
+    <div class="card">
+      <header><h3>Line + area + SLA line</h3><span class="ch">a full seeded week &middot; Aug 26 collector gap shaded</span></header>
+      <div class="chartbox" id="k-line"></div>
+      <div class="legend">
+        <span><i class="c1"></i>success % (non-5xx)</span>
+        <span><i class="line" style="background:var(--warn)"></i>SLA target 99.90%</span>
+        <span><i class="unk"></i>collector gap (Aug 26, 90 min)</span>
+      </div>
+    </div>
+    <div class="card">
+      <header><h3>Grouped bars</h3><span class="ch">this week vs prior week</span></header>
+      <div class="chartbox" id="k-bars"></div>
+    </div>
+    <div class="card">
+      <header><h3>Stacked bars</h3><span class="ch">status mix per day</span></header>
+      <div class="chartbox" id="k-stack"></div>
+    </div>
+    <div class="card">
+      <header><h3>Latency percentiles</h3><span class="ch">p75 &middot; p95 &middot; p99, threshold 4500 ms</span></header>
+      <div class="chartbox" id="k-lat"></div>
+    </div>
+  </div>
+
+  <section class="sect"><h2>Funnel</h2><span class="sh">.funnel-step &middot; screen and API per step</span></section>
+  <div class="card">
+    <header><h3>Login journey</h3><span class="ch">sessions per step &middot; last 24 h</span></header>
+    <div class="funnel" id="k-funnel"></div>
+  </div>
+
+  <section class="sect"><h2>Board</h2><span class="sh">.board / .bcol / .bcard &middot; three fixed status columns</span></section>
+  <div class="board" id="k-board"></div>
+
+  <section class="sect"><h2>Detail drawer</h2><span class="sh">.overlay &middot; right-side, Esc or scrim closes</span></section>
+  <div class="card">
+    <div class="toolbar">
+      <button class="btn pri" type="button" id="k-open">Open detail drawer</button>
+      <span class="note">Also opened by clicking a card on the board above.</span>
+    </div>
+  </div>
+
+  <section class="sect"><h2>Empty state</h2><span class="sh">.empty</span></section>
+  <div class="card pad0"><div class="empty">No rows match these filters. Widen the range or clear a chip.</div></div>
+
+</div><!-- /#pulse-main -->
+
+<div class="overlay" id="ov" aria-hidden="true">
+  <div class="ov-scrim" data-ov-close></div>
+  <aside class="ov-panel" role="dialog" aria-modal="true" aria-labelledby="ovt">
+    <header>
+      <h3 id="ovt">Pay Bill 200-declines 6&times; &mdash; replica lag</h3>
+      <span class="ovk">OPS-1041</span>
+      <button class="ov-x" type="button" data-ov-close aria-label="Close the detail drawer">&#10005;</button>
+    </header>
+    <div class="ov-body" id="ovbody"></div>
+    <div class="ov-foot">
+      <button class="btn pri" type="button">Save</button>
+      <button class="btn" type="button" data-ov-close>Close</button>
+      <span class="note">Saved to this browser only (localStorage).</span>
+    </div>
+  </aside>
+</div>
+
+<script src="assets/charts.js"></script>
+<script src="assets/shell.js"></script>
+<script>
+(function () {
+  "use strict";
+  var C = window.PULSE_CHARTS, S = window.PULSE_SHELL;
+  var $ = function (id) { return document.getElementById(id); };
+
+  /* ---------------------------------------------------- dummy seeded data */
+  function mulberry32(a) {
+    return function () {
+      a |= 0; a = a + 0x6D2B79F5 | 0;
+      var t = Math.imul(a ^ a >>> 15, 1 | a);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+  var rnd = mulberry32(20260815);
+  var N = 2016;
+  var success = [], bizfail = [], p75 = [], p95 = [], p99 = [], upt = [];
+  for (var i = 0; i < N; i++) {
+    var gap = (i >= 1000 && i < 1090);                 /* Aug 26 collector gap */
+    var F = (i > 1380 && i < 1428) ? 1 : 0;            /* core outage */
+    var A = (i > 408 && i < 460) ? 1 : 0;              /* silent declines */
+    if (gap) { success.push(null); bizfail.push(null); p75.push(null); p95.push(null); p99.push(null); upt.push(null); continue; }
+    success.push(99.94 - F * 4.2 - rnd() * 0.05);
+    bizfail.push(0.42 + A * 2.8 + rnd() * 0.06);
+    p75.push(820 + F * 2200 + rnd() * 60);
+    p95.push(2100 + F * 4200 + A * 300 + rnd() * 140);
+    p99.push(3400 + F * 6100 + A * 500 + rnd() * 220);
+    upt.push(F ? 'down' : (A ? 'part' : 'up'));
+  }
+
+  /* ------------------------------------------------------------- tiles */
+  var tiles = [
+    { c: 'ok',    l: 'Availability',   v: '99.94', u: '%',   s: 'target 99.90% · <b>7 d</b>',      p: ['pass', 'Pass'] },
+    { c: 'crit',  l: 'Success (non-5xx)', v: '99.62', u: '%', s: 'target 99.90% · <b>W34·F</b> outage', p: ['fail', 'Fail'] },
+    { c: 'warn',  l: 'Response time',  v: '99.71', u: '%',   s: 'within 4500 ms · <b>7 d</b>',     p: ['part', 'At risk'] },
+    { c: 'plain', l: 'Requests',       v: '1.28',  u: 'M',   s: '5-min buckets · all routes',      p: null },
+    { c: 'unk',   l: 'Coverage',       v: '98.7',  u: '%',   s: '90-min collector gap on <b>Aug 26</b>', p: ['na', 'Provisional'] }
+  ];
+  var th = '', k;
+  for (k = 0; k < tiles.length; k++) {
+    var t = tiles[k];
+    th += '<div class="tile ' + t.c + '"><div class="label"><span>' + t.l + '</span></div>' +
+          '<div class="value">' + t.v + '<u>' + t.u + '</u></div>' +
+          '<div class="sub">' + t.s + '</div>' +
+          '<div class="tilefoot">' + (t.p ? '<span class="pf ' + t.p[0] + '">' + t.p[1] + '</span>' : '') +
+          (k === 3 ? C.sparkline(p95.slice(1700, 2016), { w: 88, h: 20, state: 'ok', label: 'p95' }) : '') +
+          '</div></div>';
+  }
+  $('k-tiles').innerHTML = th;
+
+  /* ------------------------------------------------------------- table */
+  var svcs = [
+    ['gateway',  'pulse-gateway-deploy', 412900, 1310, 0.32, 480, 'T-COR-27101', 'warn'],
+    ['auth',     'pulse-auth-deploy',    188400,   62, 0.03, 240, 'B-OTP-41002', 'ok'],
+    ['payment',  'pulse-payment-deploy', 121050, 2410, 1.99, 1180, 'B-PAY-30018', 'crit'],
+    ['accounts', 'pulse-accounts-deploy', 96700,   41, 0.04, 310, '—',            'ok'],
+    ['biller-adapter', 'pulse-biller-deploy', 71230, 295, 0.41, 890, 'T-BIL-27440', 'warn'],
+    ['notification',  'pulse-notify-deploy', 54120,   0, 0.00, 130, '—',           'unk']
+  ];
+  var lbl = { ok: 'OK', warn: 'Warn', crit: 'Critical', unk: 'No data' };
+  var rows = '';
+  for (k = 0; k < svcs.length; k++) {
+    var r = svcs[k], id = 'd' + k;
+    rows += '<tr class="row-toggle" data-row="' + id + '" tabindex="0" role="button" aria-expanded="false">' +
+      '<td class="nm"><span class="rt-c">&#9656;</span>' + r[0] + '<span class="sub">' + r[1] + '</span></td>' +
+      '<td class="num">' + r[2].toLocaleString('en-US') + '</td>' +
+      '<td class="num">' + r[3] + '</td>' +
+      '<td class="num">' + r[4].toFixed(2) + '%</td>' +
+      '<td class="num">' + r[5] + ' ms</td>' +
+      '<td class="code">' + r[6] + '</td>' +
+      '<td><span class="pill ' + r[7] + '">' + lbl[r[7]] + '</span>' +
+        (r[7] === 'unk' ? ' <span class="badge provisional">Provisional</span>' : '') + '</td>' +
+      '<td>' + C.sparkline(p95.slice(0, 2016), { w: 96, h: 20, state: r[7], label: r[0] + ' p95' }) + '</td></tr>' +
+      '<tr class="row-detail" id="' + id + '"><td colspan="8"><div class="dgrid">' +
+        '<div><div class="label muted">Top endpoint</div><div class="mono">POST /v1/bills/pay</div></div>' +
+        '<div><div class="label muted">Downstream</div><div class="mono">core-banking · db-replica</div></div>' +
+        '<div><div class="label muted">Owner</div><div>Daw Su Myat Noe · Payments Squad</div></div>' +
+        '<div><div class="label muted">Status mix</div>' + C.statusBar({ ok: 812, warn: 41, crit: 9, unk: 6 }, {}) + '</div>' +
+      '</div></td></tr>';
+  }
+  $('k-rows').innerHTML = rows;
+
+  function toggleRow(tr) {
+    var det = $(tr.getAttribute('data-row'));
+    var open = tr.className.indexOf('open') > -1;
+    tr.className = open ? 'row-toggle' : 'row-toggle open';
+    tr.setAttribute('aria-expanded', open ? 'false' : 'true');
+    if (det) det.className = open ? 'row-detail' : 'row-detail open';
+  }
+  $('k-rows').addEventListener('click', function (ev) {
+    var n = ev.target;
+    while (n && n !== this && !(n.className && String(n.className).indexOf('row-toggle') === 0)) n = n.parentNode;
+    if (n && n !== this) toggleRow(n);
+  });
+  $('k-rows').addEventListener('keydown', function (ev) {
+    if (ev.key !== 'Enter' && ev.key !== ' ') return;
+    var n = ev.target;
+    if (n && n.className && String(n.className).indexOf('row-toggle') === 0) { ev.preventDefault(); toggleRow(n); }
+  });
+
+  /* --------------------------------------------------- status / uptime */
+  $('k-sbar').innerHTML =
+    C.statusBar({ ok: 1274900, warn: 6120, crit: 3890, unk: 1180 }, { tall: true, legend: true, fmt: 'compact' }) +
+    '<div class="note" style="margin-top:9px">Same component, thin variant:</div>' +
+    C.statusBar({ ok: 62, warn: 21, crit: 12, unk: 5 }, { thin: true });
+
+  var mons = [
+    ['Login journey probe', 'dmz',      99.98, 'ok'],
+    ['Pay Bill inquire',    'app-zone', 92.40, 'warn'],
+    ['Core posting probe',  'app-zone', 71.10, 'crit'],
+    ['SMS DLR callback',    'telco',    99.10, 'ok'],
+    ['Control · always-500', 'dmz',      0.00, 'crit']
+  ];
+  var mh = '';
+  for (k = 0; k < mons.length; k++) {
+    var states = [], j;
+    for (j = 0; j < 288; j++) {
+      var v = (k === 4) ? 'down'
+            : (k === 2 && j > 150 && j < 200) ? 'down'
+            : (k === 1 && j % 17 === 0) ? 'part'
+            : (j >= 60 && j < 78 && k === 3) ? null : 'up';
+      states.push(v);
+    }
+    mh += '<tr><td class="nm">' + mons[k][0] + '</td><td class="mono">' + mons[k][1] + '</td>' +
+          '<td class="num">' + mons[k][2].toFixed(2) + '%</td>' +
+          '<td>' + C.uptimeBars(states, { sm: true, max: 48, label: mons[k][0] }) + '</td></tr>';
+  }
+  $('k-mon').innerHTML = mh;
+
+  /* ------------------------------------------------------------ charts
+     C.render() measures the container first and builds the chart at exactly
+     that width, so label text keeps its true size at every breakpoint. It
+     runs inside S.ready() because shell.js moves #pulse-main into the frame
+     on DOM ready — measuring before that would size the charts to the body. */
+  /* x-axis day ticks: dates, no year — the year is in the page subtitle. */
+  var dayLabels = ['Aug 23', 'Aug 24', 'Aug 25', 'Aug 26', 'Aug 27', 'Aug 28', 'Aug 29'];
+  S.ready(function () {
+    C.render('#k-line', {
+      type: 'line',
+      series: [{ name: 'success % (non-5xx)', values: success, area: true }],
+      threshold: 99.9, thresholdLabel: 'SLA 99.90%', yFmt: 'pct2', xLabels: dayLabels,
+      yMin: 95, yMax: 100,          /* an SLA chart is read near the target, not from zero */
+      label: 'success across the week'
+    });
+    C.render('#k-bars', {
+      type: 'bars', groups: dayLabels,
+      series: [{ name: 'this week', values: [12, 9, 14, 22, 96, 31, 44] },
+               { name: 'prior week', values: [11, 12, 10, 13, 15, 12, 14] }],
+      yFmt: 'int', threshold: 40, thresholdLabel: 'alert threshold', label: 'errors per day'
+    });
+    C.render('#k-stack', {
+      type: 'bars', groups: dayLabels, stacked: true,
+      series: [{ name: '2xx', values: [180, 176, 181, 174, 120, 178, 170], cls: 's-ok' },
+               { name: '4xx', values: [8, 9, 7, 11, 26, 9, 14], cls: 's-warn' },
+               { name: '5xx', values: [1, 1, 2, 2, 61, 3, 9], cls: 's-crit' }],
+      yFmt: 'compact', label: 'status mix per day'
+    });
+    C.render('#k-lat', {
+      type: 'line',
+      series: [{ name: 'p75', values: p75 }, { name: 'p95', values: p95 }, { name: 'p99', values: p99 }],
+      threshold: 4500, thresholdLabel: 'T = 4500 ms', yFmt: 'ms', xLabels: dayLabels, label: 'latency percentiles'
+    });
+  });
+
+  /* ------------------------------------------------------------ funnel */
+  var steps = [
+    ['Enter phone',  'screen',                    128400, 0,    ''],
+    ['OTP sent',     'POST /v1/otp/request',      126900, 1.2,  ''],
+    ['Enter OTP',    'screen',                    118200, 6.9,  'warn'],
+    ['Verify',       'POST /v1/otp/verify',        96100, 18.7, 'crit'],
+    ['Logged in',    'GET /v1/home',               95700, 0.4,  '']
+  ];
+  var fh = '';
+  for (k = 0; k < steps.length; k++) {
+    var st = steps[k], pc = (st[2] / steps[0][2]) * 100;
+    fh += '<div class="funnel-step' + (st[4] ? ' ' + st[4] : '') + '">' +
+      '<div class="fs-l"><div class="fs-n">' + st[0] + '</div><div class="fs-k">' + st[1] + '</div></div>' +
+      '<div class="fs-bar"><i style="width:' + pc.toFixed(1) + '%"></i></div>' +
+      '<div class="fs-v"><b>' + st[2].toLocaleString('en-US') + '</b>' +
+      (st[3] ? ' <span class="drop">&minus;' + st[3].toFixed(1) + '%</span>' : '') + '</div></div>';
+  }
+  $('k-funnel').innerHTML = fh;
+
+  /* ------------------------------------------------------------- board */
+  var cols = [['todo', 'To do'], ['prog', 'In progress'], ['done', 'Done']];
+  var cards = [
+    [0, 'INC-1042', 'Gateway v2 routes 5xx +127% WoW', 'P2 · Daw Ei Ei Khaing', 'warn'],
+    [0, 'OPS-1055', 'N+1 query on /v1/home profile fan-out', 'P3 · U Thant Zin Oo', 'plain'],
+    [1, 'INC-1018', 'Pay Bill 200-declines 6× — replica lag', 'P1 · Daw Su Myat Noe', 'crit'],
+    [1, 'INC-1036', 'EOD batch overrun — posting p95 up', 'P3 · U Thant Zin Oo', 'warn'],
+    [2, 'INC-1012', 'OTP delivery dip — carrier A DLR', 'P3 · Daw Nwe Nwe Win', 'ok'],
+    [2, 'INC-1027', 'Storage creep on core DB estate', 'P2 · U Myo Min Latt', 'ok']
+  ];
+  var bh = '';
+  for (k = 0; k < cols.length; k++) {
+    var inner = '', n = 0;
+    for (var c = 0; c < cards.length; c++) {
+      if (cards[c][0] !== k) continue;
+      n++;
+      inner += '<div class="bcard" tabindex="0" role="button" data-open="1">' +
+        '<div class="bk">' + cards[c][1] + '</div><div class="bs">' + cards[c][2] + '</div>' +
+        '<div class="bm"><span class="pill ' + cards[c][4] + '">' + (lbl[cards[c][4]] || 'P3') + '</span>' +
+        '<span>' + cards[c][3] + '</span></div></div>';
+    }
+    bh += '<div class="bcol ' + cols[k][0] + '"><div class="bcol-h"><span class="bmark"></span>' +
+          '<span class="bt">' + cols[k][1] + '</span><span class="bn">' + n + '</span></div>' +
+          '<div class="bcol-b">' + inner + '</div></div>';
+  }
+  $('k-board').innerHTML = bh;
+
+  /* ----------------------------------------------------------- overlay */
+  $('ovbody').innerHTML =
+    '<dl class="ov-kv">' +
+    '<dt>Severity</dt><dd><span class="pill crit">P1</span></dd>' +
+    '<dt>Status</dt><dd>In progress</dd>' +
+    '<dt>PIC</dt><dd>Daw Su Myat Noe · Payments Squad (mock)</dd>' +
+    '<dt>ETA</dt><dd class="mono">Aug 29 18:00</dd>' +
+    '<dt>Source</dt><dd><span class="badge src">errors-explorer</span></dd>' +
+    '</dl>' +
+    '<div class="card flat"><header><h3>Evidence</h3><span class="ch">computed from the spine</span></header>' +
+    '<div class="tiles">' +
+    '<div class="tile crit"><div class="label"><span>Last week</span></div><div class="value">2,410</div>' +
+    '<div class="sub">business declines on HTTP 200</div></div>' +
+    '<div class="tile plain"><div class="label"><span>Prior week</span></div><div class="value">352</div>' +
+    '<div class="sub">same window</div></div>' +
+    '<div class="tile crit"><div class="label"><span>WoW</span></div><div class="value">+585<u>%</u></div>' +
+    '<div class="sub">5xx flat at <b>0.03%</b></div></div>' +
+    '</div></div>' +
+    '<div class="card flat"><header><h3>Business fail vs 5xx</h3></header>' +
+    '<div class="chartbox" id="ovchart"></div></div>' +
+    '<p class="note">Every number here is computed from access logs and result codes — no APM agent.</p>';
+  S.ready(function () {
+    C.render('#ovchart', {
+      type: 'line', ratio: .34,
+      series: [{ name: 'business fail %', values: bizfail.slice(300, 600), area: true },
+               { name: '5xx %', values: bizfail.slice(300, 600).map(function () { return 0.03; }) }],
+      yFmt: 'pct2', xLabels: ['Aug 24 01:00', 'Aug 24 12:00', 'Aug 24 23:55']
+    });
+  });
+
+  var ov = $('ov');
+  function openOv() { ov.className = 'overlay open'; ov.setAttribute('aria-hidden', 'false'); var x = ov.querySelector('.ov-x'); if (x) x.focus(); }
+  function closeOv() { ov.className = 'overlay'; ov.setAttribute('aria-hidden', 'true'); }
+  $('k-open').addEventListener('click', openOv);
+  $('k-board').addEventListener('click', function (ev) {
+    var n = ev.target;
+    while (n && n !== this) { if (n.getAttribute && n.getAttribute('data-open')) { openOv(); return; } n = n.parentNode; }
+  });
+  ov.addEventListener('click', function (ev) {
+    if (ev.target.hasAttribute && ev.target.hasAttribute('data-ov-close')) closeOv();
+  });
+  document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape') closeOv(); });
+
+  /* range chips just annotate the subtitle on this page */
+  S.onRange(function (ev) {
+    S.setSubtitle('every shared component with dummy data · QA reference · range ' + ev.detail.label + ' · no APM');
+  });
+})();
+</script>
+</body>
+</html>

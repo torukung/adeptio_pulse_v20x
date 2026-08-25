@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<link rel="icon" href="data:,"/>
+
+<!-- ===========================================================================
+     ADEPTIO Pulse — SLA DRILL-DOWN  (menu 2 · spec screen sources/05_rId10.jpg)
+     Journey subtotal -> group -> API, one column per day of the seeded week
+     (WK34 = Mon Aug 23 - Sun Aug 29, 2027).
+     Group and journey cells carry the two L1 figures (c = success non-5xx %,
+     t = response within T %); API cells carry the L2 figure (5xx per day).
+     Every number on this page is read from PULSE_SYNTH.drilldown(7) or from
+     PULSE_SYNTH.aggRoutes() — synth's own aggregation. Nothing is recomputed
+     here, so a cross-menu audit can compare the DOM against the payload.
+     Classic scripts only — opens straight off disk (file://).
+     =========================================================================== -->
+
+<title>SLA Drill-down &mdash; Adeptio Pulse</title>
+
+<link rel="stylesheet" href="../assets/tokens.css"/>
+<link rel="stylesheet" href="../assets/shell.css"/>
+<link rel="stylesheet" href="../assets/menus.css"/>
+
+<style>
+/* --------------------------------------------------------------- PAGE-LOCAL
+   The shared kit has no three-level day grid, so this block adds exactly that:
+   a sticky name column, the two-line c/t cell, the single-figure 5xx cell and
+   the day-header incident marks. Tokens only — status colours for status only,
+   chrome tokens for everything else. No new colours. */
+
+/* the "Source:" line the spec screen leads with */
+.dc-src{font-size:12px;color:var(--ink2);line-height:1.75;overflow-wrap:anywhere}
+.dc-src b{color:var(--ink);font-weight:700}
+.dc-src .k{font-family:var(--mono);font-size:11px;color:var(--ink2)}
+.dc-src .sep{color:var(--muted);padding:0 3px}
+
+/* cross-links */
+a.tlink{color:var(--chipink);text-decoration:none;border-bottom:1px solid var(--chipline);
+  font-size:11.5px;white-space:nowrap}
+a.tlink:hover{border-bottom-color:var(--chipink)}
+.dc-name a.tlink{font-size:10.5px}
+
+/* incident windows strip — the pill spans both text rows, links get their own
+   line so a window name is never clipped */
+.dc-incgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:8px}
+.dc-incit{display:grid;grid-template-columns:auto minmax(0,1fr);gap:2px 9px;
+  padding:8px 10px;border:1px solid var(--line);border-radius:9px;background:var(--panel2);min-width:0}
+.dc-incit > .pill{grid-row:1 / span 3;align-self:start;margin-top:2px}
+.dc-incm{grid-column:2;min-width:0;display:flex;flex-direction:column;gap:1px}
+.dc-incm b{font-size:11.5px;font-weight:650;color:var(--ink);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dc-incm span{font-family:var(--mono);font-size:10px;color:var(--muted);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dc-inca{grid-column:2;display:flex;gap:12px;flex-wrap:wrap;margin-top:3px}
+
+/* ---------------------------------------------------------------- the grid */
+.dc-grid td,.dc-grid th{vertical-align:middle}
+.dc-grid tbody tr:nth-child(even){background:transparent}
+
+/* sticky name column: a 9-column grid scrolls sideways inside .twrap, and the
+   row label has to stay readable while it does */
+.dc-grid td.dc-name,.dc-grid th.dc-nh{position:sticky;left:0;z-index:1;
+  min-width:264px;max-width:340px;white-space:normal;background:var(--panel);
+  box-shadow:1px 0 0 var(--line)}
+.dc-grid th.dc-nh{z-index:3;background:var(--panel2)}
+.dc-grid tr.jrow td{background:var(--bg2)}
+.dc-grid tr.jrow td.dc-name{box-shadow:inset 3px 0 0 var(--chipline),1px 0 0 var(--line)}
+.dc-grid tbody tr:hover td{background:var(--panel2)}
+.dc-grid tr.jrow,.dc-grid tr.grow{cursor:pointer}
+
+.dc-nm{display:flex;align-items:center;gap:7px;flex-wrap:wrap;min-width:0}
+.dc-nm .t{font-weight:700;color:var(--ink);font-size:12.5px}
+.jrow .dc-nm .t{font-size:13px;letter-spacing:-.01em}
+.arow .dc-nm .t{font-weight:600;font-size:11.5px;color:var(--ink2);font-family:var(--mono)}
+/* C2: this line was nowrap+ellipsis and got cut inside the frozen name column at
+   768 ("journey subtotal - 1 group - 5 APIs - 47,353 5xx - T 1.50s" into 236 px).
+   It is the row's whole provenance, so it wraps instead of being clipped. */
+.dc-meta{display:block;margin-top:3px;font-size:10.5px;color:var(--muted);
+  white-space:normal;overflow-wrap:anywhere}
+.dc-ind{display:inline-block;flex:0 0 auto;height:1px}
+.dc-ind.g{width:13px} .dc-ind.a{width:27px}
+.dc-mt{font-family:var(--mono);font-size:9.5px;font-weight:750;color:var(--muted);
+  background:var(--panel2);border:1px solid var(--line);border-radius:5px;padding:1px 5px;flex:0 0 auto}
+.dc-hint{font-weight:600;letter-spacing:0;text-transform:none;color:var(--muted);font-size:9.5px}
+.dc-cnt{min-width:104px}
+.dc-cv{font-family:var(--mono);font-size:12px;font-variant-numeric:tabular-nums;color:var(--ink)}
+.arow .dc-cv{color:var(--ink2);font-size:11.5px}
+
+/* the L1 two-line cell:  c 99.96 / t 92.28 */
+.dc-grid td.dc-d{padding:5px 6px;text-align:right}
+.dc-grid th.dc-dh{text-align:center;min-width:98px;padding:6px 6px}
+.dc-cell{display:flex;flex-direction:column;gap:3px;min-width:78px}
+.dc-cell.one{align-items:flex-end}
+.dc-l{display:inline-flex;align-items:baseline;gap:7px;justify-content:space-between;
+  font-family:var(--mono);font-size:11px;font-variant-numeric:tabular-nums;
+  padding:2px 6px;border-radius:5px;border:1px solid transparent;white-space:nowrap}
+.dc-l > i{font-style:normal;font-size:9.5px;font-weight:700;opacity:.85;letter-spacing:.04em}
+.dc-5xx{display:inline-block;font-family:var(--mono);font-size:12px;font-variant-numeric:tabular-nums;
+  padding:2px 7px;border-radius:5px;border:1px solid transparent}
+.dc-nil{color:var(--muted);opacity:.5;font-family:var(--mono);font-size:12px;padding:2px 7px}
+.dc-nd{font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+.dc-nodata{font-size:9.5px;font-weight:800;letter-spacing:.06em;color:var(--unk)}
+.dc-cell .badge.provisional{align-self:flex-end;padding:1px 5px;font-size:8.5px;gap:4px}
+.dc-cell .badge.provisional::before{width:5px;height:5px}
+
+/* band tints — status tokens, used for status only */
+/* C2: the tints were 12-13 %, which in light mode darkened the cell enough to
+   pull these figures — the numbers the whole grid exists to show — to 4.27-4.44:1.
+   At 8 % the band still reads (the border carries most of it) and every cell
+   value clears AA in both themes. */
+.tn-ok  {color:var(--ok);  background:color-mix(in srgb,var(--ok)    8%,transparent);border-color:color-mix(in srgb,var(--ok)   34%,transparent)}
+.tn-warn{color:var(--warn);background:color-mix(in srgb,var(--warn)  8%,transparent);border-color:color-mix(in srgb,var(--warn) 34%,transparent)}
+.tn-crit{color:var(--crit);background:color-mix(in srgb,var(--crit)  8%,transparent);border-color:color-mix(in srgb,var(--crit) 42%,transparent)}
+.tn-unk {color:var(--unk); background:color-mix(in srgb,var(--unk)  10%,transparent);border-color:color-mix(in srgb,var(--unk)  26%,transparent)}
+.tn-sev {color:var(--crit);background:color-mix(in srgb,var(--crit) 20%,transparent);border-color:var(--crit)}
+
+/* day header + the incident marks under it */
+.dh-d{display:block;font-size:11px;font-weight:800;letter-spacing:.06em;color:var(--ink2)}
+.dh-s{display:block;font-size:9px;font-weight:600;letter-spacing:.03em;color:var(--muted);margin-top:1px}
+.dh-i{display:flex;gap:3px;justify-content:center;margin-top:4px;min-height:15px}
+a.dc-ik{display:inline-block;font-family:var(--mono);font-size:9.5px;font-weight:800;
+  line-height:14px;padding:0 4px;border-radius:4px;border:1px solid;text-decoration:none}
+a.dc-ik.warn{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 40%,transparent);
+  background:color-mix(in srgb,var(--warn) 12%,transparent)}
+a.dc-ik.crit{color:var(--crit);border-color:color-mix(in srgb,var(--crit) 42%,transparent);
+  background:color-mix(in srgb,var(--crit) 13%,transparent)}
+
+/* legend rows — .legend supplies the swatches, this adds the row key */
+.dc-legrow{align-items:flex-start}
+.dc-legrow > span{white-space:normal}
+.dc-legrow .lk{font-size:9.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;
+  color:var(--ink2);flex:0 0 auto;min-width:96px}
+.dc-legrow .badge{margin-right:2px}
+
+@media (max-width:1024px){
+  .dc-grid td.dc-name,.dc-grid th.dc-nh{min-width:228px}
+}
+@media (max-width:768px){
+  .dc-grid td.dc-name,.dc-grid th.dc-nh{min-width:206px;max-width:240px}
+  .dc-grid th.dc-dh{min-width:90px}
+  .dc-legrow .lk{min-width:0}
+}
+@media (prefers-reduced-motion:reduce){ .dc-l,.dc-5xx{transition:none} }
+</style>
+</head>
+
+<body data-shell="page"
+      data-title="SLA Drill-down"
+      data-subtitle="computed from: L3 gateway access log (api_group, route_template, status, dur_ms) &middot; no APM &middot; Aug 23 &ndash; 29, 2027"
+      data-ranges="7d,14d,30d"
+      data-range="7d"
+      data-lineage="L3 gateway access log only: ts_utc_ms, api_group, route_template, status, dur_ms, per-group T_ms.">
+
+<div id="pulse-main">
+
+  <!-- ========================================================= SOURCE LINE -->
+  <div class="card">
+    <p class="dc-src" id="dsrc">&nbsp;</p>
+    <p class="note" id="dclamp" hidden></p>
+  </div>
+
+  <!-- =============================================================== TILES -->
+  <section class="tiles" id="tiles" aria-label="Headline figures"></section>
+
+  <!-- ==================================================== INCIDENT WINDOWS -->
+  <div class="card" id="incbox" hidden>
+    <header><h3>Incident windows in this range</h3><span class="ch" id="incch">&nbsp;</span></header>
+    <div class="dc-incgrid" id="incrow"></div>
+    <p class="note">Each window is a band on the front-page flow map; the ticket key opens the same
+      window in Incident Trace. The day columns below carry the same marks.</p>
+  </div>
+
+  <!-- ============================================================== CHARTS -->
+  <div class="grid2">
+    <div class="card">
+      <header><h3>By day &mdash; c and t across all 36 routes</h3><span class="ch" id="ch1s">&nbsp;</span></header>
+      <div class="chartbox" id="chday"></div>
+      <div class="legend">
+        <span><i class="c1"></i>c &mdash; success (non-5xx) %</span>
+        <span><i class="c2"></i>t &mdash; response within T %</span>
+        <span><i class="line" style="background:var(--warn)"></i><span id="ch1t">target</span></span>
+      </div>
+    </div>
+    <div class="card">
+      <header><h3>By day &mdash; 5xx (the L2 cell)</h3><span class="ch" id="ch2s">&nbsp;</span></header>
+      <div class="chartbox" id="ch5xx"></div>
+      <div class="legend">
+        <span><i class="c1"></i>technical failures per day</span>
+        <span><i class="unk"></i>Aug 26 carries a 90-minute collector gap</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ CONTROLS -->
+  <section class="sect"><h2>Group / API drill-down</h2>
+    <span class="sh">journey subtotal &rarr; API group &rarr; route, one column per day</span>
+    <span class="sp"></span>
+    <span class="note" id="dsum">&nbsp;</span></section>
+
+  <div class="card">
+    <div class="toolbar">
+      <button class="btn" type="button" id="bexp">Expand all</button>
+      <button class="btn" type="button" id="bcol">Collapse all</button>
+      <button class="btn" type="button" id="bref" title="Clear the synthesis cache and recompute from the spine">&#8635; Refresh</button>
+      <span class="csep" aria-hidden="true"></span>
+      <label class="field"><span class="fl">Find</span>
+        <input type="text" id="dfind" placeholder="group, route or service" aria-label="Filter groups and APIs"/></label>
+      <button class="btn" type="button" id="bclr">Reset</button>
+      <div class="sp"></div>
+      <span class="note" id="dmatch">&nbsp;</span>
+    </div>
+  </div>
+
+  <!-- ================================================================ GRID -->
+  <div class="card pad0">
+    <div class="twrap" style="--tmax:min(74vh,780px)">
+      <table class="ptable dc-grid" id="grid" style="--tmin:1030px"
+             aria-label="SLA drill-down by group, API and day">
+        <thead><tr id="ghead"></tr></thead>
+        <tbody id="grows"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ============================================================== LEGEND -->
+  <div class="card">
+    <div class="legend dc-legrow" id="legc"></div>
+    <div class="legend dc-legrow" id="legt"></div>
+    <div class="legend dc-legrow" id="legx"></div>
+  </div>
+
+  <p class="note" id="dnote">&nbsp;</p>
+  <p class="note" id="dgap">&nbsp;</p>
+
+</div><!-- /#pulse-main -->
+
+<!-- ===================================================== LOAD ORDER ======= -->
+<script src="../data/manifest.js"></script>
+<script src="../data/rcameta.js"></script>
+<script src="../data/tickets.js"></script>
+<script src="../data/registry.js"></script>
+<script src="../data/spine.js"></script>
+<script src="../assets/synth.js"></script>
+<script src="../assets/charts.js"></script>
+<script src="../assets/shell.js"></script>
+
+<script>
+/* ------------------------------------------------------------------- page */
+(function () {
+  "use strict";
+  var C = window.PULSE_CHARTS, S = window.PULSE_SHELL, SY = window.PULSE_SYNTH;
+  var DATA = window.ADEPTIO_DATA || {};
+  var TICKETS = (window.ADEPTIO_TICKETS && window.ADEPTIO_TICKETS.byWindow) || {};
+  var $ = function (id) { return document.getElementById(id); };
+  var esc = C.esc;
+
+  /* the seeded replay is one week; 14d / 30d clamp onto it (SPEC §5) */
+  var SPINE_DAYS = 7;
+  var ALLKEYS = SY.allRouteKeys();
+
+  var state = { openJ: {}, openG: {}, find: '' };
+  var last = null;          /* {r, d, est, byGroup, prov, notDep} */
+  var chartOpt = {};
+  var findTimer = null;
+
+  function has(v) { return v !== null && v !== undefined && isFinite(v); }
+  function bandCls(b) { return b === 'severe' ? 'sev' : (b || 'unk'); }
+  function covTxt(c) { return has(c) ? SY.fmtPct(c * 100, 1) : '-'; }
+
+  /* the incident windows keep their letters as identity (INC / INCMETA /
+     ADEPTIO_TICKETS.byWindow are all keyed on them); these are only the names a
+     reader is shown. Two compact forms, both for width the strip does not have:
+     the strip pill is nowrap and shares its row with the window name and two
+     nowrap cross-links, which overflow below ~800px if the pill spells the week
+     out; the day-header marks have to fit three-to-a-98px-column-header. Both
+     carry the full name in the tooltip beside them. */
+  function incLabel(key) { return 'WK34 · Incident ' + key; }
+  function incShort(key) { return 'W34·' + key; }
+
+  /* ------------------------------------------------------- incident windows
+     Window geometry and names are metadata (data/manifest.js INC / INCMETA),
+     the same source the front page bands are drawn from; ticket keys come from
+     ADEPTIO_TICKETS.byWindow. No figure on the page comes from here. */
+  function incidentsIn(t0, t1) {
+    var INC = DATA.INC || {}, META = DATA.INCMETA || {}, out = [], k;
+    for (k in INC) {
+      if (!Object.prototype.hasOwnProperty.call(INC, k)) continue;
+      var w = INC[k], a = w[0], b = w[w.length - 1];
+      if (b < t0 || a > t1) continue;
+      var m = META[k] || [k, 'warn'];
+      out.push({ key: k, label: m[0], severity: m[1] === 'crit' ? 'crit' : 'warn',
+                 peak: w[1], peakLabel: SY.dstamp(w[1]),
+                 span: SY.dstamp(a) + ' - ' + SY.dstamp(b),
+                 ticket: TICKETS[k] || null });
+    }
+    out.sort(function (x, y) {
+      var sx = x.severity === 'crit' ? 0 : 1, sy = y.severity === 'crit' ? 0 : 1;
+      return sx !== sy ? sx - sy : x.peak - y.peak;
+    });
+    return out;
+  }
+
+  /* ================================================================= RENDER */
+  function render() {
+    var rk = S.getRange() || '7d';
+    var r = SY.range(rk);
+    var d = SY.drilldown(SPINE_DAYS);
+    var est = SY.aggRoutes(ALLKEYS, r.t0, r.t1);
+
+    /* index the groups and count the flags the payload carries */
+    var byGroup = {}, prov = 0, notDep = 0, below = 0, i, j, g;
+    for (i = 0; i < d.journeys.length; i++) {
+      for (j = 0; j < d.journeys[i].cells.length; j++) { if (d.journeys[i].cells[j].provisional) prov++; }
+    }
+    for (i = 0; i < d.groups.length; i++) {
+      g = d.groups[i];
+      byGroup[g.key] = g;
+      if (has(g.totals.c) && g.totals.c < d.target) below++;
+      for (j = 0; j < g.cells.length; j++) { if (g.cells[j].provisional) prov++; }
+      for (j = 0; j < g.apis.length; j++) {
+        for (var q = 0; q < g.apis[j].cells.length; q++) {
+          if (g.apis[j].cells[q].provisional) prov++;
+          if (g.apis[j].cells[q].notDeployed) notDep++;
+        }
+      }
+    }
+    last = { r: r, d: d, est: est, byGroup: byGroup, prov: prov, notDep: notDep, below: below };
+
+    header(); tiles(); incidents(); charts(); buildHead(); buildRows(); legend(); footer();
+  }
+
+  /* ------------------------------------------------------------ source line */
+  function header() {
+    var d = last.d, r = last.r, sp = '<span class="sep">&middot;</span>';
+    $('dsrc').innerHTML =
+      '<b>Source:</b> L3 gateway access log, unsampled &mdash; one lane, no APM agent, no code change' + sp +
+      '<span class="k">' + esc(r.label.replace(' (clamped to the seeded week)', '')) + '</span>' + sp +
+      '<b>' + d.days.length + '</b> days' + sp +
+      '<b>' + d.groupCount + '</b> groups' + sp +
+      '<b>' + d.apiCount + '</b> APIs' + sp +
+      '<b>' + esc(SY.fmtNum(d.txnTotal)) + '</b> transactions' + sp +
+      'target <b>' + esc(SY.fmtPct(d.target, 2)) + '</b><br/>' +
+      '<b>L1 cell</b> (journey and group rows): <span class="k">c</span> = success (non-5xx) % ' +
+      '<span class="k">countIf(status&lt;500)/count()</span>, <span class="k">t</span> = response within the ' +
+      'group threshold T <span class="k">countIf(dur_ms&lt;=T_ms)/count()</span>' + sp +
+      '<b>L2 cell</b> (route rows): 5xx (technical) errors per day.';
+
+    if (r.clamped) {
+      $('dclamp').innerHTML = 'The seeded replay holds <b>one week</b>, so <b>' + esc(rkLabel(r.key)) +
+        '</b> clamps to <span class="mono">' + esc(SY.dstamp(r.t0)) + ' - ' + esc(SY.dstamp(r.t1)) +
+        '</span>. Seven day columns are shown and nothing is extrapolated &mdash; a longer window would ' +
+        'need a longer replay, not a wider axis.';
+      $('dclamp').hidden = false;
+    } else { $('dclamp').hidden = true; $('dclamp').innerHTML = ''; }
+  }
+  function rkLabel(k) { return k === '14d' ? '14d' : k === '30d' ? '30d' : k; }
+
+  /* ------------------------------------------------------------------ tiles */
+  function tiles() {
+    var d = last.d, e = last.est;
+    var sBand = SY.slaBand(e.successPct), tBand = SY.slaBand(e.responsePct);
+    var items = [
+      { l: 'Transactions', v: SY.fmtNum(d.txnTotal), b: 'plain',
+        s: '<b>' + d.groupCount + '</b> groups &middot; <b>' + d.apiCount + '</b> APIs &middot; <b>' +
+           d.journeyCount + '</b> journey subtotals' },
+      { l: 'Success (non-5xx)', v: SY.fmtPct(e.successPct, 2), b: sBand,
+        pf: e.successPct >= d.target ? ['pass', 'Pass'] : ['fail', 'Fail'],
+        s: 'target <b>' + esc(SY.fmtPct(d.target, 2)) + '</b> &middot; the <b>c</b> figure, over all 36 routes' },
+      { l: 'Response within T', v: SY.fmtPct(e.responsePct, 2), b: tBand,
+        pf: e.responsePct >= d.target ? ['pass', 'Pass'] : ['fail', 'Fail'],
+        s: 'per-group T (1.5 s &ndash; 4.5 s) &middot; the <b>t</b> figure' },
+      { l: '5xx in window', v: SY.fmtNum(e.technicalFail), b: SY.errBand(e.errorRatePct),
+        s: 'the L2 population &middot; <b>' + esc(SY.fmtNum(e.businessFail)) +
+           '</b> business declines sit outside it' },
+      { l: 'Groups below target', v: last.below + ' / ' + d.groupCount,
+        b: last.below ? 'crit' : 'ok',
+        pf: last.below ? ['fail', 'Fail'] : ['pass', 'Pass'],
+        s: 'measured on <b>c</b> against <b>' + esc(SY.fmtPct(d.target, 2)) + '</b>' },
+      { l: 'Coverage', v: SY.fmtPct(e.coverage * 100, 2), b: e.provisional ? 'unk' : 'plain',
+        prov: last.prov > 0,
+        s: '<b>' + esc(SY.fmtNum(e.unknownBuckets)) + '</b> unknown buckets &middot; <b>' + last.prov +
+           '</b> cells flagged provisional' }
+    ];
+    var h = '', i;
+    for (i = 0; i < items.length; i++) {
+      var t = items[i], nd = (t.v === '-' || t.v == null);
+      h += '<div class="tile ' + (nd ? 'unk' : (t.b === 'severe' ? 'crit' : t.b)) + '">' +
+        '<div class="label"><span>' + t.l + '</span></div>' +
+        '<div class="value">' + (nd ? 'NO DATA' : esc(t.v)) + '</div>' +
+        '<div class="sub">' + (nd ? 'coverage below the reporting floor &mdash; withheld, not zero' : t.s) + '</div>' +
+        '<div class="tilefoot">' + (t.pf && !nd ? '<span class="pf ' + t.pf[0] + '">' + t.pf[1] + '</span>' : '') +
+          (t.prov ? '<span class="badge provisional">Provisional</span>' : '') +
+        '</div></div>';
+    }
+    $('tiles').innerHTML = h;
+  }
+
+  /* ------------------------------------------------------- incident windows */
+  function incidents() {
+    var r = last.r, list = incidentsIn(r.t0, r.t1), h = '', i;
+    if (!list.length) { $('incbox').hidden = true; return; }
+    $('incbox').hidden = false;
+    $('incch').textContent = list.length + ' windows overlap ' + r.label.replace(' (clamped to the seeded week)', '');
+    for (i = 0; i < list.length; i++) {
+      var w = list[i];
+      h += '<div class="dc-incit" title="' + esc(incLabel(w.key) + ' — ' + w.label + ' · ' + w.span) + '">' +
+        '<span class="pill ' + w.severity + '" title="' + esc(incLabel(w.key)) + '">' +
+          esc(incShort(w.key)) + '</span>' +
+        '<div class="dc-incm"><b>' + esc(w.label) + '</b>' +
+          '<span>' + esc(w.span) + '</span></div>' +
+        '<div class="dc-inca">' +
+          '<a class="tlink" href="../index.html#t=' + w.peak + '" title="Open the flow map at ' +
+            esc(w.peakLabel) + '">Open on the flow map at ' + esc(w.peakLabel) + '</a>' +
+          (w.ticket ? '<a class="tlink" href="../incident-trace.html#' + esc(w.ticket) + '">' +
+            esc(w.ticket) + '</a>' : '') +
+        '</div></div>';
+    }
+    $('incrow').innerHTML = h;
+  }
+
+  /* ----------------------------------------------------------------- charts
+     Per-day estate figures come from PULSE_SYNTH.aggRoutes() — the same
+     aggregation drilldown() itself sums over — never from arithmetic here. */
+  function charts() {
+    var d = last.d, cs = [], ts = [], fx = [], labels = [], lo = 100, i, a;
+    for (i = 0; i < d.days.length; i++) {
+      a = SY.aggRoutes(ALLKEYS, d.days[i].t0, d.days[i].t1);
+      cs.push(has(a.successPct) ? a.successPct : null);
+      ts.push(has(a.responsePct) ? a.responsePct : null);
+      fx.push(a.technicalFail);
+      labels.push(d.days[i].label);
+      if (has(a.successPct) && a.successPct < lo) lo = a.successPct;
+      if (has(a.responsePct) && a.responsePct < lo) lo = a.responsePct;
+    }
+    var yMin = Math.max(0, Math.floor((lo - 0.25) * 4) / 4);
+
+    $('ch1s').textContent = 'one point per day · volume-weighted over every route';
+    $('ch2s').textContent = 'technical failures per day · all 36 routes';
+    $('ch1t').textContent = 'target ' + SY.fmtPct(d.target, 2);
+
+    chartOpt.day = {
+      type: 'line', ratio: .34, minH: 170, maxH: 250, responsive: false,
+      /* the target line is the only dashed stroke — t stays solid so the two
+         cannot be confused where they run close together */
+      series: [{ name: 'c — success %', values: cs, area: true },
+               { name: 't — within T %', values: ts }],
+      threshold: d.target, thresholdLabel: 'target ' + SY.fmtPct(d.target, 2),
+      yFmt: 'pct2', yMin: yMin, yMax: 100, xLabels: labels, legend: false,
+      label: 'success and response compliance by day'
+    };
+    chartOpt.fx = {
+      type: 'bars', ratio: .34, minH: 170, maxH: 250, responsive: false,
+      groups: labels, series: [{ name: '5xx', values: fx }],
+      yFmt: 'compact', legend: false, label: '5xx per day'
+    };
+    drawCharts();
+  }
+  function drawCharts() {
+    if (chartOpt.day) C.render('#chday', chartOpt.day);
+    if (chartOpt.fx) C.render('#ch5xx', chartOpt.fx);
+  }
+
+  /* ------------------------------------------------------------ table header */
+  function buildHead() {
+    var d = last.d, h = '', i, j;
+    h += '<th class="dc-nh" scope="col">Group / API <span class="dc-hint">(click a row to expand)</span></th>' +
+         '<th class="num dc-cnt" scope="col">Count <span class="dc-hint">vol</span></th>';
+    for (i = 0; i < d.days.length; i++) {
+      var day = d.days[i], inc = incidentsIn(day.t0, day.t1), marks = '';
+      for (j = 0; j < inc.length && j < 3; j++) {
+        marks += '<a class="dc-ik ' + inc[j].severity + '" href="../index.html#t=' + inc[j].peak +
+          '" title="' + esc(incLabel(inc[j].key) + ' — ' + inc[j].label + ' · peak ' + inc[j].peakLabel +
+          ' · open on the flow map') + '" aria-label="' + esc(incLabel(inc[j].key) + ' — ' + inc[j].label +
+          ' — open on the flow map at ' + inc[j].peakLabel) + '">' + esc(inc[j].key) + '</a>';
+      }
+      h += '<th class="dc-dh" scope="col"><span class="dh-d">' + esc(day.label) + '</span>' +
+           '<span class="dh-s">' + esc(SY.hm(day.t0)) + '&ndash;' + esc(SY.hm(day.t1)) + '</span>' +
+           '<span class="dh-i">' + marks + '</span></th>';
+    }
+    $('ghead').innerHTML = h;
+  }
+
+  /* -------------------------------------------------------------- the cells */
+  function ctCell(cell, name) {
+    var tip = name + ' · ' + cell.label + ' · c ' + SY.fmtPct(cell.c, 2) + ' · t ' + SY.fmtPct(cell.t, 2) +
+      ' · 5xx ' + SY.fmtNum(cell.s5xx) + ' · n ' + SY.fmtNum(cell.n) +
+      (has(cell.p95) ? ' · p95 ' + SY.fmtMs(cell.p95) : '') +
+      ' · coverage ' + covTxt(cell.coverage) + (cell.provisional ? ' (provisional)' : '');
+    if (cell.notDeployed) {
+      return '<td class="dc-d"><span class="dc-nd" title="' + esc(name + ' · ' + cell.label +
+        ' — the route did not exist yet') + '">not deployed</span></td>';
+    }
+    if (cell.state === 'unknown' || (!has(cell.c) && !has(cell.t))) {
+      return '<td class="dc-d"><span class="dc-nodata" title="' + esc(name + ' · ' + cell.label +
+        ' — coverage ' + covTxt(cell.coverage) + ', below the reporting floor; withheld, not zero') +
+        '">NO DATA</span></td>';
+    }
+    return '<td class="dc-d"><div class="dc-cell" title="' + esc(tip) + '">' +
+      '<span class="dc-l tn-' + bandCls(cell.cBand) + '"><i>c</i>' + esc(SY.fmtPct(cell.c, 2)) + '</span>' +
+      '<span class="dc-l tn-' + bandCls(cell.tBand) + '"><i>t</i>' + esc(SY.fmtPct(cell.t, 2)) + '</span>' +
+      (cell.provisional ? '<span class="badge provisional" title="coverage ' + covTxt(cell.coverage) +
+        ' — a collector gap sits inside this day">prov</span>' : '') +
+      '</div></td>';
+  }
+
+  function fxCell(cell, name) {
+    if (cell.notDeployed) {
+      return '<td class="dc-d"><span class="dc-nd" title="' + esc(name + ' · ' + cell.label +
+        ' — the route did not exist yet') + '">not deployed</span></td>';
+    }
+    if (cell.state === 'unknown') {
+      return '<td class="dc-d"><span class="dc-nodata" title="' + esc(name + ' · ' + cell.label +
+        ' — coverage ' + covTxt(cell.coverage) + ', withheld, not zero') + '">NO DATA</span></td>';
+    }
+    var tip = name + ' · ' + cell.label + ' · 5xx ' + SY.fmtNum(cell.s5xx) + ' · c ' + SY.fmtPct(cell.c, 2) +
+      ' · t ' + SY.fmtPct(cell.t, 2) + ' · n ' + SY.fmtNum(cell.n) +
+      (has(cell.p95) ? ' · p95 ' + SY.fmtMs(cell.p95) : '') +
+      ' · coverage ' + covTxt(cell.coverage) + (cell.provisional ? ' (provisional)' : '');
+    var body = cell.s5xx
+      ? '<span class="dc-5xx tn-' + bandCls(cell.cBand) + '">' + esc(SY.fmtNum(cell.s5xx)) + '</span>'
+      : '<span class="dc-nil">&middot;</span>';
+    return '<td class="dc-d"><div class="dc-cell one" title="' + esc(tip) + '">' + body +
+      (cell.provisional ? '<span class="badge provisional" title="coverage ' + covTxt(cell.coverage) +
+        ' — a collector gap sits inside this day">prov</span>' : '') +
+      '</div></td>';
+  }
+
+  /* ------------------------------------------------------------------- rows */
+  function hit(s) { return String(s).toLowerCase().indexOf(state.find) > -1; }
+
+  function ctPills(tot, T) {
+    return '<span class="dc-l tn-' + bandCls(tot.cBand) + '" title="success (non-5xx) over the whole window">' +
+             '<i>code</i>' + esc(SY.fmtPct(tot.c, 2)) + '</span>' +
+           '<span class="dc-l tn-' + bandCls(tot.tBand) + '" title="response within T = ' +
+             esc(SY.fmtMs(T)) + ' over the whole window"><i>time</i>' + esc(SY.fmtPct(tot.t, 2)) + '</span>';
+  }
+
+  function buildRows() {
+    var d = last.d, f = state.find, out = '', jn, gi, ai, i;
+    var nJ = 0, nG = 0, nA = 0, aTotal = 0;
+
+    for (jn = 0; jn < d.journeys.length; jn++) {
+      var J = d.journeys[jn], jHit = !f || hit(J.name) || hit(J.key), blocks = [];
+      for (gi = 0; gi < J.groups.length; gi++) {
+        var g = last.byGroup[J.groups[gi]];
+        if (!g) continue;
+        var gHit = jHit || hit(g.name) || hit(g.key), apis = [];
+        for (ai = 0; ai < g.apis.length; ai++) {
+          var a = g.apis[ai];
+          aTotal++;
+          if (!f || gHit || hit(a.key) || hit(a.svc)) apis.push(a);
+        }
+        if (f && !gHit && !apis.length) continue;
+        blocks.push({ g: g, apis: apis });
+      }
+      if (f && !blocks.length) continue;
+
+      var jOpen = f ? true : state.openJ[J.key] !== false;
+      nJ++;
+      out += '<tr class="jrow" data-kind="j" data-key="' + esc(J.key) + '" tabindex="0" role="button" ' +
+        'aria-expanded="' + (jOpen ? 'true' : 'false') + '">' +
+        '<td class="dc-name"><div class="dc-nm">' +
+          '<span class="rt-c">&#9656;</span><span class="t">' + esc(J.name) + '</span>' +
+          ctPills(J.totals, J.T_ms) +
+          (J.totals.provisional ? '<span class="badge provisional">Provisional</span>' : '') +
+          '<a class="tlink" href="kpi-live.html#j=' + esc(J.key) + '&amp;r=24h" ' +
+            'title="Open this journey in KPI Live">KPI live</a>' +
+        '</div><span class="dc-meta">journey subtotal &middot; ' + J.groupCount + ' group' +
+          (J.groupCount > 1 ? 's' : '') + ' &middot; ' + J.apiCount + ' APIs &middot; ' +
+          esc(SY.fmtNum(J.totals.s5xx)) + ' 5xx &middot; T ' + esc(SY.fmtMs(J.T_ms)) + '</span></td>' +
+        '<td class="num"><span class="dc-cv">' + esc(SY.fmtNum(J.totals.n)) + '</span></td>';
+      for (i = 0; i < J.cells.length; i++) out += ctCell(J.cells[i], J.name);
+      out += '</tr>';
+      if (!jOpen) continue;
+
+      for (gi = 0; gi < blocks.length; gi++) {
+        var G = blocks[gi].g, gApis = blocks[gi].apis;
+        var gOpen = f ? true : !!state.openG[G.key];
+        nG++;
+        out += '<tr class="grow" data-kind="g" data-key="' + esc(G.key) + '" tabindex="0" role="button" ' +
+          'aria-expanded="' + (gOpen ? 'true' : 'false') + '">' +
+          '<td class="dc-name"><div class="dc-nm"><span class="dc-ind g"></span>' +
+            '<span class="rt-c">&#9656;</span><span class="t">' + esc(G.name) + '</span>' +
+            ctPills(G.totals, G.T_ms) +
+            (G.totals.provisional ? '<span class="badge provisional">Provisional</span>' : '') +
+          '</div><span class="dc-meta">' + G.apiCount + ' APIs &middot; ' +
+            esc(SY.fmtNum(G.totals.n)) + ' hits &middot; ' + esc(SY.fmtNum(G.totals.s5xx)) +
+            ' 5xx &middot; T ' + esc(SY.fmtMs(G.T_ms)) + '</span></td>' +
+          '<td class="num"><span class="dc-cv">' + esc(SY.fmtNum(G.totals.n)) + '</span></td>';
+        for (i = 0; i < G.cells.length; i++) out += ctCell(G.cells[i], G.name);
+        out += '</tr>';
+        if (!gOpen) continue;
+
+        for (ai = 0; ai < gApis.length; ai++) {
+          var A = gApis[ai];
+          nA++;
+          out += '<tr class="arow">' +
+            '<td class="dc-name"><div class="dc-nm"><span class="dc-ind a"></span>' +
+              '<span class="dc-mt">' + esc(A.method) + '</span>' +
+              '<span class="t">' + esc(A.path) + '</span>' +
+              (A.totals.s5xx ? '<span class="badge">' + esc(SY.fmtNum(A.totals.s5xx)) + ' 5xx</span>' : '') +
+              (A.totals.provisional ? '<span class="badge provisional">Provisional</span>' : '') +
+              (A.newInD ? '<span class="badge">new &middot; ' + esc(A.introducedLabel || '') + '</span>' : '') +
+            '</div><span class="dc-meta">' + esc(A.svc) + ' &middot; T ' + esc(SY.fmtMs(A.T_ms)) +
+              ' &middot; code ' + esc(SY.fmtPct(A.totals.c, 2)) + ' &middot; time ' +
+              esc(SY.fmtPct(A.totals.t, 2)) + '</span></td>' +
+            '<td class="num"><span class="dc-cv">' + esc(SY.fmtNum(A.totals.n)) + '</span></td>';
+          for (i = 0; i < A.cells.length; i++) out += fxCell(A.cells[i], A.method + ' ' + A.path);
+          out += '</tr>';
+        }
+      }
+    }
+
+    if (!out) {
+      out = '<tr><td colspan="' + (2 + d.days.length) + '"><div class="empty">' +
+        'Nothing matches &ldquo;' + esc(state.find) + '&rdquo;. Clear the filter or try a service name.' +
+        '</div></td></tr>';
+    }
+    $('grows').innerHTML = out;
+
+    $('dmatch').innerHTML = f
+      ? '<b>' + nA + '</b> of ' + aTotal + ' APIs match &ldquo;' + esc(state.find) + '&rdquo; &middot; ' +
+        nG + ' groups &middot; ' + nJ + ' journeys'
+      : nJ + ' journey subtotals &middot; ' + nG + ' groups shown &middot; ' + nA + ' of ' + aTotal +
+        ' API rows open';
+    $('dsum').innerHTML = '<b>' + last.below + ' of ' + d.groupCount + '</b> groups below target &middot; <b>' +
+      esc(SY.fmtNum(last.est.technicalFail)) + '</b> 5xx in window &middot; <b>' +
+      esc(SY.fmtNum(last.est.requests)) + '</b> transactions';
+  }
+
+  /* ----------------------------------------------------------------- legend */
+  function legend() {
+    var d = last.d, h, i;
+    h = '<span class="lk">c &mdash; success</span>';
+    for (i = 0; i < d.legend.c.length; i++) {
+      h += '<span><i class="' + bandSwatch(d.legend.c[i].band) + '"></i>' + esc(d.legend.c[i].text) + '</span>';
+    }
+    $('legc').innerHTML = h;
+
+    h = '<span class="lk">t &mdash; within T</span>';
+    for (i = 0; i < d.legend.t.length; i++) {
+      h += '<span><i class="' + bandSwatch(d.legend.t[i].band) + '"></i>' + esc(d.legend.t[i].text) + '</span>';
+    }
+    $('legt').innerHTML = h;
+
+    $('legx').innerHTML = '<span class="lk">cell states</span>' +
+      '<span><span class="badge provisional">prov</span>coverage below 99% inside the day &mdash; the figure is ' +
+        'reported and flagged, not hidden</span>' +
+      '<span><i class="unk"></i><b>NO DATA</b> &mdash; coverage below the reporting floor; withheld, never 0%</span>' +
+      '<span><i class="unk"></i><b>not deployed</b> &mdash; the route did not exist on that day (' +
+        last.notDep + ' cells)</span>';
+  }
+  function bandSwatch(b) { return b === 'severe' ? 'crit' : (b === 'ok' || b === 'warn' || b === 'crit') ? b : 'unk'; }
+
+  /* ----------------------------------------------------------------- footer */
+  function footer() {
+    var d = last.d, gp = d.coverage && d.coverage.gap;
+    S.setLineage(d.lineage);
+    $('dnote').innerHTML =
+      '<b>Count</b> &mdash; L1: SLA transactions (the c / t denominator) &middot; L2: API request hits. ' +
+      esc(d.notes.text) + ' ' + esc(SY.disclaimer) + '.';
+    $('dgap').innerHTML = gp
+      ? '<b>Coverage</b> &mdash; ' + esc(gp.mins) + ' minutes of <b>' + esc(gp.svc) +
+        '</b> logs are missing on <b>' + esc(gp.label) + '</b> (' + esc(gp.reason) + '). The ' +
+        last.prov + ' cells inside that day are flagged provisional; every other cell has full coverage. ' +
+        'Journey subtotals are recomputed from the raw buckets of all routes of the journey, never averaged ' +
+        'from the group rows &mdash; which is why the Login subtotal equals the SLA Weekly figure for Login.'
+      : '';
+  }
+
+  /* ---------------------------------------------------------------- wiring */
+  function toggle(kind, key) {
+    if (state.find) return;                       /* filtering forces rows open */
+    if (kind === 'j') state.openJ[key] = (state.openJ[key] === false);
+    else if (kind === 'g') state.openG[key] = !state.openG[key];
+    else return;
+    buildRows();
+    refocus(kind, key);
+  }
+  function refocus(kind, key) {
+    var rows = $('grows').getElementsByTagName('tr'), i;
+    for (i = 0; i < rows.length; i++) {
+      if (rows[i].getAttribute('data-kind') === kind && rows[i].getAttribute('data-key') === key) {
+        rows[i].focus(); return;
+      }
+    }
+  }
+  function rowOf(node) {
+    while (node && node !== $('grows') && !(node.getAttribute && node.getAttribute('data-kind'))) node = node.parentNode;
+    return (node && node.getAttribute && node.getAttribute('data-kind')) ? node : null;
+  }
+  $('grows').addEventListener('click', function (ev) {
+    if (ev.target && ev.target.tagName === 'A') return;      /* let cross-links work */
+    var n = rowOf(ev.target);
+    if (n) toggle(n.getAttribute('data-kind'), n.getAttribute('data-key'));
+  });
+  $('grows').addEventListener('keydown', function (ev) {
+    if (ev.key !== 'Enter' && ev.key !== ' ') return;
+    var n = rowOf(ev.target);
+    if (n) { ev.preventDefault(); toggle(n.getAttribute('data-kind'), n.getAttribute('data-key')); }
+  });
+
+  function setAll(open) {
+    var d = last.d, i, j;
+    for (i = 0; i < d.journeys.length; i++) state.openJ[d.journeys[i].key] = open ? true : false;
+    for (j = 0; j < d.groups.length; j++) state.openG[d.groups[j].key] = open;
+    buildRows();
+  }
+  $('bexp').addEventListener('click', function () { setAll(true); });
+  $('bcol').addEventListener('click', function () { setAll(false); });
+  $('bref').addEventListener('click', function () {
+    var t0 = (window.performance && performance.now) ? performance.now() : 0;
+    SY.clearCache();
+    render();
+    var ms = (window.performance && performance.now) ? Math.round(performance.now() - t0) : null;
+    var tm = SY.timings()['drilldown|' + SPINE_DAYS];
+    $('dmatch').innerHTML = 'Recomputed from the spine' +
+      (tm != null ? ' &middot; drilldown <b>' + tm + ' ms</b>' : '') +
+      (ms != null ? ' &middot; page <b>' + ms + ' ms</b>' : '') + ' &middot; ' + esc(SY.freshness);
+  });
+
+  function applyFind(v) {
+    state.find = String(v || '').trim().toLowerCase();
+    buildRows();
+  }
+  $('dfind').addEventListener('input', function (ev) {
+    var v = ev.target.value;
+    if (findTimer) clearTimeout(findTimer);
+    findTimer = setTimeout(function () { applyFind(v); }, 120);
+  });
+  $('bclr').addEventListener('click', function () { $('dfind').value = ''; applyFind(''); });
+
+  var rid = null;
+  window.addEventListener('resize', function () {
+    if (rid) clearTimeout(rid);
+    rid = setTimeout(drawCharts, 150);
+  });
+
+  /* first paint + every range change */
+  S.ready(function () { render(); });
+  S.onRange(function () { render(); });
+})();
+</script>
+</body>
+</html>

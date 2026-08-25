@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<link rel="icon" href="data:,"/>
+
+<!-- ===========================================================================
+     ADEPTIO Pulse — CUSTOMER JOURNEY  (menu 9 · spec screens sources/13_rId18
+     .jpg + 14_rId19.jpg)
+     Six journey cards (customer-perceived %, delta, three-lens strip, p95/p99,
+     failed requests) -> "How the number is calculated" -> "Where users drop
+     off" funnel -> "By stage - where is the user stuck" table with per-step
+     status-code breakdown, strict/platform formulas and the comparison window.
+
+     Every figure comes from PULSE_SYNTH.journeys(range); the page selects,
+     formats and lays out - it never recomputes a metric. The APP lens is
+     always null in the payload (no crash SDK is collected without an agent),
+     so the card reads "not collected" and carries the "2 of 3 lenses" badge -
+     never 0 %.
+
+     The comparison window is the same clock hour on the PREVIOUS DAY, printed
+     verbatim from `prevLabel` / `comparisonWindow`. The reference screen says
+     "last week"; this spine IS one week, so saying that would be a lie.
+
+     Classic scripts only — opens straight off disk (file://).
+     =========================================================================== -->
+
+<title>Customer Journey &mdash; Adeptio Pulse</title>
+
+<link rel="stylesheet" href="../assets/tokens.css"/>
+<link rel="stylesheet" href="../assets/shell.css"/>
+<link rel="stylesheet" href="../assets/menus.css"/>
+
+<style>
+/* ------------------------------------------------------------- PAGE-LOCAL
+   Six things the shared kit does not carry: the journey card (a selectable
+   panel with a hero percentage and three lens meters), the lens meter itself,
+   the funnel connector between two .funnel-step rows, the method pill, the
+   status-code chip and the mono "computed from" block. Tokens only — no new
+   colours; status colours stay on status. */
+.card[hidden],.badge[hidden],.note[hidden],a[hidden],div[hidden]{display:none}
+
+a.tlink{color:var(--chipink);text-decoration:none;border-bottom:1px solid var(--chipline);
+  font-size:11.5px;white-space:nowrap}
+a.tlink:hover{border-bottom-color:var(--chipink)}
+.ptable td a.tlink{font-size:11px}
+.jdash{color:var(--muted)}
+.jsp{flex:1 1 auto;min-width:6px}
+
+/* incident strip — layout is chrome, the pill carries the status colour */
+.jinc{display:flex;align-items:center;gap:10px;flex-wrap:wrap;min-width:0}
+.jinc .jit{font-size:12.5px;color:var(--ink2);min-width:0}
+.jinc .jit b{color:var(--ink);font-weight:700}
+
+/* ------------------------------------------------------------ journey cards */
+.jgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(268px,1fr));gap:12px;align-items:stretch}
+.jcell{display:flex;flex-direction:column;gap:6px;min-width:0}
+.jcard{width:100%;flex:1 1 auto;min-width:0;font:inherit;color:inherit;text-align:left;cursor:pointer;
+  background:var(--panel);border:1px solid var(--line);border-radius:12px;
+  padding:12px 13px 11px;display:flex;flex-direction:column;gap:7px}
+.jcard:hover{border-color:var(--chipline)}
+.jcard[aria-pressed="true"]{background:var(--panel2);box-shadow:0 0 0 1px var(--chipline) inset}
+.jcard.b-ok  {border-color:color-mix(in srgb,var(--ok)   46%,var(--line))}
+.jcard.b-warn{border-color:color-mix(in srgb,var(--warn) 46%,var(--line))}
+.jcard.b-crit{border-color:color-mix(in srgb,var(--crit) 52%,var(--line))}
+.jcard.b-unk {border-color:color-mix(in srgb,var(--unk)  46%,var(--line));border-style:dashed}
+
+.jc-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
+.jc-n{font-size:14.5px;font-weight:700;letter-spacing:-.01em;color:var(--ink);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.jc-d{display:block;font-family:var(--mono);font-size:10.5px;color:var(--muted);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.jc-big{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;min-width:0}
+.jc-v{font-size:30px;line-height:1.06;font-weight:750;letter-spacing:-.03em;
+  font-variant-numeric:tabular-nums;color:var(--ink)}
+.jc-v.ok{color:var(--ok)} .jc-v.warn{color:var(--warn)}
+.jc-v.crit{color:var(--crit)} .jc-v.unk{color:var(--unk)}
+.jc-v.nd{font-size:18px;letter-spacing:.02em}
+.jc-l{display:flex;align-items:center;gap:7px;flex-wrap:wrap;
+  font-size:9.5px;font-weight:750;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+
+/* lens meter — three rows, APP is a dashed empty track, never a 0 % bar */
+.jlens{display:flex;flex-direction:column;gap:4px;padding-top:2px;
+  border-top:1px solid var(--line2)}
+.jl{display:grid;grid-template-columns:34px minmax(0,1fr) auto;align-items:center;gap:8px}
+.jl-k{font-size:9.5px;font-weight:750;letter-spacing:.06em;color:var(--muted)}
+.jl-b{height:6px;border-radius:999px;background:var(--panel2);border:1px solid var(--line);overflow:hidden}
+.jl-b > i{display:block;height:100%;background:var(--unk);transition:width .2s}
+.jl.ok   .jl-b > i{background:var(--ok)}
+.jl.warn .jl-b > i{background:var(--warn)}
+.jl.crit .jl-b > i{background:var(--crit)}
+.jl.na .jl-b{border-style:dashed;background:none}
+.jl-v{font-size:11px;font-weight:650;font-variant-numeric:tabular-nums;color:var(--ink2);white-space:nowrap}
+.jl.na .jl-v{color:var(--unk);font-weight:600;text-transform:none;letter-spacing:0}
+
+.jc-lat{display:block;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+.jc-lat b{color:var(--ink2);font-weight:650}
+.jc-f{display:flex;align-items:flex-end;gap:9px;flex-wrap:wrap;min-width:0;
+  padding-top:7px;border-top:1px solid var(--line2)}
+.jc-fr{display:flex;flex-direction:column;gap:1px;min-width:0}
+.jc-frl{font-size:9.5px;font-weight:750;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.jc-frv{font-size:15px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--ink)}
+.jc-frs{font-size:10.5px;color:var(--muted)}
+.jc-cta{display:block;margin-top:auto;padding-top:6px;border-top:1px solid var(--line2);
+  font-size:11px;color:var(--muted)}
+.jcard[aria-pressed="true"] .jc-cta{color:var(--chipink)}
+.jlinks{display:flex;align-items:center;gap:11px;flex-wrap:wrap;padding:0 3px}
+
+/* --------------------------------------------------------------- lens strip */
+.lcard{gap:8px}
+.lc-h{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;min-width:0}
+.lc-t{font-size:12.5px;font-weight:700;color:var(--ink)}
+.lc-v{margin-left:auto;font-size:20px;font-weight:750;letter-spacing:-.02em;
+  font-variant-numeric:tabular-nums;color:var(--ink)}
+.lc-v.ok{color:var(--ok)} .lc-v.warn{color:var(--warn)}
+.lc-v.crit{color:var(--crit)} .lc-v.unk{color:var(--unk);font-size:13px;letter-spacing:0}
+.lc-s{font-size:11px;color:var(--muted)}
+.lc-bar{height:8px;border-radius:999px;background:var(--panel2);border:1px solid var(--line);overflow:hidden}
+.lc-bar > i{display:block;height:100%;background:var(--unk);transition:width .22s}
+.lc-bar.ok > i{background:var(--ok)} .lc-bar.warn > i{background:var(--warn)}
+.lc-bar.crit > i{background:var(--crit)}
+.lc-bar.na{border-style:dashed;background:none}
+.lc-f{font-size:11px;color:var(--ink2);line-height:1.55;overflow-wrap:anywhere}
+.lc-f b{color:var(--ink);font-weight:700;font-variant-numeric:tabular-nums}
+
+/* ------------------------------------------------------------------ funnel */
+.fidx{display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;
+  border-radius:50%;background:var(--panel2);border:1px solid var(--line);
+  font-size:9.5px;font-weight:750;color:var(--muted);margin-right:7px;flex:0 0 auto;
+  font-variant-numeric:tabular-nums}
+.funnel-step .fs-n{display:flex;align-items:center;min-width:0}
+.funnel-step .fs-n span.t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fconn{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding-left:34px;
+  font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+.fconn b{color:var(--ink2);font-weight:700}
+.fconn.warn b{color:var(--warn)} .fconn.crit b{color:var(--crit)}
+.fconn .arw{color:var(--muted)}
+.ffoot{display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;padding-top:8px;
+  border-top:1px solid var(--line2);font-size:11.5px;color:var(--muted)}
+.ffoot b{color:var(--ink);font-weight:700;font-variant-numeric:tabular-nums}
+
+/* ------------------------------------------------------------- stage table */
+.mpill{display:inline-block;font-family:var(--mono);font-size:9.5px;font-weight:700;
+  letter-spacing:.04em;padding:1px 6px;border-radius:5px;color:var(--ink2);
+  background:var(--panel2);border:1px solid var(--line);margin-right:6px}
+.cchip{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:10.5px;
+  padding:2px 7px;border-radius:6px;background:var(--panel2);border:1px solid var(--line);
+  color:var(--ink2);white-space:nowrap;font-variant-numeric:tabular-nums}
+.cchip::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--unk);flex:0 0 auto}
+.cchip.ok::before{background:var(--ok)}
+.cchip.warn::before{background:var(--warn)}
+.cchip.crit::before{background:var(--crit)}
+.cchip b{color:var(--ink);font-weight:700}
+.cchips{display:flex;gap:6px;flex-wrap:wrap;min-width:0}
+.dblk{display:flex;flex-direction:column;gap:7px;min-width:0}
+.dlbl{font-size:9.5px;font-weight:750;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+.frow{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;font-size:11.5px;color:var(--ink2)}
+.frow .fk{color:var(--muted);min-width:132px;flex:0 0 auto}
+.frow b{color:var(--ink);font-weight:700;font-variant-numeric:tabular-nums}
+.pre{font-family:var(--mono);font-size:10.5px;line-height:1.75;color:var(--ink2);
+  background:var(--bg2);border:1px solid var(--line);border-radius:9px;padding:9px 11px;
+  white-space:pre-wrap;overflow-wrap:anywhere}
+.callout{font-size:11.5px;line-height:1.6;color:var(--ink2);background:var(--panel2);
+  border:1px solid var(--line);border-left:3px solid var(--warn);border-radius:9px;padding:9px 11px}
+.callout b{color:var(--ink);font-weight:700;font-variant-numeric:tabular-nums}
+.callout.plain{border-left-color:var(--line)}
+
+/* --------------------------------------------------------------- responsive */
+/* six cards read as a clean 3 x 2 block once there is room for three columns;
+   auto-fit takes over below that (2-up, then 1-up) */
+@media (min-width:1000px){ .jgrid{grid-template-columns:repeat(3,minmax(0,1fr))} }
+@media (max-width:1024px){
+  .jgrid{grid-template-columns:repeat(auto-fit,minmax(248px,1fr))}
+  .jc-v{font-size:26px}
+}
+@media (max-width:768px){
+  .jgrid{grid-template-columns:repeat(auto-fit,minmax(238px,1fr))}
+  .jc-v{font-size:24px}
+  .fconn{padding-left:0}
+  .frow .fk{min-width:0;flex:1 0 100%}
+}
+@media (prefers-reduced-motion:reduce){
+  .jl-b > i,.lc-bar > i{transition:none}
+}
+</style>
+</head>
+
+<body data-shell="page"
+      data-title="Customer Journey"
+      data-subtitle="computed from: L3 gateway rows &middot; L1 synthetic journey &middot; no APM &middot; Aug 23 &ndash; 29, 2027"
+      data-ranges="1h,4h,12h,24h,7d"
+      data-range="1h"
+      data-lineage="L3 gateway rows tagged route&#8594;journey for the backend lens, plus the L1 synthetic journey (per-step probe_success) for the completion lens. The client-stability lens needs a self-hosted crash SDK and is not collected here - the card shows 2 of 3 lenses and says so.">
+
+<div id="pulse-main">
+
+  <!-- ============================================================ CONTROLS -->
+  <div class="card">
+    <div class="toolbar">
+      <span class="clbl">Window</span>
+      <div class="chips" id="wchips" role="group" aria-label="Analysis window"></div>
+      <span class="csep" aria-hidden="true"></span>
+      <span class="note" id="wnote"></span>
+      <div class="sp"></div>
+      <a class="tlink" id="jflow" href="../index.html">Open on the flow map</a>
+    </div>
+    <p class="note" id="wcmp"></p>
+  </div>
+
+  <!-- incident strip — only when an incident window overlaps the analysis window -->
+  <div class="card" id="incbox" hidden>
+    <div class="jinc">
+      <span class="pill" id="incpill"></span>
+      <span class="jit" id="inctxt"></span>
+      <span class="jsp"></span>
+      <a class="tlink" id="incflow" href="../index.html">Open on the flow map</a>
+      <a class="tlink" id="incticket" href="../incident-trace.html" hidden>Incident trace</a>
+    </div>
+  </div>
+
+  <!-- =============================================================== TILES -->
+  <section class="sect">
+    <h2 id="tilesh">Selected journey</h2>
+    <span class="sh" id="tilessh">every figure is read from the journey payload</span>
+  </section>
+  <section class="tiles" id="tiles" aria-label="Headline figures for the selected journey"></section>
+
+  <!-- ============================================================ JOURNEYS -->
+  <section class="sect">
+    <h2>Journeys</h2>
+    <span class="sh">customer-perceived = the worst collected lens &middot; select a card to inspect</span>
+    <span class="sp"></span>
+    <span class="sh"><b id="jusers">&mdash;</b> active users &middot; <span id="jwin"></span></span>
+  </section>
+  <div class="jgrid" id="cards"></div>
+
+  <!-- ====================================================== HOW CALCULATED -->
+  <section class="sect">
+    <h2 id="calch">How the number is calculated</h2>
+    <span class="sh">three-lens model &middot; customer-perceived = worst lens</span>
+    <span class="sp"></span>
+    <a class="tlink" id="lnkkpi" href="kpi-live.html">KPI Live for this journey</a>
+    <a class="tlink" id="lnkerr" href="errors.html">Errors Explorer</a>
+  </section>
+  <div class="card">
+    <div class="grid3 even" id="lenses"></div>
+    <p class="note" id="lensformula"></p>
+    <p class="note" id="lensnote"></p>
+  </div>
+
+  <!-- =============================================== WHERE USERS DROP OFF -->
+  <section class="sect">
+    <h2>Where users drop off</h2>
+    <span class="sh">session counts from the L1 synthetic journey, not API calls</span>
+  </section>
+  <div class="card">
+    <div class="funnel" id="funnel"></div>
+    <div class="ffoot" id="funnelfoot"></div>
+  </div>
+
+  <!-- ============================================================ BY STAGE -->
+  <section class="sect">
+    <h2>By stage &mdash; where is the user stuck</h2>
+    <span class="sh">one row per API step &middot; open a row for its status codes, formulas and comparison window</span>
+    <span class="sp"></span>
+    <button class="btn" type="button" id="expall">Expand all</button>
+    <button class="btn" type="button" id="colall">Collapse all</button>
+  </section>
+  <div class="card pad0">
+    <div class="twrap" style="--tmax:560px">
+      <table class="ptable" style="--tmin:1000px">
+        <thead>
+          <tr>
+            <th>Stage</th><th>API</th>
+            <th class="num">Strict (2xx)</th><th class="num">Platform (non-5xx)</th>
+            <th class="num">&Delta; vs previous day</th>
+            <th class="num">p95</th><th class="num">p99</th>
+            <th class="num">Failed / total</th><th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="strows"></tbody>
+      </table>
+    </div>
+  </div>
+  <p class="note" id="stnote"></p>
+
+  <!-- ============================================================== LEGEND -->
+  <div class="card">
+    <header><h3>Severity and comparison</h3><span class="ch">how a card earns its colour</span></header>
+    <div class="legend" id="sevleg"></div>
+    <p class="note" id="cmpnote"></p>
+    <p class="note" id="modelnote"></p>
+    <p class="note" id="disc"></p>
+  </div>
+
+</div><!-- /#pulse-main -->
+
+<!-- ===================================================== LOAD ORDER ======= -->
+<script src="../data/manifest.js"></script>
+<script src="../data/rcameta.js"></script>
+<script src="../data/tickets.js"></script>
+<script src="../data/registry.js"></script>
+<script src="../data/spine.js"></script>
+<script src="../assets/synth.js"></script>
+<script src="../assets/charts.js"></script>
+<script src="../assets/shell.js"></script>
+
+<script>
+/* ------------------------------------------------------------------- page */
+(function () {
+  "use strict";
+  var C = window.PULSE_CHARTS, S = window.PULSE_SHELL, SY = window.PULSE_SYNTH;
+  var REG = window.PULSE_REG, D = window.ADEPTIO_DATA || {};
+  var TICKETS = (window.ADEPTIO_TICKETS && window.ADEPTIO_TICKETS.byWindow) || {};
+  var esc = C.esc;
+  function $(id) { return document.getElementById(id); }
+  function has(v) { return v !== null && v !== undefined; }
+
+  var PILL = { ok: 'OK', warn: 'At risk', crit: 'Critical', unk: 'No data' };
+  var PF   = { ok: 'pass', warn: 'part', crit: 'fail', unk: 'na' };
+  /* latBand() can return "severe", which the shared tile has no colour for -
+     fold it onto crit so a 4x-threshold p95 can never render as neutral ink */
+  var BAND = { ok: 'ok', warn: 'warn', crit: 'crit', severe: 'crit', unk: 'unk' };
+
+  /* the incident windows keep their letters as identity (INC, INCMETA and
+     ADEPTIO_TICKETS.byWindow are all keyed on them); these are only the names
+     a reader sees. incShort() is the compact form the journey cards use — the
+     card grid is 238px at its narrowest and the pill sits beside a figure. The
+     descriptive name is printed from the payload's own `label` field and is
+     never prefixed here. */
+  function incLabel(key) { return 'WK34 · Incident ' + key; }
+  function incShort(key) { return 'W34·' + key; }
+
+  /* ------------------------------------------------------ analysis windows
+     The top-bar range chips answer "how is it now". Two story windows answer
+     "what did it look like when it broke" and "what does a collector gap do
+     to this screen" - the second is the only way this page can show the
+     provisional badge and the NO DATA state, both of which the payload
+     produces only inside the Aug 26 hole. Both are read from the shared model
+     (manifest INC, registry gap), never hardcoded here. */
+  var INC = D.INC || {}, INCMETA = D.INCMETA || {}, GAP = REG.gap || null;
+  var WINS = [{ key: 'range', label: 'Selected range' }];
+  if (INC.F) {
+    WINS.push({ key: 'F', t0: INC.F[0], t1: INC.F[INC.F.length - 1],
+                label: 'Core outage', sub: incLabel('F') + ' — ' + (INCMETA.F || ['F'])[0] });
+  }
+  if (GAP) {
+    WINS.push({ key: 'gap', t0: GAP.t0, t1: GAP.t1,
+                label: 'Collector gap', sub: GAP.label + ' - ' + GAP.svc });
+  }
+  function winOf(key) {
+    for (var i = 0; i < WINS.length; i++) if (WINS[i].key === key && WINS[i].t0 != null) return WINS[i];
+    return null;
+  }
+
+  var state = { j: null, win: 'range', open: {} };
+
+  /* ------------------------------------------------------------- the payload */
+  function payload() {
+    var w = winOf(state.win);
+    return w ? SY.journeys({ t0: w.t0, t1: w.t1 }) : SY.journeys(S.getRange() || '1h');
+  }
+  function cardOf(d) {
+    var i;
+    for (i = 0; i < d.cards.length; i++) if (d.cards[i].key === state.j) return d.cards[i];
+    return d.cards[0];
+  }
+
+  /* ======================================================== window controls */
+  function renderWindows(d) {
+    var h = '', i;
+    for (i = 0; i < WINS.length; i++) {
+      var w = WINS[i], on = state.win === w.key;
+      h += '<button class="chip' + (on ? ' on' : '') + '" type="button" data-w="' + esc(w.key) +
+           '" aria-pressed="' + (on ? 'true' : 'false') + '">' + esc(w.label) + '</button>';
+    }
+    $('wchips').innerHTML = h;
+
+    var act = winOf(state.win);
+    $('wnote').innerHTML = '<b class="mono">' + esc(d.range.label) + '</b>' +
+      (act ? ' &middot; ' + esc(act.sub || '') : ' &middot; live range chips above');
+    $('jwin').textContent = d.range.label;
+    $('jflow').href = '../index.html#t=' + d.range.t1;
+    $('jflow').textContent = 'Open on the flow map at ' + SY.dstamp(d.range.t1);
+
+    $('wcmp').innerHTML = d.comparisonWindow
+      ? 'Every &Delta; on this page compares the same clock window one day earlier &mdash; <b>' +
+        esc(d.comparisonWindow.label) + '</b>. ' + esc(d.comparisonNote)
+      : 'This window is the whole seeded week, so there is no earlier window to compare against &mdash; ' +
+        'every &Delta; says so in words rather than printing a 0.';
+  }
+
+  /* ============================================================== incident */
+  function renderIncident(card) {
+    var inc = card.incident, box = $('incbox');
+    if (!inc) { box.hidden = true; return; }
+    box.hidden = false;
+    $('incpill').className = 'pill ' + (inc.severity || 'warn');
+    $('incpill').textContent = incLabel(inc.key);
+    $('inctxt').innerHTML = '<b>' + esc(inc.label) + '</b> &middot; peak ' + esc(inc.peakLabel) +
+      ' &middot; overlaps this window, so every card below carries it';
+    $('incflow').href = '../index.html#t=' + inc.peak;
+    $('incflow').textContent = 'Open on the flow map at ' + inc.peakLabel;
+    var tk = inc.ticket || TICKETS[inc.key] || null;
+    $('incticket').hidden = !tk;
+    if (tk) {
+      $('incticket').href = '../incident-trace.html#' + tk;
+      $('incticket').textContent = 'Incident trace ' + tk;
+    }
+  }
+
+  /* ================================================================= tiles */
+  function tile(cls, key, label, value, sub, foot) {
+    return '<div class="tile ' + cls + '" data-k="' + key + '"><div class="label"><span>' + label + '</span></div>' +
+           '<div class="value">' + value + '</div>' +
+           '<div class="sub">' + sub + '</div>' +
+           '<div class="tilefoot">' + (foot || '') + '</div></div>';
+  }
+  function renderTiles(d, c) {
+    var nd = c.state === 'unknown';
+    var prov = c.provisional ? '<span class="badge provisional">Provisional</span>' : '';
+    $('tilesh').textContent = 'Selected journey — ' + c.name;
+    $('tilessh').textContent = c.svc + ' · ' + c.deploy + ' · every figure read from the journey payload';
+
+    var h = '';
+    h += tile(nd ? 'unk' : c.status, 'cp', 'Customer-perceived',
+      nd ? 'NO DATA' : esc(SY.fmtPct(c.customerPerceived, 1)),
+      'worst of ' + c.lensCount + ' collected lenses &middot; <b>' + esc(d.range.label) + '</b>',
+      '<span class="pf ' + PF[nd ? 'unk' : c.status] + '">' + PILL[nd ? 'unk' : c.status] + '</span>' + prov);
+    h += tile('plain', 'users', 'Active users', esc(SY.fmtNum(d.activeUsers)),
+      'sessions entering a journey in this window', '');
+    h += tile(c.failedRequests > 0 ? 'warn' : 'ok', 'failed', 'Failed requests',
+      esc(SY.fmtNum(c.failedRequests)),
+      esc(SY.fmtNum(c.businessFail)) + ' business &middot; ' + esc(SY.fmtNum(c.technicalFail)) +
+      ' technical &middot; of ' + esc(SY.fmtNum(c.requests)) + ' requests',
+      c.incident ? '<span class="pill ' + esc(c.incident.severity) + '" title="' +
+                     esc(incLabel(c.incident.key) + ' — ' + c.incident.label) + '">' +
+                     esc(incShort(c.incident.key)) + '</span>'
+                 : (c.ack ? '' : '<span class="badge">Unacknowledged</span>'));
+    var lb = SY.latBand(c.p95, c.T_ms);
+    h += tile(BAND[lb] || 'plain', 'p95', 'Latency p95', esc(SY.fmtMs(c.p95)),
+      'p99 ' + esc(SY.fmtMs(c.p99)) + ' &middot; threshold T <b>' + esc(SY.fmtMs(c.T_ms)) + '</b>',
+      lb === 'severe' ? '<span class="pf fail">Severe</span>'
+                      : (lb === 'crit' ? '<span class="pf fail">Over T</span>' : ''));
+    h += tile(nd ? 'unk' : (c.provisional ? 'warn' : 'ok'), 'cov', 'Window coverage',
+      esc(SY.fmtPct(c.coverage * 100, 1)),
+      'API lens ' + esc(SY.fmtPct(c.apiCoverage * 100, 1)) + ' &middot; UX lens ' +
+      esc(SY.fmtPct(c.uxCoverage * 100, 1)),
+      nd ? '<span class="pf na">No data</span>' : (prov || '<span class="pf pass">Observed</span>'));
+    $('tiles').innerHTML = h;
+  }
+
+  /* ========================================================= journey cards */
+  function lensRow(k, val, band) {
+    if (!has(val)) {
+      return '<span class="jl na" data-l="' + k + '"><span class="jl-k">' + k + '</span>' +
+             '<span class="jl-b"></span><span class="jl-v">not collected</span></span>';
+    }
+    var w = Math.max(0, Math.min(100, val));
+    return '<span class="jl ' + band + '" data-l="' + k + '"><span class="jl-k">' + k + '</span>' +
+           '<span class="jl-b"><i style="width:' + w.toFixed(1) + '%"></i></span>' +
+           '<span class="jl-v">' + esc(SY.fmtPct(val, 1)) + '</span></span>';
+  }
+  /* a null delta means there is no earlier window in this spine to compare
+     against - it is said in words, never printed as a bare dash or as 0.00pp */
+  function deltaSpan(pp) {
+    if (!has(pp)) return '<span class="delta flat">no comparison</span>';
+    var cls = pp > 0 ? 'good' : (pp < 0 ? 'bad' : 'flat');
+    return '<span class="delta ' + cls + '">' + esc(SY.fmtDelta(pp, 2)) + '</span>';
+  }
+  function renderCards(d) {
+    var h = '', i;
+    for (i = 0; i < d.cards.length; i++) {
+      var c = d.cards[i], nd = c.state === 'unknown', on = c.key === state.j;
+      var band = nd ? 'unk' : c.status;
+      var mark = c.incident
+        ? '<span class="pill ' + esc(c.incident.severity) + '" title="' +
+            esc(incLabel(c.incident.key) + ' — ' + c.incident.label) + '">' +
+            esc(incShort(c.incident.key)) + '</span>'
+        : (c.ack ? '' : (c.failedRequests > 0
+            ? '<span class="badge">Unacknowledged</span>'
+            : '<span class="jc-frs">no incident</span>'));
+
+      h += '<div class="jcell">' +
+        '<button type="button" class="jcard b-' + band + '" data-j="' + esc(c.key) +
+          '" aria-pressed="' + (on ? 'true' : 'false') + '">' +
+          '<span class="jc-h"><span class="jc-n">' + esc(c.name) + '</span>' +
+            '<span class="pill ' + band + '">' + PILL[band] + '</span>' +
+            (c.provisional ? '<span class="badge provisional">Provisional</span>' : '') + '</span>' +
+          '<span class="jc-d">' + esc(c.deploy) + '</span>' +
+          '<span class="jc-big"><span class="jc-v ' + band + (nd ? ' nd' : '') + '">' +
+            (nd ? 'NO DATA' : esc(SY.fmtPct(c.customerPerceived, 1))) + '</span>' +
+            deltaSpan(c.delta) + '</span>' +
+          '<span class="jc-l">Customer-perceived<span class="badge lens">' +
+            c.lensCount + ' of ' + c.lensTotal + ' lenses</span></span>' +
+          '<span class="jlens">' +
+            lensRow('API', c.lenses.api, SY.journeyBand(c.lenses.api, null)) +
+            lensRow('UX',  c.lenses.ux,  SY.journeyBand(c.lenses.ux, null)) +
+            lensRow('APP', c.lenses.app, 'unk') +
+          '</span>' +
+          '<span class="jc-lat">p95 <b>' + esc(SY.fmtMs(c.p95)) + '</b> &middot; p99 <b>' +
+            esc(SY.fmtMs(c.p99)) + '</b></span>' +
+          '<span class="jc-f"><span class="jc-fr">' +
+            '<span class="jc-frl">Failed requests</span>' +
+            '<span class="jc-frv">' + esc(SY.fmtNum(c.failedRequests)) + '</span>' +
+            '<span class="jc-frs">' + esc(d.range.label) + '</span></span>' +
+            '<span class="jsp"></span>' + mark + '</span>' +
+          '<span class="jc-cta">' + (on ? 'Showing details below' : 'Click to inspect') + '</span>' +
+        '</button>';
+
+      /* incident-coloured cards get the map / ticket pair beside the card,
+         outside the button so the links stay real links */
+      if (c.incident) {
+        var tk = c.incident.ticket || TICKETS[c.incident.key] || null;
+        h += '<div class="jlinks">' +
+          '<a class="tlink" href="../index.html#t=' + c.incident.peak + '">Open on the flow map at ' +
+            esc(c.incident.peakLabel) + '</a>' +
+          (tk ? '<a class="tlink" href="../incident-trace.html#' + esc(tk) + '">' + esc(tk) + '</a>' : '') +
+        '</div>';
+      }
+      h += '</div>';
+    }
+    $('cards').innerHTML = h;
+  }
+
+  /* ============================================================ lens strip */
+  function lensCard(title, sub, val, band, foot, na) {
+    var w = has(val) ? Math.max(0, Math.min(100, val)) : 0;
+    return '<div class="card flat lcard">' +
+      '<div class="lc-h"><span class="lc-t">' + title + '</span>' +
+        '<span class="lc-v ' + (na ? 'unk' : band) + '">' +
+          (na ? 'not collected' : (has(val) ? esc(SY.fmtPct(val, 1)) : 'NO DATA')) + '</span></div>' +
+      '<div class="lc-s">' + sub + '</div>' +
+      '<div class="lc-bar ' + (na || !has(val) ? 'na' : band) + '">' +
+        (na || !has(val) ? '' : '<i style="width:' + w.toFixed(1) + '%"></i>') + '</div>' +
+      '<div class="lc-f">' + foot + '</div></div>';
+  }
+  function renderLenses(d, c) {
+    var steps = c.funnel.steps, first = steps[0], last = steps[steps.length - 1];
+    $('calch').textContent = 'How the ' + c.name + ' number is calculated';
+    $('lnkkpi').href = 'kpi-live.html#j=' + c.key + '&r=' + (S.getRange() || '1h');
+    $('lnkerr').href = 'errors.html';
+
+    var h = '';
+    h += lensCard('Backend', 'L3 gateway rows tagged route&#8594;journey &middot; strict 2xx ratio',
+      c.lenses.api, SY.journeyBand(c.lenses.api, null),
+      '<b>' + esc(SY.fmtNum(c.requests)) + '</b> requests &middot; <b>' + esc(SY.fmtNum(c.failedRequests)) +
+      '</b> failed (' + esc(SY.fmtNum(c.businessFail)) + ' business &middot; ' +
+      esc(SY.fmtNum(c.technicalFail)) + ' technical)', false);
+    h += lensCard('User completion', 'L1 synthetic journey &middot; sessions that reached the last step',
+      c.lenses.ux, SY.journeyBand(c.lenses.ux, null),
+      '<b>' + esc(SY.fmtNum(last.sessions)) + '</b> of <b>' + esc(SY.fmtNum(first.sessions)) +
+      '</b> sessions reached &ldquo;' + esc(last.label) + '&rdquo;', false);
+    h += lensCard('Client stability', 'crash-free sessions &middot; needs a self-hosted crash SDK in the app build',
+      null, 'unk',
+      'No lane collects this without an agent in the app, so it is reported as not collected &mdash; ' +
+      'never as 0&nbsp;%.', true);
+    $('lenses').innerHTML = h;
+
+    var nd = c.state === 'unknown';
+    $('lensformula').innerHTML = nd
+      ? 'Customer-perceived = <b>NO DATA</b> &mdash; coverage over this window is ' +
+        esc(SY.fmtPct(c.coverage * 100, 1)) + ', below the 50&nbsp;% floor, so the payload returns null ' +
+        'for every lens rather than a zero that would read as a total outage.'
+      : 'Customer-perceived = min(API ' + esc(SY.fmtPct(c.lenses.api, 1)) + ', user completion ' +
+        esc(SY.fmtPct(c.lenses.ux, 1)) + ') = <b>' + esc(SY.fmtPct(c.customerPerceived, 1)) + '</b>' +
+        ' &middot; ' + esc(SY.fmtDelta(c.delta, 2)) + ' against ' +
+        (d.comparisonWindow ? esc(d.comparisonWindow.label) : 'no earlier window');
+    $('lensnote').textContent = c.lensNote;
+  }
+
+  /* ================================================================ funnel */
+  function renderFunnel(c) {
+    var steps = c.funnel.steps, base = steps.length ? steps[0].sessions : 0, h = '', i;
+    for (i = 0; i < steps.length; i++) {
+      var st = steps[i];
+      if (i > 0) {
+        var band = st.biggestDrop ? (st.dropPct >= 20 ? 'crit' : 'warn') : '';
+        h += '<div class="fconn ' + band + '"><span class="arw">&darr;</span>' +
+             '<b>' + esc(SY.fmtPct(st.reachedPct, 1)) + '</b> reached the next step' +
+             (st.biggestDrop ? '<span class="badge">Biggest drop</span>' : '') + '</div>';
+      }
+      var cls = st.biggestDrop ? (st.dropPct >= 20 ? ' crit' : ' warn') : '';
+      var kind = st.kind === 'api' ? 'API: ' + st.api
+               : (st.kind === 'sms' ? 'off-app step · screen: ' + st.screen
+                                    : 'screen: ' + st.screen);
+      var w = base ? (st.sessions / base) * 100 : 0;
+      h += '<div class="funnel-step' + cls + '" data-fi="' + i + '">' +
+        '<div class="fs-l"><div class="fs-n"><span class="fidx">' + (i + 1) + '</span>' +
+          '<span class="t">' + esc(st.label) + '</span></div>' +
+          '<div class="fs-k">' + esc(kind) + '</div></div>' +
+        '<div class="fs-bar"><i style="width:' + w.toFixed(1) + '%"></i></div>' +
+        '<div class="fs-v"><b>' + esc(SY.fmtNum(st.sessions)) + '</b> sessions' +
+          (st.dropPct ? ' <span class="drop">&minus;' + esc(SY.fmtPct(st.dropPct, 1)) + '</span>' : '') +
+        '</div></div>';
+    }
+    $('funnel').innerHTML = h;
+
+    var bd = c.funnel.biggestDrop;
+    $('funnelfoot').innerHTML =
+      'Overall completion <b>' + (has(c.funnel.completion) ? esc(SY.fmtPct(c.funnel.completion, 1)) : 'NO DATA') +
+      '</b> <span class="jdash">(' + esc(SY.fmtNum(steps[steps.length - 1].sessions)) + ' of ' +
+      esc(SY.fmtNum(base)) + ' sessions)</span>' +
+      (bd ? '<span>Biggest drop-off <b>' + esc(SY.fmtPct(bd.pct, 1)) + '</b> at <b>' + esc(bd.step) +
+            '</b></span>' : '') +
+      '<span class="jdash">the completion figure is the UX lens above &mdash; the same number, ' +
+      'not a second measurement</span>';
+  }
+
+  /* ============================================================ stage rows */
+  function codeRows(sb) {
+    var keys = [], k;
+    for (k in sb) {
+      if (!Object.prototype.hasOwnProperty.call(sb, k)) continue;
+      if (!(sb[k] > 0)) continue;
+      keys.push(k);
+    }
+    keys.sort(function (a, b) { return (+a) - (+b); });
+    return keys.map(function (code) {
+      var n = +code;
+      return { code: code, value: sb[code], key: n < 300 ? 'ok' : (n < 500 ? 'warn' : 'crit') };
+    });
+  }
+  function methodOf(api) { var i = String(api).indexOf(' '); return i < 0 ? '' : api.slice(0, i); }
+  function pathOf(api)   { var i = String(api).indexOf(' '); return i < 0 ? api : api.slice(i + 1); }
+
+  function stageDetail(d, c, s) {
+    var rows = codeRows(s.statusBreakdown), nd = s.state === 'unknown';
+    /* the shared status bar owns the share arithmetic (it is geometry); the
+       counts are printed through the page's own number format so they match
+       every other figure on the screen */
+    var bar = rows.length
+      ? C.statusBar(rows.map(function (r) { return { key: r.key, label: r.code, value: r.value }; }),
+                    { tall: true, legend: true, fmt: SY.fmtNum, label: 'status codes for ' + s.api })
+      : '<div class="empty">No observed requests in this window &mdash; the collector was down, not the service.</div>';
+
+    var pre = 'lane      L3 · gateway access log\n' +
+              'filter    route_template = "' + s.api + '"\n' +
+              '          ts_utc_ms within ' + d.range.label + '\n' +
+              'strict    = countIf(status < 300) / count()\n' +
+              'platform  = countIf(status < 500) / count()\n' +
+              'p95/p99   = volume-weighted mean of the per-bucket percentile';
+
+    var note = nd
+      ? 'This stage sits inside the ' + (GAP ? GAP.label : 'collector') + ' gap: <b>' +
+        esc(SY.fmtPct(s.coverage * 100, 1)) + '</b> coverage, so strict and platform read NO DATA. ' +
+        'A zero here would claim a total failure that never happened.'
+      : '<b>' + esc(SY.fmtNum(s.failed)) + '</b> of <b>' + esc(SY.fmtNum(s.total)) +
+        '</b> requests did not return 2xx. Strict counts every non-2xx; platform counts only 5xx &mdash; ' +
+        'the distance between <b>' + esc(SY.fmtPct(s.strict, 2)) + '</b> and <b>' +
+        esc(SY.fmtPct(s.platform, 2)) + '</b> is the business population (4xx and domain declines carried ' +
+        'on HTTP 200), which is a user or policy outcome, not a platform failure.';
+
+    return '<div class="dgrid" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr))">' +
+      '<div class="dblk"><div class="dlbl">Status code breakdown</div>' + bar +
+        '<div class="frow"><span class="fk">Total requests</span><b>' + esc(SY.fmtNum(s.total)) + '</b></div>' +
+        '<div class="dlbl">When it fails</div>' +
+        '<p class="note">' + esc(s.whenItFails || '—') + '</p>' +
+      '</div>' +
+      '<div class="dblk"><div class="dlbl">Formulas</div>' +
+        '<div class="frow"><span class="fk">Strict (2xx only)</span><b>' +
+          (nd ? 'NO DATA' : esc(SY.fmtPct(s.strict, 2))) + '</b></div>' +
+        '<div class="frow"><span class="fk">Platform (non-5xx)</span><b>' +
+          (nd ? 'NO DATA' : esc(SY.fmtPct(s.platform, 2))) + '</b></div>' +
+        '<div class="frow"><span class="fk">&Delta; vs previous day</span><b>' +
+          esc(SY.fmtDelta(s.wow, 2)) + '</b></div>' +
+        '<div class="frow"><span class="fk">p95 &middot; p99</span><b>' + esc(SY.fmtMs(s.p95)) +
+          '</b> &middot; <b>' + esc(SY.fmtMs(s.p99)) + '</b></div>' +
+        '<div class="dlbl">Time window</div>' +
+        '<div class="frow"><span class="fk">now</span><b>' + esc(d.range.label) + '</b></div>' +
+        '<div class="frow"><span class="fk">vs</span><b>' +
+          (s.prevLabel ? esc(s.prevLabel) : 'no earlier window') + '</b>' +
+          (has(s.sameHourLastWeek) ? '<span class="cchip ' +
+            SY.journeyBand(s.sameHourLastWeek, null) + '">strict <b>' +
+            esc(SY.fmtPct(s.sameHourLastWeek, 2)) + '</b></span>' : '') + '</div>' +
+        '<p class="note">The reference screen labels this &ldquo;same hour, 7 days ago&rdquo;. The seeded ' +
+          'spine is exactly one week, so the honest comparison is the same clock window on the previous day ' +
+          '&mdash; printed above as it really is.</p>' +
+      '</div>' +
+      '<div class="dblk"><div class="dlbl">Computed from</div>' +
+        '<div class="pre">' + esc(pre) + '</div>' +
+        '<div class="frow"><a class="tlink" href="../index.html#t=' + d.range.t1 +
+          '">Open on the flow map at ' + esc(SY.dstamp(d.range.t1)) + '</a></div>' +
+      '</div>' +
+      '<div class="dblk" style="grid-column:1/-1"><div class="callout' + (nd ? ' plain' : '') + '">' +
+        note + '</div></div>' +
+    '</div>';
+  }
+
+  function renderStages(d, c) {
+    var h = '', i;
+    for (i = 0; i < c.byStage.length; i++) {
+      var s = c.byStage[i], nd = s.state === 'unknown';
+      var band = nd ? 'unk' : s.severity;
+      var id = 'stg' + i, open = !!state.open[s.step];
+      h += '<tr class="row-toggle' + (open ? ' open' : '') + '" data-row="' + id + '" data-step="' + s.step +
+        '" tabindex="0" role="button" aria-expanded="' + (open ? 'true' : 'false') + '">' +
+        '<td class="nm"><span class="rt-c">&#9656;</span>' + esc(s.label) +
+          '<span class="sub">screen: ' + esc(s.screen) + '</span></td>' +
+        '<td class="mono"><span class="mpill">' + esc(methodOf(s.api)) + '</span>' + esc(pathOf(s.api)) + '</td>' +
+        '<td class="num c-strict">' + (nd ? 'NO DATA' : esc(SY.fmtPct(s.strict, 2))) + '</td>' +
+        '<td class="num c-plat">' + (nd ? 'NO DATA' : esc(SY.fmtPct(s.platform, 2))) + '</td>' +
+        '<td class="num c-wow">' + esc(SY.fmtDelta(s.wow, 2)) +
+          '<span class="sub">' + (s.prevLabel ? esc(s.prevLabel) : 'no earlier window') + '</span></td>' +
+        '<td class="num c-p95">' + esc(SY.fmtMs(s.p95)) + '</td>' +
+        '<td class="num c-p99">' + esc(SY.fmtMs(s.p99)) + '</td>' +
+        '<td class="num c-fail">' + esc(SY.fmtNum(s.failed)) + ' / ' + esc(SY.fmtNum(s.total)) + '</td>' +
+        '<td><span class="pill ' + band + '">' + PILL[band] + '</span>' +
+          (s.provisional ? ' <span class="badge provisional">Provisional</span>' : '') + '</td>' +
+        '</tr>' +
+        '<tr class="row-detail' + (open ? ' open' : '') + '" id="' + id + '"><td colspan="9">' +
+          stageDetail(d, c, s) + '</td></tr>';
+    }
+    $('strows').innerHTML = h;
+    $('stnote').innerHTML = 'Strict and platform are the two readings the reference screen prints side by ' +
+      'side, and they disagree on purpose: strict is what the customer felt, platform is what the estate ' +
+      'was responsible for. Stage rows list the API steps of the funnel only &mdash; screen and off-app ' +
+      'steps carry no HTTP status of their own.';
+  }
+
+  /* ================================================================ legend */
+  function renderLegend(d) {
+    var h = '', i;
+    for (i = 0; i < d.severityLegend.length; i++) {
+      var L = d.severityLegend[i];
+      h += '<span><i class="' + esc(L.band) + '"></i>' + esc(PILL[L.band] || L.band) + ' &middot; ' +
+           esc(L.text) + '</span>';
+    }
+    h += '<span><i class="unk"></i>No data &middot; coverage &lt; 50%, the value is null and never 0%</span>';
+    $('sevleg').innerHTML = h;
+    $('cmpnote').textContent = d.comparisonNote;
+    $('modelnote').textContent = d.model;
+    $('disc').innerHTML = 'Reported window <b class="mono">' + esc(d.range.label) + '</b> &mdash; ' +
+      esc(SY.disclaimer) + '.';
+  }
+
+  /* ================================================================ render */
+  function render() {
+    var d = payload(), c = cardOf(d);
+    state.j = c.key;
+    renderWindows(d);
+    renderIncident(c);
+    renderTiles(d, c);
+    renderCards(d);
+    renderLenses(d, c);
+    renderFunnel(c);
+    renderStages(d, c);
+    renderLegend(d);
+    $('jusers').textContent = SY.fmtNum(d.activeUsers);
+    S.setLineage(SY.lineage('journey') || d.lineage);
+    writeHash();
+  }
+
+  /* --------------------------------------------------------------- deep link
+     Read once on boot, written on every selection. No hashchange listener, so
+     a same-page hash write can never loop. */
+  function readHash() {
+    var parts = String(location.hash || '').replace(/^#/, '').split('&'), i, kv, o = {};
+    for (i = 0; i < parts.length; i++) { kv = parts[i].split('='); if (kv[0]) o[kv[0]] = kv[1] || ''; }
+    if (o.j) state.j = o.j;
+    if (o.w && (o.w === 'range' || winOf(o.w))) state.win = o.w;
+  }
+  function writeHash() {
+    try { location.hash = 'j=' + state.j + '&w=' + state.win; } catch (e) { /* file:// without history */ }
+  }
+
+  /* ---------------------------------------------------------- interactions */
+  $('wchips').addEventListener('click', function (ev) {
+    var t = ev.target;
+    while (t && t !== this && !(t.getAttribute && t.getAttribute('data-w'))) t = t.parentNode;
+    if (!t || t === this) return;
+    state.win = t.getAttribute('data-w');
+    state.open = {};
+    render();
+  });
+
+  $('cards').addEventListener('click', function (ev) {
+    var t = ev.target;
+    while (t && t !== this && !(t.getAttribute && t.getAttribute('data-j'))) t = t.parentNode;
+    if (!t || t === this) return;
+    var key = t.getAttribute('data-j');
+    if (key === state.j) return;
+    state.j = key;
+    state.open = {};
+    render();
+  });
+
+  function toggleRow(tr) {
+    var det = document.getElementById(tr.getAttribute('data-row'));
+    var open = tr.className.indexOf('open') > -1;
+    tr.className = open ? 'row-toggle' : 'row-toggle open';
+    tr.setAttribute('aria-expanded', open ? 'false' : 'true');
+    if (det) det.className = open ? 'row-detail' : 'row-detail open';
+    var step = tr.getAttribute('data-step');
+    if (open) delete state.open[step]; else state.open[step] = 1;
+  }
+  $('strows').addEventListener('click', function (ev) {
+    var t = ev.target;
+    if (t && t.tagName === 'A') return;
+    while (t && t !== this && !(t.className && String(t.className).indexOf('row-toggle') === 0)) t = t.parentNode;
+    if (t && t !== this) toggleRow(t);
+  });
+  $('strows').addEventListener('keydown', function (ev) {
+    if (ev.key !== 'Enter' && ev.key !== ' ') return;
+    var t = ev.target;
+    if (t && t.className && String(t.className).indexOf('row-toggle') === 0) { ev.preventDefault(); toggleRow(t); }
+  });
+  $('expall').addEventListener('click', function () {
+    var rows = $('strows').querySelectorAll('tr.row-toggle'), i;
+    for (i = 0; i < rows.length; i++) if (rows[i].className.indexOf('open') < 0) toggleRow(rows[i]);
+  });
+  $('colall').addEventListener('click', function () {
+    var rows = $('strows').querySelectorAll('tr.row-toggle'), i;
+    for (i = 0; i < rows.length; i++) if (rows[i].className.indexOf('open') > -1) toggleRow(rows[i]);
+  });
+
+  /* a top-bar range chip always means "back to the live range" */
+  S.onRange(function () { state.win = 'range'; state.open = {}; render(); });
+
+  S.ready(function () { readHash(); render(); });
+})();
+</script>
+</body>
+</html>

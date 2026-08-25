@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<link rel="icon" href="data:,"/>
+
+<!-- ===========================================================================
+     ADEPTIO Pulse — menu 7 · SERVICE DEPENDENCIES
+     Built from menus/_template.html. Every figure comes from
+     PULSE_SYNTH.dependencies(svc, range) — the page formats, it never computes.
+     =========================================================================== -->
+
+<title>Service Dependencies &mdash; Adeptio Pulse</title>
+
+<link rel="stylesheet" href="../assets/tokens.css"/>
+<link rel="stylesheet" href="../assets/shell.css"/>
+<link rel="stylesheet" href="../assets/menus.css"/>
+
+<style>
+/* ------------------------------------------------------------- page-local
+   Five additions this screen needs and the shared kit does not carry.
+   Tokens only; status colours are used for status only. -------------------*/
+
+/* 1 · the selected-service card: identity left, the three figures right */
+/* .card is a column flex box; this one lays its two blocks out side by side */
+.depcard{display:flex;flex-direction:row;align-items:flex-start;gap:14px;flex-wrap:wrap}
+.depcard .dc-id{min-width:0;flex:1 1 260px}
+.depcard .dc-n{font-family:var(--mono);font-size:19px;font-weight:700;color:var(--ink);
+  letter-spacing:-.01em;overflow-wrap:anywhere}
+.depcard .dc-d{font-family:var(--mono);font-size:11.5px;color:var(--muted);margin-top:3px;
+  overflow-wrap:anywhere}
+.depcard .dc-m{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:7px}
+.depcard .dc-fig{flex:0 0 auto;text-align:right;margin-left:auto;min-width:0}
+.depcard .dc-v{font-size:27px;font-weight:750;letter-spacing:-.02em;
+  font-variant-numeric:tabular-nums;line-height:1.1}
+.depcard .dc-v u{font-style:normal;text-decoration:none;font-size:12px;font-weight:600;
+  color:var(--muted);margin-left:5px}
+.depcard .dc-s{font-size:11.5px;color:var(--muted);margin-top:4px}
+.depcard .dc-s b{color:var(--ink2);font-weight:650;font-variant-numeric:tabular-nums}
+
+/* 2 · a rate is a status reading, so it takes a status colour */
+.rv{font-variant-numeric:tabular-nums;font-weight:650}
+.rv.ok{color:var(--ok)} .rv.warn{color:var(--warn)}
+.rv.crit{color:var(--crit)} .rv.unk{color:var(--unk)}
+
+/* 3 · badge variants: evidence tag, incident cross-link, selected-caller mark */
+.badge.tech{font-family:var(--mono);letter-spacing:0;text-transform:none;font-weight:600;
+  color:var(--ink2)}
+.badge.inc{text-decoration:none;color:var(--warn);
+  border-color:color-mix(in srgb,var(--warn) 42%,transparent);
+  background:color-mix(in srgb,var(--warn) 12%,transparent)}
+.badge.inc.crit{color:var(--crit);border-color:color-mix(in srgb,var(--crit) 42%,transparent);
+  background:color-mix(in srgb,var(--crit) 12%,transparent)}
+.badge.inc:hover{border-color:currentColor}
+
+/* the dependency cell is two lines: identity, then the host:port actually seen */
+.dline{display:flex;align-items:center;gap:7px;flex-wrap:wrap;min-width:0}
+.dline .dn{font-weight:650;color:var(--ink)}
+.dline .go{color:var(--muted);font-weight:400}
+.ptable tr.row-toggle:hover .dline .go{color:var(--chipink)}
+
+/* links inside a row detail sit on one line and do not inherit the row cursor */
+.dlinks{display:flex;gap:10px;flex-wrap:wrap;align-items:center;font-size:11px}
+.dlinks a{text-decoration:none;border-bottom:1px solid transparent}
+.dlinks a:hover{border-bottom-color:currentColor}
+.callers{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+
+/* 4 · the caller -> callee strip. Built at the container's measured width so
+      label text keeps its true size; status colours mark edge health only. */
+.gwrap{min-width:0;overflow:hidden}
+.gsvg{display:block;max-width:100%;height:auto}
+.gsvg text{font-family:var(--font)}
+.gsvg .gbox{fill:var(--panel2);stroke:var(--line);stroke-width:1}
+.gsvg .gnode.sel .gbox{stroke:var(--chipline);fill:var(--chipbg)}
+.gsvg .gnode{cursor:pointer}
+.gsvg .gnode:hover .gbox{stroke:var(--chipink)}
+.gsvg .gnode:focus{outline:none}
+.gsvg .gnode:focus-visible .gbox{stroke:var(--accent);stroke-width:2}
+.gsvg .gt{fill:var(--ink);font-size:12px;font-weight:650}
+.gsvg .gs{fill:var(--muted);font-size:11px}
+.gsvg .gn{fill:var(--ink2);font-size:11px;font-variant-numeric:tabular-nums}
+.gsvg .ge{fill:none;stroke-linecap:round;opacity:.85}
+.gsvg .ge.ok{stroke:var(--ok)} .gsvg .ge.warn{stroke:var(--warn)}
+.gsvg .ge.crit{stroke:var(--crit)} .gsvg .ge.unk{stroke:var(--unk);stroke-dasharray:4 4}
+.gsvg .gdot{stroke:none}
+.gsvg .gdot.ok{fill:var(--ok)} .gsvg .gdot.warn{fill:var(--warn)}
+.gsvg .gdot.crit{fill:var(--crit)} .gsvg .gdot.unk{fill:var(--unk)}
+
+/* 5 · the estate table marks the rows belonging to the selected caller */
+.ptable tr.mine td{background:var(--chipbg)}
+.ptable tr.mine:hover td{background:var(--chipbg)}
+.ptable td.cl{cursor:pointer}
+.ptable td.cl:hover{color:var(--chipink)}
+
+@media (max-width:768px){
+  .depcard .dc-fig{text-align:left;margin-left:0}
+  .depcard .dc-v{font-size:23px}
+}
+@media (prefers-reduced-motion:reduce){
+  .rt-c,.statusbar > i,.gsvg .gbox{transition:none}
+}
+</style>
+</head>
+
+<body data-shell="page"
+      data-title="Service Dependencies"
+      data-subtitle="computed from: L3 choke-point logs (caller_service, callee_host, callee_port, endpoint, status, upstream_ms) &middot; node registry &middot; conntrack callee_actual_host &middot; no APM &middot; Aug 23 &ndash; 29, 2027"
+      data-ranges="1h,4h,12h,24h"
+      data-range="24h"
+      data-lineage="L3 choke-point logs + node registry + conntrack">
+
+<div id="pulse-main">
+
+  <!-- ===================================================== window / range -->
+  <div class="card">
+    <div class="toolbar">
+      <span class="clbl">Window</span>
+      <span class="mono" id="winlabel">&mdash;</span>
+      <span class="csep"></span>
+      <span class="note" id="wininfo"></span>
+      <div class="sp"></div>
+      <span class="note" id="wininc"></span>
+      <a class="btn" id="winflow" href="../index.html">Open on the flow map</a>
+    </div>
+  </div>
+
+  <!-- ======================================================= service chips -->
+  <section class="sect"><h2>Caller</h2>
+    <span class="sh">trace the call chain to find root cause &mdash; pick the service whose outbound edges you want</span>
+    <span class="sp"></span>
+    <span class="note" id="svcnote"></span>
+  </section>
+  <div class="card">
+    <div class="toolbar">
+      <span class="clbl">Service</span>
+      <div class="chips" id="svcchips" role="group" aria-label="Select the calling service"></div>
+    </div>
+  </div>
+
+  <!-- ======================================================== service card -->
+  <div class="card depcard" id="depcard"></div>
+
+  <!-- ================================================================ tiles -->
+  <section class="tiles" id="tiles" aria-label="Headline figures"></section>
+
+  <!-- ============================================================ the chain -->
+  <section class="sect"><h2>Call chain</h2>
+    <span class="sh">one edge per dependency &middot; thickness = share of outbound calls &middot; colour = 5xx band</span></section>
+  <div class="card">
+    <header><h3 id="gtitle">Chain</h3><span class="ch" id="gsub"></span></header>
+    <div class="gwrap" id="graph"></div>
+    <div class="legend">
+      <span><i class="ok"></i>&lt; 0.1% 5xx</span>
+      <span><i class="warn"></i>&lt; 1%</span>
+      <span><i class="crit"></i>&ge; 1%</span>
+      <span><i class="unk"></i>no evidence &mdash; never 0.00%</span>
+      <span class="csep"></span>
+      <span class="muted" id="glegend"></span>
+    </div>
+  </div>
+
+  <!-- ========================================================= dependencies -->
+  <section class="sect"><h2 id="deptitle">Downstream Dependencies</h2>
+    <span class="sh">click any row to navigate into that dependency</span>
+    <span class="sp"></span>
+    <span class="note" id="depnote"></span>
+  </section>
+
+  <div class="card pad0">
+    <div class="twrap" style="--tmax:60vh">
+      <table class="ptable" style="--tmin:900px">
+        <thead>
+          <tr>
+            <th scope="col">Dependency</th>
+            <th scope="col">Type</th>
+            <th class="num" scope="col">Calls</th>
+            <th class="num" scope="col">5xx</th>
+            <th class="num" scope="col">Error Rate</th>
+            <th class="num" scope="col">Avg Latency</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <div id="none" class="empty" hidden>This service makes no outbound call that a choke-point log can see in this window.</div>
+  </div>
+
+  <!-- ========================================================= estate edges -->
+  <section class="sect"><h2>Every observed edge</h2>
+    <span class="sh">the whole estate &mdash; who else depends on the same callee is who else goes down with it</span>
+    <span class="sp"></span>
+    <span class="note" id="edgenote"></span>
+  </section>
+
+  <div class="card pad0">
+    <div class="twrap" style="--tmax:52vh">
+      <table class="ptable" style="--tmin:880px">
+        <thead>
+          <tr>
+            <th scope="col">Caller</th>
+            <th scope="col">Dependency</th>
+            <th scope="col">Type</th>
+            <th class="num" scope="col">Calls</th>
+            <th class="num" scope="col">Error Rate</th>
+            <th scope="col">Evidence</th>
+          </tr>
+        </thead>
+        <tbody id="erows"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ============================================================= honesty -->
+  <section class="sect"><h2>How an edge is proved</h2>
+    <span class="sh">three rules that keep a dependency map from lying</span></section>
+  <div class="grid3">
+    <div class="card"><header><h3>Every edge carries its technique</h3>
+      <span class="ch">L7 &middot; TCP &middot; flow &middot; probe</span></header>
+      <p class="note" id="n-tech"></p></div>
+    <div class="card"><header><h3>Calls are attributed by share</h3>
+      <span class="ch">callee-side counting</span></header>
+      <p class="note" id="n-share"></p></div>
+    <div class="card"><header><h3>Missing evidence is not health</h3>
+      <span class="ch">the fourth state</span></header>
+      <p class="note" id="n-cov"></p></div>
+  </div>
+
+</div><!-- /#pulse-main -->
+
+<!-- ===================================================== LOAD ORDER =======
+     1 · data      manifest (topology + INC) -> rcameta (owners) -> tickets
+     2 · registry  the account-agnostic reference model  (window.PULSE_REG)
+     3 · spine     the seeded canonical week              (window.PULSE_SPINE)
+     4 · synth     the synthesis API every page reads     (window.PULSE_SYNTH)
+     5 · charts    inline-SVG helpers                     (window.PULSE_CHARTS)
+     6 · shell     builds the frame, fires 'pulse:range'  (window.PULSE_SHELL)
+     ======================================================================== -->
+<script src="../data/manifest.js"></script>
+<script src="../data/rcameta.js"></script>
+<script src="../data/tickets.js"></script>
+<script src="../data/registry.js"></script>
+<script src="../data/spine.js"></script>
+<script src="../assets/synth.js"></script>
+<script src="../assets/charts.js"></script>
+<script src="../assets/shell.js"></script>
+
+<script>
+/* ------------------------------------------------------------------ page */
+(function () {
+  "use strict";
+
+  var C   = window.PULSE_CHARTS,
+      S   = window.PULSE_SHELL,
+      SY  = window.PULSE_SYNTH,
+      REG = window.PULSE_REG,
+      TK  = window.ADEPTIO_TICKETS || { byWindow: {} },
+      DA  = window.ADEPTIO_DATA;
+
+  var esc = C.esc;
+  var $ = function (id) { return document.getElementById(id); };
+
+  /* view state — which caller is selected and which rows are expanded. Every
+     number lives in the payload; selecting a service swaps payloads, it never
+     re-computes anything. */
+  var V    = { svc: 'payment' };
+  var open = {};
+  var ALL  = null;   /* {svcKey: payload} for the current range — 12 payloads  */
+  var cur  = null;   /* the payload on screen                                  */
+  var hashGuard = false;
+
+  /* --------------------------------------------------------------- format */
+  function num(v)  { return v == null ? 'NO DATA' : SY.fmtNum(v); }
+  function ms(v)   { return v == null ? 'NO DATA' : SY.fmtMs(v); }
+  /* a rate under 0.01% printed at 2 dp reads "0.00%" — the false green this
+     page exists to prevent — so small rates keep the precision they have. */
+  function rate(v) {
+    if (v == null) return 'NO DATA';
+    return (v !== 0 && v < 0.01) ? SY.fmtPct(v, 3) : SY.fmtPct(v, 2);
+  }
+  function band(v) { return v == null ? 'unk' : SY.errBand(v); }
+
+  /* incident windows a downstream is coupled to inside the visible range. The
+     coupling is registry metadata (the same map the spine reads); every number
+     stays in the payload. */
+  function incidents(depKey, rng) {
+    var d = REG.byDownstream[depKey] || {}, inc = d.inc || {}, outp = [], k;
+    for (k in DA.INC) {
+      if (!Object.prototype.hasOwnProperty.call(DA.INC, k)) continue;
+      if (!inc[k]) continue;
+      var w = DA.INC[k];
+      if (w[w.length - 1] < rng.t0 || w[0] > rng.t1) continue;
+      var meta = DA.INCMETA[k] || [k, 'warn'];
+      outp.push({ key: k, label: meta[0], sev: meta[1], peak: w[1],
+                  peakLabel: SY.dstamp(w[1]), ticket: (TK.byWindow || {})[k] || null });
+    }
+    outp.sort(function (a, b) {
+      if (a.sev !== b.sev) return a.sev === 'crit' ? -1 : 1;
+      return a.peak - b.peak;
+    });
+    return outp;
+  }
+
+  function incBadges(incs) {
+    var h = '', i;
+    for (i = 0; i < incs.length; i++) {
+      h += '<a class="badge inc' + (incs[i].sev === 'crit' ? ' crit' : '') + '" ' +
+           'href="../index.html#t=' + incs[i].peak + '" ' +
+           'title="' + esc('WK34 · Incident ' + incs[i].key + ' — ' + incs[i].label +
+                           ' · peak ' + incs[i].peakLabel +
+                           ' — open on the flow map at this time') + '">' +
+           esc('W34·' + incs[i].key) + ' ' + esc(incs[i].peakLabel) + '</a>';
+    }
+    return h;
+  }
+
+  /* ---------------------------------------------------------- service chips
+     One chip per service, its dot banded by that service's own 5xx rate and
+     its count taken from that service's payload — not counted by the page. */
+  function chips() {
+    var h = '', i, list = cur.services;
+    for (i = 0; i < list.length; i++) {
+      var k = list[i].key, p = ALL[k], on = k === V.svc;
+      h += '<button class="chip' + (on ? ' on' : '') + '" type="button" data-svc="' + esc(k) + '" ' +
+           'aria-pressed="' + (on ? 'true' : 'false') + '" ' +
+           'title="' + esc(list[i].name + ' · ' + rate(p.card.s5xxRate) + ' 5xx · ' +
+                           p.card.depCount + ' dependencies') + '">' +
+           '<span class="sdot ' + band(p.card.s5xxRate) + '"></span>' + esc(k) +
+           '<span class="n">' + esc(String(p.card.depCount)) + '</span></button>';
+    }
+    $('svcchips').innerHTML = h;
+    $('svcnote').textContent = list.length + ' services · dot = the service’s own 5xx band · ' +
+                               'number = dependencies proved in this window';
+  }
+
+  /* ----------------------------------------------------------- service card */
+  function card(d) {
+    var c = d.card, b = band(c.s5xxRate);
+    var own = REG.bySvc[c.key] || {};
+    var h = '';
+
+    h += '<div class="dc-id">' +
+         '<div class="dc-n">' + esc(c.name) + '</div>' +
+         '<div class="dc-d">' + esc(c.deploy) + '</div>' +
+         '<div class="dc-m">' +
+         '<span class="badge src">' + esc(c.key) + '</span>' +
+         '<span class="badge">' + esc(c.zone) + '</span>' +
+         '<span class="badge tech">node ' + esc(c.node) + '</span>' +
+         (own.critical ? '<span class="pill plain">critical</span>' : '') +
+         (c.owner ? '<span class="note">' + esc(c.owner.name) + ' &middot; ' + esc(c.owner.team) +
+                    ' <span class="badge">mock</span></span>' : '') +
+         '</div></div>';
+
+    h += '<div class="dc-fig">' +
+         '<div class="dc-v rv ' + b + '" id="card-rate">' + esc(rate(c.s5xxRate)) + '<u>5xx</u></div>' +
+         '<div class="dc-s"><b id="card-out">' + esc(SY.fmtCompact(c.outboundCalls)) + '</b> outbound calls' +
+         ' &middot; <b id="card-dep">' + esc(String(c.depCount)) + '</b> dependencies</div>' +
+         '<div class="dc-s">' + esc(num(c.requests)) + ' inbound requests in this window</div>' +
+         '</div>';
+
+    $('depcard').innerHTML = h;
+  }
+
+  /* ---------------------------------------------------------------- tiles */
+  function tiles(d) {
+    var c = d.card, h = '';
+    var worst = null, i;
+    for (i = 0; i < d.rows.length; i++) {
+      if (d.rows[i].errorRate == null) continue;
+      if (!worst || d.rows[i].errorRate > worst.errorRate) worst = d.rows[i];
+    }
+    var eb = REG.thresholds.errBands;
+
+    h += '<div class="tile ' + band(c.s5xxRate) + '" id="tile-rate">' +
+         '<div class="label"><span>Service 5xx</span></div>' +
+         '<div class="value"><span class="v">' + esc(rate(c.s5xxRate)) + '</span></div>' +
+         '<div class="sub">what this service returns to its own callers &middot; <b>' +
+         esc(num(c.requests)) + '</b> requests</div>' +
+         '<div class="tilefoot"><span class="pf ' +
+         (c.s5xxRate == null ? 'na' : c.s5xxRate < eb.ok ? 'pass' : c.s5xxRate < eb.warn ? 'part' : 'fail') + '">' +
+         (c.s5xxRate == null ? 'No data' : c.s5xxRate < eb.ok ? 'Pass' : c.s5xxRate < eb.warn ? 'At risk' : 'Fail') +
+         '</span><span class="note">band ' + esc(SY.fmtPct(eb.ok, 1)) + ' / ' + esc(SY.fmtPct(eb.warn, 1)) +
+         '</span></div></div>';
+
+    h += '<div class="tile plain" id="tile-out">' +
+         '<div class="label"><span>Outbound calls</span></div>' +
+         '<div class="value"><span class="v">' + esc(SY.fmtCompact(c.outboundCalls)) + '</span></div>' +
+         '<div class="sub">' + esc(num(c.outboundCalls)) + ' on <b>' + esc(String(c.depCount)) +
+         '</b> edges this service owns</div>' +
+         '<div class="tilefoot"><span class="note">callee-side count, share-attributed</span></div></div>';
+
+    /* a raw count is not a status, so this tile stays neutral — the rate that
+       carries the status is the one on the far right. */
+    h += '<div class="tile plain" id="tile-out5">' +
+         '<div class="label"><span>Outbound 5xx</span></div>' +
+         '<div class="value"><span class="v">' + esc(num(c.outbound5xx)) + '</span></div>' +
+         '<div class="sub">failures this service <b>received</b> from its dependencies</div>' +
+         '<div class="tilefoot"><span class="note">not the same population as the tile on the left</span></div></div>';
+
+    h += '<div class="tile plain" id="tile-deps">' +
+         '<div class="label"><span>Dependencies</span></div>' +
+         '<div class="value"><span class="v">' + esc(String(c.depCount)) + '</span></div>' +
+         '<div class="sub">every callee an L3 choke-point log proves in this window</div>' +
+         '<div class="tilefoot"><span class="note">' + esc(String(d.graph.edges.length)) +
+         ' edges across the estate</span></div></div>';
+
+    h += '<div class="tile ' + (worst ? band(worst.errorRate) : 'unk') + '" id="tile-worst">' +
+         '<div class="label"><span>Worst dependency</span></div>' +
+         '<div class="value"><span class="v">' + esc(worst ? rate(worst.errorRate) : 'NO DATA') + '</span></div>' +
+         '<div class="sub">' + (worst
+            ? '<b>' + esc(worst.name) + '</b> &middot; ' + esc(num(worst.calls)) + ' calls &middot; ' +
+              esc(ms(worst.avgLatency))
+            : 'no edge in this window carries an error rate') + '</div>' +
+         '<div class="tilefoot">' + (worst
+            ? '<span class="pf ' + (worst.band === 'ok' ? 'pass' : worst.band === 'warn' ? 'part' : 'fail') + '">' +
+              (worst.band === 'ok' ? 'In band' : worst.band === 'warn' ? 'At risk' : 'Out of band') + '</span>' +
+              '<span class="note">' + esc(worst.type.toLowerCase()) + ' callee</span>'
+            : '<span class="pf na">No data</span>') + '</div></div>';
+
+    $('tiles').innerHTML = h;
+  }
+
+  /* ------------------------------------------------------------ call chain
+     A two-column caller -> callee strip built from graph.edges, at the
+     container's measured width so the labels keep their real size. */
+  function graphSVG(d, W) {
+    var edges = [], i;
+    for (i = 0; i < d.graph.edges.length; i++) {
+      if (d.graph.edges[i].from === d.card.key) edges.push(d.graph.edges[i]);
+    }
+    edges.sort(function (a, b) { return b.calls - a.calls; });
+    if (!edges.length) return '<p class="note">No outbound edge is observed for this service in this window.</p>';
+
+    var byKey = {}, nn;
+    for (i = 0; i < d.graph.nodes.length; i++) { nn = d.graph.nodes[i]; byKey[nn.id] = nn; }
+
+    var ROW = 48, PAD = 12, H = Math.max(96, edges.length * ROW + PAD * 2);
+    var SW  = Math.max(148, Math.min(230, Math.round(W * 0.27)));
+    var GAP = Math.max(56, Math.min(110, Math.round(W * 0.10)));
+    var DX  = SW + GAP, DW = Math.max(160, W - DX - 2);
+    var maxCalls = edges[0].calls || 1;
+
+    var s = '<svg class="gsvg" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" ' +
+            'role="img" aria-label="' + esc(d.card.name + ' calls ' + edges.length + ' dependencies') + '">';
+
+    /* edges first, so the boxes sit on top of them */
+    var scy = H / 2;
+    for (i = 0; i < edges.length; i++) {
+      var e = edges[i], dcy = PAD + i * ROW + 19;
+      var bw = 1.2 + 2.8 * Math.sqrt(Math.max(0, e.calls) / maxCalls);
+      var c1 = SW + GAP * 0.45, c2 = DX - GAP * 0.45;
+      s += '<path class="ge ' + band(e.errorRate) + '" stroke-width="' + bw.toFixed(2) + '" d="M' +
+           SW + ' ' + scy.toFixed(1) + ' C' + c1.toFixed(1) + ' ' + scy.toFixed(1) + ' ' +
+           c2.toFixed(1) + ' ' + dcy + ' ' + DX + ' ' + dcy + '">' +
+           '<title>' + esc(d.card.key + ' → ' + e.to + ' · ' + num(e.calls) + ' calls · ' +
+                           rate(e.errorRate) + ' 5xx · ' + e.technique + '/' + e.confidence) +
+           '</title></path>';
+      s += '<circle class="gdot ' + band(e.errorRate) + '" cx="' + DX + '" cy="' + dcy + '" r="3"/>';
+    }
+
+    /* the caller */
+    s += '<g class="gnode sel"><rect class="gbox" x="1" y="' + (scy - 26).toFixed(1) + '" width="' + (SW - 12) +
+         '" height="52" rx="10"/>' +
+         '<text class="gt" x="13" y="' + (scy - 6).toFixed(1) + '">' + esc(d.card.key) + '</text>' +
+         '<text class="gs" x="13" y="' + (scy + 11).toFixed(1) + '">' + esc(d.card.zone) + ' · node ' +
+         esc(d.card.node) + '</text>' +
+         '<title>' + esc(d.card.name + ' · ' + d.card.deploy) + '</title></g>';
+
+    /* the callees */
+    for (i = 0; i < edges.length; i++) {
+      var ed = edges[i], y = PAD + i * ROW, n = byKey[ed.to] || { label: ed.to, type: 'external' };
+      var lab = num(ed.calls) + '  ·  ' + rate(ed.errorRate);
+      s += '<g class="gnode" tabindex="0" role="button" data-dep="' + esc(ed.to) + '" ' +
+           'aria-label="' + esc(n.label + ' — open this dependency') + '">' +
+           '<rect class="gbox" x="' + DX + '" y="' + y + '" width="' + DW + '" height="38" rx="9"/>' +
+           '<text class="gt" x="' + (DX + 12) + '" y="' + (y + 17) + '">' + esc(n.label) + '</text>' +
+           '<text class="gs" x="' + (DX + 12) + '" y="' + (y + 31) + '">' + esc(String(n.type)) +
+           ' · node ' + esc(String(n.node)) + '</text>' +
+           '<text class="gn" x="' + (DX + DW - 12) + '" y="' + (y + 24) + '" text-anchor="end">' +
+           esc(lab) + '</text>' +
+           '<title>' + esc(n.label + ' · ' + num(ed.calls) + ' calls · ' + rate(ed.errorRate) +
+                           ' 5xx · evidence ' + ed.technique + '/' + ed.confidence) + '</title></g>';
+    }
+
+    s += '</svg>';
+    return s;
+  }
+
+  var gTid = null, gLast = 0;
+  function drawGraph() {
+    if (!cur) return;
+    var box = $('graph'), w = Math.round(box.clientWidth || 0);
+    if (!w) w = 900;
+    gLast = w;
+    box.innerHTML = graphSVG(cur, w);
+  }
+  function onResize() {
+    if (gTid) clearTimeout(gTid);
+    gTid = setTimeout(function () {
+      var w = Math.round($('graph').clientWidth || 0);
+      if (Math.abs(w - gLast) < 8) return;
+      drawGraph();
+    }, 140);
+  }
+
+  /* ----------------------------------------------------------------- rows */
+  function rowMarkup(r, d) {
+    var id  = 'd-' + r.dependency;
+    var cs  = SY.covState(r.coverage);
+    var unk = cs.state === 'unknown';
+    var incs = incidents(r.dependency, d.range);
+    var reg = REG.byDownstream[r.dependency] || {};
+    var i;
+
+    var h = '';
+    h += '<tr class="row-toggle' + (open[r.dependency] ? ' open' : '') + '" data-row="' + id +
+         '" data-dep="' + esc(r.dependency) + '" tabindex="0" role="button" aria-controls="' + id +
+         '" aria-expanded="' + (open[r.dependency] ? 'true' : 'false') + '">';
+
+    /* 1 · dependency */
+    h += '<td class="nm"><div class="dline"><span class="rt-c">&#9656;</span>' +
+         '<span class="sdot ' + esc(unk ? 'unk' : r.band) + '" title="' +
+         esc(unk ? 'no evidence in this window' : r.band + ' 5xx band') + '"></span>' +
+         '<span class="dn">' + esc(r.name) + '</span><span class="go">&rsaquo;</span>' +
+         '<span class="badge tech" title="source_technique / confidence">' + esc(r.technique) + ' &middot; ' +
+         esc(r.confidence) + '</span>' +
+         (cs.provisional && !unk ? '<span class="badge provisional">Provisional ' +
+            esc(SY.fmtPct(cs.coverage * 100, 1)) + '</span>' : '') +
+         (unk ? '<span class="badge provisional">No data</span>' : '') +
+         incBadges(incs) +
+         '</div><span class="sub mono">' + esc(r.host + ':' + r.port) + '</span></td>';
+
+    /* 2 · type */
+    h += '<td><span class="pill plain">' + esc(r.type) + '</span></td>';
+
+    /* 3 · calls */
+    h += '<td class="num c-calls">' + esc(num(r.calls)) + '</td>';
+
+    /* 4 · 5xx — a count is only coloured when it is out of band; the rate in
+       the next column is what carries the status. */
+    h += '<td class="num c-s5xx"><span class="rv ' +
+         esc(!r.s5xx ? '' : unk ? 'unk' : r.band === 'ok' ? '' : r.band) + '">' +
+         esc(r.s5xx ? num(r.s5xx) : '—') + '</span></td>';
+
+    /* 5 · error rate */
+    h += '<td class="num c-rate"><span class="rv ' + esc(unk ? 'unk' : r.band) + '">' +
+         esc(unk ? 'NO DATA' : rate(r.errorRate)) + '</span></td>';
+
+    /* 6 · avg latency */
+    h += '<td class="num c-lat">' + esc(ms(r.avgLatency)) + '</td>';
+    h += '</tr>';
+
+    /* ------------------------------------------------------------- detail */
+    var eps = '', k;
+    for (k = 0; k < (reg.endpoints || []).length; k++) {
+      if (reg.endpoints[k].caller !== d.card.key) continue;
+      eps += '<div class="mono">' + esc(reg.endpoints[k].ep) + '</div>';
+    }
+    if (!eps) eps = '<div class="note">no endpoint of this callee is mapped to this caller.</div>';
+
+    var others = '', co = (reg.callers || []);
+    for (k = 0; k < co.length; k++) {
+      if (co[k] === d.card.key) continue;
+      others += '<button class="chip sm" type="button" data-svc="' + esc(co[k]) + '">' +
+                esc(co[k]) + '</button>';
+    }
+
+    var links = '<a href="../index.html#t=' + d.range.t1 + '">Flow map at ' +
+                esc(SY.dstamp(d.range.t1)) + '</a>' +
+                '<span class="csep"></span><a href="downstream.html">Downstream Health</a>';
+    for (i = 0; i < incs.length; i++) {
+      links += '<span class="csep"></span><a href="../index.html#t=' + incs[i].peak +
+               '">Open on the flow map at ' + esc('WK34 · Incident ' + incs[i].key) + ' peak (' + esc(incs[i].peakLabel) + ')</a>';
+      if (incs[i].ticket) {
+        links += '<a href="../incident-trace.html#' + esc(incs[i].ticket) + '">' +
+                 esc(incs[i].ticket) + ' &mdash; ' + esc(incs[i].label) + '</a>';
+      }
+    }
+
+    h += '<tr class="row-detail' + (open[r.dependency] ? ' open' : '') + '" id="' + id +
+         '"><td colspan="6"><div class="dgrid">' +
+      '<div><div class="label muted">The edge</div>' +
+        '<div class="mono">' + esc(d.card.key) + ' → ' + esc(r.dependency) + '</div>' +
+        '<div class="note">' + esc(r.type.toLowerCase()) + ' callee at <span class="mono">' +
+        esc(r.host + ':' + r.port) + '</span>, node <span class="mono">' + esc(r.node) +
+        '</span> on the flow map.</div></div>' +
+      '<div><div class="label muted">Evidence</div>' +
+        '<div><span class="badge tech">' + esc(r.technique) + '</span> ' + esc(r.confidence) + '</div>' +
+        '<div class="note">' + (r.technique === 'L7'
+          ? 'the choke-point log carries status and upstream_ms, so this edge has a real error rate.'
+          : 'this edge is inferred, so its error rate stays empty rather than reading 0.00%.') +
+        '</div></div>' +
+      '<div><div class="label muted">This caller’s endpoints</div>' + eps + '</div>' +
+      '<div><div class="label muted">In this window</div>' +
+        '<div><b>' + esc(num(r.calls)) + '</b> calls &middot; <b>' + esc(num(r.s5xx)) + '</b> 5xx &middot; ' +
+        '<span class="rv ' + esc(unk ? 'unk' : r.band) + '">' + esc(unk ? 'NO DATA' : rate(r.errorRate)) +
+        '</span></div>' +
+        '<div class="note">avg latency ' + esc(ms(r.avgLatency)) +
+        ' — the callee’s own time, not the whole request.</div></div>' +
+      '<div><div class="label muted">Coverage</div>' +
+        '<div class="rv ' + (cs.state === 'ok' ? 'ok' : 'unk') + '">' +
+        esc(SY.fmtPct(cs.coverage * 100, 2)) + '</div>' +
+        '<div class="note">' + (cs.state === 'ok'
+          ? 'every 5-min bucket in this window produced evidence.'
+          : cs.state === 'unknown'
+            ? 'too little evidence to state a rate for this edge; the figure is withheld.'
+            : 'some buckets produced no evidence; the figure is provisional.') + '</div></div>' +
+      '<div><div class="label muted">Also called by</div>' +
+        (others ? '<div class="callers">' + others + '</div>' +
+                  '<div class="note">' + esc(String(co.length)) +
+                  ' callers share this callee &mdash; select one to follow the chain.</div>'
+                : '<div class="note">no other service calls this callee.</div>') + '</div>' +
+      '<div><div class="label muted">Incident windows in range</div>' +
+        (incs.length ? incidentList(incs)
+                     : '<div class="note">none &mdash; this callee is not coupled to an incident inside this window.</div>') +
+        '</div>' +
+      '<div style="grid-column:1/-1"><div class="label muted">Cross-links</div>' +
+        '<div class="dlinks">' + links + '</div></div>' +
+      '</div></td></tr>';
+
+    return h;
+  }
+
+  function incidentList(incs) {
+    var h = '', i;
+    for (i = 0; i < incs.length; i++) {
+      h += '<div style="margin-top:3px"><span class="pill ' + (incs[i].sev === 'crit' ? 'crit' : 'warn') + '">' +
+           esc('W34·' + incs[i].key) + '</span> ' + esc(incs[i].label) +
+           '<span class="sub">peak ' + esc(incs[i].peakLabel) +
+           (incs[i].ticket ? ' &middot; ' + esc(incs[i].ticket) : '') + '</span></div>';
+    }
+    return h;
+  }
+
+  function table(d) {
+    var h = '', i;
+    for (i = 0; i < d.rows.length; i++) h += rowMarkup(d.rows[i], d);
+    $('rows').innerHTML = h;
+    $('none').hidden = d.rows.length > 0;
+    $('deptitle').textContent = 'Downstream Dependencies (' + d.rows.length + ')';
+    $('depnote').textContent = d.card.name + ' · ' + d.range.label +
+                               ' · rows ordered by calls, worst edge first on a tie';
+  }
+
+  /* --------------------------------------------------------- estate edges */
+  function edgeTable(d) {
+    var e = d.graph.edges.slice(), h = '', i, byKey = {}, n;
+    for (i = 0; i < d.graph.nodes.length; i++) { n = d.graph.nodes[i]; byKey[n.id] = n; }
+    e.sort(function (a, b) {
+      if (a.from !== b.from) return a.from.localeCompare(b.from);
+      return b.calls - a.calls;
+    });
+    for (i = 0; i < e.length; i++) {
+      var x = e[i], tn = byKey[x.to] || { label: x.to, type: '-' }, mine = x.from === d.card.key;
+      h += '<tr' + (mine ? ' class="mine"' : '') + '>' +
+           '<td class="nm cl" data-svc="' + esc(x.from) + '" tabindex="0" role="button" ' +
+           'title="' + esc('select ' + x.from + ' as the caller') + '">' + esc(x.from) + '</td>' +
+           '<td class="cl" data-dep="' + esc(x.to) + '" tabindex="0" role="button" ' +
+           'title="' + esc('open ' + x.to + ' in the table above') + '">' + esc(tn.label) + '</td>' +
+           '<td><span class="pill plain">' + esc(tn.type === 'internal' ? 'Internal' : 'External') + '</span></td>' +
+           '<td class="num">' + esc(num(x.calls)) + '</td>' +
+           '<td class="num"><span class="rv ' + band(x.errorRate) + '">' + esc(rate(x.errorRate)) + '</span></td>' +
+           '<td><span class="badge tech">' + esc(x.technique) + ' &middot; ' + esc(x.confidence) + '</span></td>' +
+           '</tr>';
+    }
+    $('erows').innerHTML = h;
+    $('edgenote').textContent = e.length + ' edges · ' + d.graph.nodes.length +
+                                ' nodes (12 services, 12 callees) · ' + d.range.label;
+  }
+
+  /* --------------------------------------------------------------- render */
+  function paint() {
+    cur = ALL[V.svc];
+    var d = cur;
+
+    $('winlabel').textContent = d.range.label;
+    $('wininfo').textContent  = d.range.buckets + ' five-minute buckets · ' +
+                                'edges counted at the callee, attributed to its callers by share';
+    $('winflow').setAttribute('href', '../index.html#t=' + d.range.t1);
+
+    var inc = SY.incidentAt(d.range.t0, d.range.t1);
+    if (inc) {
+      $('wininc').textContent = 'incident in window: WK34 · Incident ' + inc.key + ' — ' + inc.label +
+                                ' · peak ' + inc.peakLabel + (inc.ticket ? ' · ' + inc.ticket : '');
+      $('winflow').setAttribute('href', '../index.html#t=' + inc.peak);
+      $('winflow').textContent = 'Open on the flow map at WK34 · Incident ' + inc.key + ' peak';
+    } else {
+      $('wininc').textContent = 'no incident window opens inside this range';
+      $('winflow').textContent = 'Open on the flow map';
+    }
+
+    chips();
+    card(d);
+    tiles(d);
+
+    $('gtitle').textContent = d.card.key + ' → ' + d.rows.length + ' dependencies';
+    $('gsub').textContent   = d.range.label + ' · ' + SY.fmtCompact(d.card.outboundCalls) + ' outbound calls';
+    $('glegend').textContent = 'edge thickness = share of this service’s outbound calls';
+    drawGraph();
+
+    table(d);
+    edgeTable(d);
+
+    $('n-tech').textContent  = d.note;
+    $('n-share').textContent = 'Calls are counted at the callee and attributed evenly across the callers the ' +
+      'registry proves, so a shared callee shows the same figure to each of its callers. It is a share, not a ' +
+      'per-caller measurement, and the page says so rather than implying a precision the log does not carry.';
+    $('n-cov').textContent   = 'Coverage is observed buckets over planned buckets. Below ' +
+      SY.fmtPct(REG.thresholds.coverage.provisional * 100, 0) + ' the row is marked provisional; below ' +
+      SY.fmtPct(REG.thresholds.coverage.nodata * 100, 0) + ' the rate is withheld and the row reads NO DATA. ' +
+      'A missing collector is missing evidence, never a healthy zero.';
+
+    S.setLineage(SY.lineage('dependencies'));
+  }
+
+  function render(rangeKey) {
+    var list = REG.services, i;
+    ALL = {};
+    for (i = 0; i < list.length; i++) ALL[list[i].key] = SY.dependencies(list[i].key, rangeKey);
+    if (!ALL[V.svc]) V.svc = 'payment';
+    paint();
+  }
+
+  /* ---------------------------------------------------- navigate the chain */
+  function selectSvc(key, push) {
+    if (!ALL[key] || key === V.svc) return;
+    V.svc = key;
+    open = {};
+    paint();
+    if (push !== false) {
+      hashGuard = true;
+      try { location.hash = 'svc=' + key; } catch (e) { /* file:// without history */ }
+      setTimeout(function () { hashGuard = false; }, 0);
+    }
+    var t = $('depcard');
+    if (t && t.scrollIntoView) t.scrollIntoView({ block: 'nearest' });
+  }
+
+  function svcFromHash() {
+    var m = /^#svc=([a-z0-9\-]+)$/i.exec(location.hash || '');
+    return m ? m[1] : null;
+  }
+
+  function toggleRow(tr) {
+    var det = $(tr.getAttribute('data-row'));
+    var isOpen = tr.className.indexOf('open') > -1;
+    var key = tr.getAttribute('data-dep');
+    tr.className = isOpen ? 'row-toggle' : 'row-toggle open';
+    tr.setAttribute('aria-expanded', isOpen ? 'false' : 'true');
+    if (det) det.className = isOpen ? 'row-detail' : 'row-detail open';
+    if (isOpen) delete open[key]; else open[key] = 1;
+  }
+
+  /* open a dependency from the chain strip or the estate table */
+  function openDep(key) {
+    var tr = document.querySelector('#rows tr.row-toggle[data-dep="' + key + '"]');
+    if (!tr) return false;
+    if (tr.className.indexOf('open') < 0) toggleRow(tr);
+    if (tr.scrollIntoView) tr.scrollIntoView({ block: 'center' });
+    tr.focus();
+    return true;
+  }
+
+  /* walk up to the nearest element carrying `attr` */
+  function up(node, stop, attr) {
+    while (node && node !== stop && !(node.getAttribute && node.getAttribute(attr))) node = node.parentNode;
+    return (node && node !== stop) ? node : null;
+  }
+
+  S.ready(function () {
+    var fromHash = svcFromHash();
+    if (fromHash && REG.bySvc[fromHash]) V.svc = fromHash;
+
+    S.setLineage(SY.lineage('dependencies'));
+    render(S.getRange() || '24h');
+
+    /* range chips recompute all twelve payloads for the new window */
+    S.onRange(function (ev) { render(ev.detail.range); });
+
+    /* service chips */
+    $('svcchips').addEventListener('click', function (ev) {
+      var n = up(ev.target, this, 'data-svc');
+      if (n) selectSvc(n.getAttribute('data-svc'));
+    });
+
+    /* dependency rows: click or Enter/Space navigates into the dependency */
+    $('rows').addEventListener('click', function (ev) {
+      if (ev.target && ev.target.tagName === 'A') return;      /* cross-links win */
+      var n = up(ev.target, this, 'data-svc');                 /* a co-caller chip */
+      if (n) { selectSvc(n.getAttribute('data-svc')); return; }
+      n = up(ev.target, this, 'data-row');
+      if (n) toggleRow(n);
+    });
+    $('rows').addEventListener('keydown', function (ev) {
+      if (ev.key !== 'Enter' && ev.key !== ' ') return;
+      var n = ev.target;
+      if (n && n.getAttribute && n.getAttribute('data-svc')) {
+        ev.preventDefault(); selectSvc(n.getAttribute('data-svc')); return;
+      }
+      if (n && n.getAttribute && n.getAttribute('data-row')) { ev.preventDefault(); toggleRow(n); }
+    });
+
+    /* the chain strip: a callee box opens its row */
+    $('graph').addEventListener('click', function (ev) {
+      var n = up(ev.target, this, 'data-dep');
+      if (n) openDep(n.getAttribute('data-dep'));
+    });
+    $('graph').addEventListener('keydown', function (ev) {
+      if (ev.key !== 'Enter' && ev.key !== ' ') return;
+      var n = up(ev.target, this, 'data-dep');
+      if (n) { ev.preventDefault(); openDep(n.getAttribute('data-dep')); }
+    });
+
+    /* the estate table: caller cell selects, callee cell opens */
+    function estate(ev) {
+      if (ev.type === 'keydown' && ev.key !== 'Enter' && ev.key !== ' ') return;
+      var n = up(ev.target, this, 'data-svc');
+      if (n) { if (ev.type === 'keydown') ev.preventDefault(); selectSvc(n.getAttribute('data-svc')); return; }
+      n = up(ev.target, this, 'data-dep');
+      if (!n) return;
+      if (ev.type === 'keydown') ev.preventDefault();
+      if (!openDep(n.getAttribute('data-dep'))) {
+        /* the callee belongs to another caller — follow the chain there first */
+        var reg = REG.byDownstream[n.getAttribute('data-dep')];
+        if (reg && reg.callers.length) {
+          selectSvc(reg.callers[0]);
+          openDep(n.getAttribute('data-dep'));
+        }
+      }
+    }
+    $('erows').addEventListener('click', estate);
+    $('erows').addEventListener('keydown', estate);
+
+    /* back / forward through the chain */
+    window.addEventListener('hashchange', function () {
+      if (hashGuard) return;
+      var k = svcFromHash();
+      if (k && REG.bySvc[k] && k !== V.svc) { V.svc = k; open = {}; paint(); }
+    });
+
+    window.addEventListener('resize', onResize);
+  });
+})();
+</script>
+</body>
+</html>

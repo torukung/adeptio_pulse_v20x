@@ -1,0 +1,1021 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<link rel="icon" href="data:,"/>
+
+<!-- ===========================================================================
+     ADEPTIO Pulse — menu 10 · OPS ISSUES
+     Built from menus/_template.html. Every register figure comes from
+     PULSE_SYNTH.opsIssues() and every detail figure from issueDetail(id) —
+     the page formats, it never computes. The only numbers the page derives
+     itself are counts of the rows it is currently showing (tab counts, "N
+     shown"), and those are labelled as such.
+
+     Local edits (severity / status / description / PIC / ETA / CC / decision)
+     and locally added issues live in localStorage under `pulse_ops_v1`,
+     wrapped in try/catch, and are never folded back into the register tiles:
+     the tiles stay the computed register so an audit can compare DOM against
+     synth on any machine.
+     =========================================================================== -->
+
+<title>Ops Issues &mdash; Adeptio Pulse</title>
+
+<link rel="stylesheet" href="../assets/tokens.css"/>
+<link rel="stylesheet" href="../assets/shell.css"/>
+<link rel="stylesheet" href="../assets/menus.css"/>
+
+<style>
+/* --------------------------------------------------------------- page-local
+   Seven additions this screen needs that the shared kit does not carry.
+   Tokens only; status colours are used for status only (here: severity and
+   issue status, both of which are status). ---------------------------------*/
+
+/* 1 · severity group header row inside the register table */
+.ptable tr.grp > td{background:var(--panel2);border-bottom:1px solid var(--line);
+  border-top:1px solid var(--line);padding:8px 11px;white-space:normal}
+.ptable tr.grp:hover > td{background:var(--panel2)}
+.grph{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;min-width:0}
+.grph .gl{font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--ink2)}
+.grph .gn{font-size:10.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.grph .gn b{color:var(--ink2);font-weight:700}
+.grph .gr{font-size:10.5px;color:var(--muted);min-width:0;overflow-wrap:anywhere}
+
+/* 2 · the wrapping cells. Nine columns of nowrap text runs past 1440, which
+      pushes COMMENTS out of sight; the three prose columns wrap instead so the
+      whole register is readable without scrolling the table sideways. */
+.card .ptable th,.card .ptable td{padding-left:9px;padding-right:9px}
+/* max-width is ignored on a td under auto table layout, so the cap lives on an
+   inner block (.cw) and the cell sizes to it */
+.ptable td.ttl,.ptable td.svcc,.ptable td.picc,.ptable td.etac{white-space:normal;overflow-wrap:anywhere}
+.ptable td.ttl{min-width:220px}
+.ptable td.ttl .cw{max-width:330px}
+.ptable td.svcc .cw{max-width:146px}
+.ptable td.picc .cw{max-width:158px}
+.ptable td.etac .cw{max-width:104px}
+.ttl .tt{color:var(--ink);font-weight:650;line-height:1.45}
+.xls{display:flex;gap:9px;flex-wrap:wrap;margin-top:4px}
+.xl{font-size:10.5px;color:var(--muted);text-decoration:none;border-bottom:1px dotted var(--line2);
+  white-space:nowrap}
+.xl:hover{color:var(--chipink);border-bottom-color:var(--chipink)}
+.xl .a{font-family:var(--mono)}
+
+/* 3 · a strip that states what is held locally, above the register */
+.infobar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 12px;
+  border:1px dashed var(--line);border-radius:10px;background:var(--panel2);
+  font-size:11px;color:var(--muted)}
+/* the class sets display, so it has to answer [hidden] itself */
+.infobar[hidden]{display:none}
+.infobar b{color:var(--ink2);font-weight:650}
+
+/* 4 · full-width labelled form control inside the drawer */
+.ff{display:flex;flex-direction:column;gap:5px;min-width:0}
+.ff > .fl{font-size:9.5px;font-weight:750;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+.ff > .fh{font-size:10.5px;color:var(--muted);line-height:1.5}
+.ff input,.ff textarea,.ff select{width:100%;min-width:0;background:var(--panel2);color:var(--ink);
+  border:1px solid var(--line);border-radius:9px;padding:7px 10px;font-family:var(--font);
+  font-size:12px;line-height:1.55}
+.ff textarea{resize:vertical;min-height:88px}
+.ff input:focus,.ff textarea:focus,.ff select:focus{outline:none;border-color:var(--accent)}
+.ff .row{display:flex;gap:7px;align-items:center;min-width:0}
+.ff .row select{flex:1 1 0}
+.ovsec{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;
+  margin-top:2px;padding-top:11px;border-top:1px solid var(--line)}
+.ovsec h4{font-size:9.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--ink2)}
+.ovsec .sh{font-size:10.5px;color:var(--muted)}
+.ovh{display:flex;flex-direction:column;gap:5px;min-width:0}
+.ovh .t{font-size:14px;font-weight:700;color:var(--ink);line-height:1.4;overflow-wrap:anywhere}
+.ovh .d{font-family:var(--mono);font-size:11px;color:var(--muted)}
+
+/* 5 · related dashboard links */
+.rel{display:flex;flex-direction:column;gap:5px}
+.rel a{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--ink2);
+  text-decoration:none;padding:6px 9px;border:1px solid var(--line);border-radius:8px;
+  background:var(--panel2);min-width:0;overflow-wrap:anywhere}
+.rel a:hover{border-color:var(--chipline);color:var(--ink)}
+.rel a .h{font-family:var(--mono);font-size:10px;color:var(--muted);margin-left:auto;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:46%}
+
+/* 6 · evidence numbers — a two-column key/value ledger */
+.evkv{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:3px 18px}
+.evrow{display:flex;align-items:baseline;gap:10px;padding:5px 0;border-bottom:1px solid var(--line2)}
+.evrow .k{font-size:11px;color:var(--muted);min-width:0}
+.evrow .v{margin-left:auto;font-size:12.5px;font-weight:700;color:var(--ink);
+  font-variant-numeric:tabular-nums;white-space:nowrap}
+.evrow .v.up{color:var(--crit)} .evrow .v.dn{color:var(--ok)} .evrow .v.nd{color:var(--unk)}
+.wowline{font-size:11.5px;color:var(--ink2);line-height:1.7;overflow-wrap:anywhere}
+.wowline b{color:var(--ink);font-variant-numeric:tabular-nums}
+
+/* 7 · the drawer sits outside .pshell, so it needs its own focus ring */
+.overlay :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+
+@media (max-width:760px){
+  .ptable td.ttl{min-width:210px}
+  .rel a .h{display:none}
+}
+</style>
+</head>
+
+<body data-shell="page"
+      data-title="Ops Issues"
+      data-subtitle="computed from: the P4 registers (SLA engine, error taxonomy, dependency aggregator) &middot; the P5 ticket service &middot; evidence recomputed from the monitoring spine &middot; no APM &middot; Aug 23 &ndash; 29, 2027"
+      data-ranges=""
+      data-lineage="P4 registers + P5 ticket service; evidence recomputed from the same spine the monitoring menus use">
+
+<div id="pulse-main">
+
+  <!-- ======================================================== TILES ====== -->
+  <section class="tiles" id="tiles" aria-label="Register headline figures"></section>
+
+  <p class="note" id="note-reg"></p>
+
+  <!-- =============================================== TABS + FILTERS ====== -->
+  <section class="sect">
+    <h2>Issue register</h2>
+    <span class="sh">who owns it, what was decided, when it is due</span>
+    <span class="sp"></span>
+    <span class="note" id="shown"></span>
+  </section>
+
+  <div class="card">
+    <div class="toolbar">
+      <div class="chips" id="tabs" role="group" aria-label="Issue status view"></div>
+    </div>
+
+    <div class="toolbar">
+      <label class="field"><span class="fl">Status</span>
+        <select id="f-status" aria-label="Filter by status"></select></label>
+      <label class="field"><span class="fl">Severity</span>
+        <select id="f-sev" aria-label="Filter by severity"></select></label>
+      <label class="field"><span class="fl">Source</span>
+        <select id="f-src" aria-label="Filter by source"></select></label>
+      <label class="field" style="flex:1 1 210px">
+        <span class="fl">Search</span>
+        <input type="text" id="f-q" placeholder="title, id, service, route, PIC&hellip;" aria-label="Search issues"/>
+      </label>
+      <div class="chips">
+        <span class="clbl">Raised</span>
+        <div class="chips" id="raised" role="group" aria-label="Filter by when the issue was raised"></div>
+      </div>
+      <div class="sp"></div>
+      <button class="btn" type="button" id="reset">Reset</button>
+      <button class="btn pri" type="button" id="newissue">+ New Issue</button>
+    </div>
+
+    <p class="note" id="note-raised"></p>
+  </div>
+
+  <div class="infobar" id="localbar" hidden>
+    <span id="localtxt"></span>
+    <span class="sp" style="flex:1 1 auto"></span>
+    <button class="btn" type="button" id="clearlocal">Clear local changes</button>
+  </div>
+
+  <!-- ======================================================= REGISTER ==== -->
+  <div class="card pad0">
+    <div class="twrap" style="--tmax:none">
+      <table class="ptable" style="--tmin:1080px">
+        <thead>
+          <tr>
+            <th class="sortable" data-sort="id"       tabindex="0" role="button">ID<span class="sarr">&#8597;</span></th>
+            <th class="sortable" data-sort="sev"      tabindex="0" role="button">Sev<span class="sarr">&#8597;</span></th>
+            <th class="sortable" data-sort="title"    tabindex="0" role="button">Title<span class="sarr">&#8597;</span></th>
+            <th class="sortable" data-sort="svc"      tabindex="0" role="button">Service<span class="sarr">&#8597;</span></th>
+            <th class="sortable" data-sort="source"   tabindex="0" role="button">Source<span class="sarr">&#8597;</span></th>
+            <th class="sortable" data-sort="status"   tabindex="0" role="button">Status<span class="sarr">&#8597;</span></th>
+            <th class="sortable" data-sort="pic"      tabindex="0" role="button">PIC<span class="sarr">&#8597;</span></th>
+            <th class="sortable" data-sort="eta"      tabindex="0" role="button">ETA<span class="sarr">&#8597;</span></th>
+            <th class="sortable num" data-sort="comments" tabindex="0" role="button">Comments<span class="sarr">&#8597;</span></th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </div>
+  <p class="note" id="note-tbl"></p>
+
+  <!-- ================================================ SEVERITY POLICY ==== -->
+  <section class="sect">
+    <h2>Severity policy</h2>
+    <span class="sh">the rule each band is raised under &middot; counts are the register, not the current view</span>
+  </section>
+  <div class="grid2" id="sevcards"></div>
+
+</div><!-- /#pulse-main -->
+
+<!-- =================================================== DETAIL DRAWER ===== -->
+<div class="overlay" id="ov" aria-hidden="true">
+  <div class="ov-scrim" data-ov-close></div>
+  <aside class="ov-panel" role="dialog" aria-modal="true" aria-labelledby="ovt">
+    <header>
+      <span class="ovk" id="ovk">OPS-000</span>
+      <h3 id="ovt">Issue detail</h3>
+      <button class="ov-x" type="button" data-ov-close aria-label="Close the issue detail">&#10005;</button>
+    </header>
+    <div class="ov-body" id="ovbody"></div>
+    <div class="ov-foot">
+      <button class="btn pri" type="button" id="ovsave">Save changes</button>
+      <button class="btn" type="button" id="ovrevert">Revert</button>
+      <button class="btn" type="button" data-ov-close>Close</button>
+      <span class="note" id="ovmsg">Saved to this browser only (localStorage).</span>
+    </div>
+  </aside>
+</div>
+
+<script src="../data/manifest.js"></script>
+<script src="../data/rcameta.js"></script>
+<script src="../data/tickets.js"></script>
+<script src="../data/registry.js"></script>
+<script src="../data/spine.js"></script>
+<script src="../assets/synth.js"></script>
+<script src="../assets/charts.js"></script>
+<script src="../assets/shell.js"></script>
+
+<script>
+(function () {
+  "use strict";
+
+  var SY = window.PULSE_SYNTH, C = window.PULSE_CHARTS, S = window.PULSE_SHELL,
+      REG = window.PULSE_REG, TIX = window.ADEPTIO_TICKETS || {};
+  var BYWIN = TIX.byWindow || {};
+  var NOW = (TIX.now != null) ? TIX.now : 2015, DAY = 288;
+  var STORE_KEY = 'pulse_ops_v1';
+
+  var $ = function (id) { return document.getElementById(id); };
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+  function up(node, stop, attr) {
+    while (node && node !== stop && !(node.getAttribute && node.getAttribute(attr))) node = node.parentNode;
+    return (node && node !== stop) ? node : null;
+  }
+  function num(v) { return v == null ? 'NO DATA' : SY.fmtNum(v); }
+
+  /* status / severity -> the pill class. Status colours for status only. */
+  var SEVCLS = { P1: 'crit', P2: 'warn', P3: 'plain', P4: 'plain' };
+  var STCLS = { 'open': 'plain', 'discussing': 'plain', 'decided': 'maint',
+                'in progress': 'warn', 'resolved': 'ok', "won't fix": 'unk' };
+  /* the five tabs and the statuses each one collects */
+  var TABDEF = [
+    { key: 'Open',        has: function (s) { return s === 'open' || s === 'discussing' || s === 'decided'; } },
+    { key: 'In progress', has: function (s) { return s === 'in progress'; } },
+    { key: 'Resolved',    has: function (s) { return s === 'resolved'; } },
+    { key: "Won't fix",   has: function (s) { return s === "won't fix"; } },
+    { key: 'All',         has: function () { return true; } }
+  ];
+  var RAISED = [
+    { key: '7d',  days: 7,   label: '7d' },
+    { key: '30d', days: 30,  label: '30d' },
+    { key: '90d', days: 90,  label: '90d' },
+    { key: 'all', days: null, label: 'All' }
+  ];
+
+  /* ------------------------------------------------------------- payload */
+  var D = SY.opsIssues();
+
+  /* --------------------------------------------------------- local store */
+  function loadStore() {
+    var st = { v: 1, edits: {}, added: [], persisted: true };
+    try {
+      var raw = window.localStorage.getItem(STORE_KEY);
+      if (raw) {
+        var o = JSON.parse(raw);
+        if (o && typeof o === 'object') {
+          if (o.edits && typeof o.edits === 'object') st.edits = o.edits;
+          if (o.added && o.added.length) st.added = o.added;
+        }
+      }
+    } catch (e) { st = { v: 1, edits: {}, added: [], persisted: true }; }
+    return st;
+  }
+  /* returns false when the browser refuses storage (private mode, storage off).
+     The page keeps working on the in-memory copy and says so rather than
+     claiming a persistence it did not get. */
+  function saveStore() {
+    try {
+      window.localStorage.setItem(STORE_KEY, JSON.stringify({ v: STORE.v, edits: STORE.edits, added: STORE.added }));
+      STORE.persisted = true; return true;
+    } catch (e) { STORE.persisted = false; return false; }
+  }
+  /* the synth contract also names a per-issue key; keep it in step so a reader
+     following docs/SPEC-Site-v2.0.md §5.11 finds the same patch there. */
+  function mirrorStore(id, patch, storageKey) {
+    try { window.localStorage.setItem(storageKey || ('adeptio_ops_' + id), JSON.stringify(patch)); } catch (e) {}
+  }
+  function clearStore() {
+    STORE = { v: 1, edits: {}, added: [], persisted: true };
+    try {
+      window.localStorage.removeItem(STORE_KEY);
+      for (var i = 0; i < D.rows.length; i++) window.localStorage.removeItem('adeptio_ops_' + D.rows[i].id);
+    } catch (e) {}
+  }
+  var STORE = loadStore();
+
+  /* --------------------------------------------------------- row assembly */
+  function clone(o) { var r = {}, k; for (k in o) if (Object.prototype.hasOwnProperty.call(o, k)) r[k] = o[k]; return r; }
+  function sevLabel(sev) {
+    for (var i = 0; i < D.groups.length; i++) if (D.groups[i].sev === sev) return D.groups[i].label;
+    return sev;
+  }
+  function overdueOf(eta, status) {
+    return (eta != null && eta < NOW && status !== 'resolved' && status !== "won't fix");
+  }
+  /* an edit patches only the fields a person can type; every evidence number
+     stays exactly as synth produced it */
+  function applyEdit(row) {
+    var p = STORE.edits[row.id];
+    if (!p) return row;
+    var r = clone(row);
+    if (p.sev) { r.sev = p.sev; r.severityLabel = sevLabel(p.sev); }
+    if (p.status) r.status = p.status;
+    if (p.title != null) r.title = p.title;
+    if (p.desc != null) r.desc = p.desc;
+    if (p.decision != null) r.decision = p.decision;
+    if (p.picEmail != null) r.picEmail = p.picEmail;
+    if (p.cc != null) r.cc = p.cc;
+    if (Object.prototype.hasOwnProperty.call(p, 'eta')) {
+      r.eta = p.eta; r.etaLabel = (p.eta == null ? null : SY.dstamp(p.eta));
+    }
+    r.overdue = overdueOf(r.eta, r.status);
+    r.edited = true;
+    return r;
+  }
+  function buildRows() {
+    var out = [], i;
+    for (i = 0; i < D.rows.length; i++) out.push(applyEdit(D.rows[i]));
+    for (i = 0; i < STORE.added.length; i++) {
+      var a = clone(STORE.added[i]);
+      a.local = true;
+      a.severityLabel = sevLabel(a.sev);
+      a.etaLabel = (a.eta == null ? null : SY.dstamp(a.eta));
+      a.createdLabel = SY.dstamp(a.created);
+      a.updatedLabel = SY.dstamp(a.updated);
+      a.overdue = overdueOf(a.eta, a.status);
+      out.push(applyEdit(a));
+    }
+    return out;
+  }
+
+  /* ------------------------------------------------------------ view state */
+  var V = { tab: 'All', status: '', sev: '', src: '', q: '', raised: 'all',
+            sort: 'id', dir: 1, gdir: 1, rows: [] };
+
+  function picName(r) { return r.pic ? r.pic.name : null; }
+  function svcInfo(key) {
+    var s = REG && REG.bySvc ? REG.bySvc[key] : null;
+    return { name: s ? s.name : (key || '—'), deploy: s ? s.deploy : null };
+  }
+  function ticketOf(r) {
+    /* prefer the payload's ticket; fall back to the byWindow map in tickets.js */
+    if (r.ticket) return r.ticket;
+    return (r.incKey && BYWIN[r.incKey]) ? BYWIN[r.incKey] : null;
+  }
+  function ticketHref(r) {
+    var t = ticketOf(r);
+    return t ? '../incident-trace.html#' + t : null;
+  }
+
+  function raisedCut(key) {
+    for (var i = 0; i < RAISED.length; i++) if (RAISED[i].key === key) {
+      return RAISED[i].days == null ? null : (NOW - RAISED[i].days * DAY);
+    }
+    return null;
+  }
+  function passRaised(r, key) {
+    var cut = raisedCut(key);
+    return (cut == null) ? true : (r.created >= cut);
+  }
+  function passFilters(r, ignoreTab) {
+    if (!ignoreTab) {
+      for (var i = 0; i < TABDEF.length; i++) if (TABDEF[i].key === V.tab && !TABDEF[i].has(r.status)) return false;
+    }
+    if (V.status && r.status !== V.status) return false;
+    if (V.sev && r.sev !== V.sev) return false;
+    if (V.src && r.source !== V.src) return false;
+    if (!passRaised(r, V.raised)) return false;
+    if (V.q) {
+      var hay = (r.id + ' ' + r.title + ' ' + r.svc + ' ' + (r.route || '') + ' ' +
+                 (picName(r) || '') + ' ' + r.source + ' ' + r.status).toLowerCase();
+      if (hay.indexOf(V.q) < 0) return false;
+    }
+    return true;
+  }
+  function visible() {
+    var out = [], i;
+    for (i = 0; i < V.rows.length; i++) if (passFilters(V.rows[i])) out.push(V.rows[i]);
+    return out;
+  }
+
+  function sortKey(r, k) {
+    if (k === 'id') return r.id;
+    if (k === 'title') return r.title.toLowerCase();
+    if (k === 'svc') return svcInfo(r.svc).name.toLowerCase();
+    if (k === 'source') return r.source;
+    if (k === 'status') return r.status;
+    if (k === 'pic') return (picName(r) || '~~~').toLowerCase();
+    if (k === 'eta') return r.eta == null ? Infinity : r.eta;
+    if (k === 'comments') return r.comments || 0;
+    return r.id;
+  }
+  function sortRows(list) {
+    var k = V.sort, dir = V.dir;
+    return list.slice().sort(function (a, b) {
+      var x = sortKey(a, k), y = sortKey(b, k);
+      if (x < y) return -1 * dir;
+      if (x > y) return 1 * dir;
+      return a.id < b.id ? -1 : (a.id > b.id ? 1 : 0);
+    });
+  }
+
+  /* ================================================================ PAINT */
+  function paintTiles() {
+    var t = D.tiles;
+    var cards = [
+      { k: 'total',    l: 'Total',    v: t.total,    c: 'plain', s: 'issues in the register' },
+      { k: 'open',     l: 'Open',     v: t.open,     c: t.open ? 'warn' : 'ok',
+        s: 'not resolved and not won&#39;t fix' },
+      { k: 'resolved', l: 'Resolved', v: t.resolved, c: 'ok',    s: 'resolved or closed won&#39;t fix' },
+      { k: 'overdue',  l: 'Overdue',  v: t.overdue,  c: t.overdue ? 'crit' : 'ok',
+        s: 'ETA before <b>' + esc(SY.dstamp(NOW)) + '</b>' },
+      { k: 'noPic',    l: 'No PIC',   v: t.noPic,    c: t.noPic ? 'warn' : 'ok',  s: 'nobody accountable yet' },
+      { k: 'noEta',    l: 'No ETA',   v: t.noEta,    c: t.noEta ? 'warn' : 'ok',  s: 'no date committed' }
+    ];
+    var h = '', i;
+    for (i = 0; i < cards.length; i++) {
+      var c = cards[i];
+      h += '<div class="tile ' + c.c + '">' +
+             '<div class="label"><span>' + c.l + '</span></div>' +
+             '<div class="value" id="tile-' + c.k + '" data-qa="tile-' + c.k + '">' + num(c.v) + '</div>' +
+             '<div class="sub">' + c.s + '</div>' +
+           '</div>';
+    }
+    $('tiles').innerHTML = h;
+  }
+
+  function paintTabs() {
+    var h = '', i, j, n;
+    for (i = 0; i < TABDEF.length; i++) {
+      n = 0;
+      for (j = 0; j < V.rows.length; j++) if (TABDEF[i].has(V.rows[j].status) && passFilters(V.rows[j], true)) n++;
+      h += '<button class="chip' + (V.tab === TABDEF[i].key ? ' on' : '') + '" type="button" ' +
+           'data-tab="' + esc(TABDEF[i].key) + '" aria-pressed="' + (V.tab === TABDEF[i].key) + '">' +
+           esc(TABDEF[i].key) + '<span class="n">' + n + '</span></button>';
+    }
+    $('tabs').innerHTML = h;
+  }
+
+  function paintRaised() {
+    var h = '', i, j, n;
+    for (i = 0; i < RAISED.length; i++) {
+      n = 0;
+      for (j = 0; j < V.rows.length; j++) if (passRaised(V.rows[j], RAISED[i].key)) n++;
+      h += '<button class="chip sm' + (V.raised === RAISED[i].key ? ' on' : '') + '" type="button" ' +
+           'data-raised="' + RAISED[i].key + '" aria-pressed="' + (V.raised === RAISED[i].key) + '">' +
+           RAISED[i].label + '<span class="n">' + n + '</span></button>';
+    }
+    $('raised').innerHTML = h;
+    var clamped = (V.raised === '30d' || V.raised === '90d');
+    $('note-raised').innerHTML =
+      'Raised windows are measured back from <b>' + esc(SY.dstamp(NOW)) + '</b>. ' +
+      'The seeded spine is exactly one week, so <b>7d</b> already reaches Aug 23 00:00' +
+      (clamped ? ' and <b>' + esc(V.raised) + '</b> clamps to the same span — no row can be older than the replay.'
+               : ' — 30d and 90d clamp to the same span rather than reaching further back.');
+  }
+
+  function head(cellSort) {
+    var ths = document.querySelectorAll('.ptable thead th'), i;
+    for (i = 0; i < ths.length; i++) {
+      var k = ths[i].getAttribute('data-sort'), on = (k === cellSort);
+      ths[i].className = (ths[i].className.indexOf('num') > -1 ? 'sortable num' : 'sortable') + (on ? ' sorted' : '');
+      var arr = ths[i].querySelector('.sarr');
+      if (arr) arr.innerHTML = on ? (V.dir > 0 ? '&#9650;' : '&#9660;')
+                                  : (k === 'sev' ? (V.gdir > 0 ? '&#9650;' : '&#9660;') : '&#8597;');
+    }
+  }
+
+  function rowHtml(r) {
+    var s = svcInfo(r.svc), tk = ticketOf(r), th = ticketHref(r);
+    var xl = '';
+    if (th) xl += '<a class="xl" href="' + esc(th) + '" title="Open the incident ticket">' +
+                  'Incident Trace <span class="a">' + esc(tk) + '</span></a>';
+    if (r.flowLink) xl += '<a class="xl" href="' + esc(r.flowLink) + '" ' +
+                  'title="Open the front-page flow map at the incident peak">Open on the flow map</a>';
+    if (r.route) xl += '<span class="xl" style="border:0;cursor:default"><span class="a">' + esc(r.route) + '</span></span>';
+
+    var eta = r.eta == null
+      ? '<span class="muted">no ETA</span>'
+      : '<span class="mono">' + esc(r.etaLabel) + '</span>' +
+        (r.overdue ? ' <span class="delta up">overdue</span>' : '');
+    var pic = r.pic
+      ? '<span>' + esc(r.pic.name) + '</span><span class="sub">' + esc(r.pic.team) + ' (mock)</span>'
+      : '<span class="muted">click to assign</span>';
+
+    return '<tr class="irow" data-id="' + esc(r.id) + '" tabindex="0" role="button" ' +
+             'aria-label="Open issue ' + esc(r.id) + '">' +
+        '<td class="code">' + esc(r.id) + (r.local ? ' <span class="badge">local</span>' : '') + '</td>' +
+        '<td><span class="pill ' + SEVCLS[r.sev] + '">' + esc(r.sev) + '</span></td>' +
+        '<td class="ttl"><div class="cw"><div class="tt">' + esc(r.title) + '</div>' +
+          (r.incKey ? '<div class="xls"><span class="badge">' + esc('WK34 · Incident ' + r.incKey) + '</span></div>' : '') +
+          (xl ? '<div class="xls">' + xl + '</div>' : '') + '</div></td>' +
+        '<td class="nm svcc"><div class="cw">' + esc(s.name) +
+          (s.deploy ? '<span class="sub mono">' + esc(s.deploy) + '</span>' : '') + '</div></td>' +
+        '<td><span class="badge src">' + esc(r.source) + '</span></td>' +
+        '<td><span class="pill ' + STCLS[r.status] + '">' + esc(r.status) + '</span>' +
+          (r.edited ? ' <span class="badge">edited</span>' : '') + '</td>' +
+        '<td class="nm picc"><div class="cw">' + pic + '</div></td>' +
+        '<td class="etac"><div class="cw">' + eta + '</div></td>' +
+        '<td class="num">' + (r.comments || 0) + '</td>' +
+      '</tr>';
+  }
+
+  function paintTable() {
+    var vis = visible(), h = '', gi, i, shown = 0;
+    var order = D.groups.slice();
+    if (V.gdir < 0) order.reverse();
+
+    for (gi = 0; gi < order.length; gi++) {
+      var g = order[gi];
+      var inGroup = sortRows(vis.filter(function (r) { return r.sev === g.sev; }));
+      if (!inGroup.length) continue;
+      h += '<tr class="grp"><td colspan="9"><div class="grph">' +
+             '<span class="pill ' + SEVCLS[g.sev] + '">' + esc(g.sev) + '</span>' +
+             '<span class="gl">' + esc(g.label) + '</span>' +
+             '<span class="gn"><b data-qa="grp-' + g.sev + '">' + g.count + '</b> in register &middot; ' +
+               '<b>' + inGroup.length + '</b> shown</span>' +
+             '<span class="gr">' + esc(g.rule) + '</span>' +
+           '</div></td></tr>';
+      for (i = 0; i < inGroup.length; i++) { h += rowHtml(inGroup[i]); shown++; }
+    }
+    /* rows added locally can only carry a seeded severity, so nothing falls out
+       of the four groups; the guard is here so a future band cannot vanish */
+    var stray = vis.filter(function (r) { return !SEVCLS[r.sev]; });
+    for (i = 0; i < stray.length; i++) { h += rowHtml(stray[i]); shown++; }
+
+    if (!shown) h = '<tr><td colspan="9"><div class="empty">No issue matches this view. ' +
+                    'Widen the tab, clear a filter, or reset.</div></td></tr>';
+    $('rows').innerHTML = h;
+    $('shown').innerHTML = '<b>' + shown + '</b> of <b>' + V.rows.length + '</b> issues shown';
+    head(V.sort);
+  }
+
+  function paintSevCards() {
+    var h = '', i;
+    for (i = 0; i < D.groups.length; i++) {
+      var g = D.groups[i];
+      h += '<div class="card"><header>' +
+             '<span class="pill ' + SEVCLS[g.sev] + '">' + esc(g.sev) + '</span>' +
+             '<h3>' + esc(g.label) + '</h3>' +
+             '<span class="sp" style="flex:1 1 auto"></span>' +
+             '<span class="ch"><b>' + g.count + '</b> raised</span>' +
+           '</header><p class="note">' + esc(g.rule) + '</p></div>';
+    }
+    $('sevcards').innerHTML = h;
+  }
+
+  function paintLocalBar() {
+    var nEdit = 0, k;
+    for (k in STORE.edits) if (Object.prototype.hasOwnProperty.call(STORE.edits, k)) nEdit++;
+    var nAdd = STORE.added.length;
+    var bar = $('localbar');
+    if (!nEdit && !nAdd) { bar.hidden = true; return; }
+    bar.hidden = false;
+    $('localtxt').innerHTML = STORE.persisted === false
+      ? '<b>' + nEdit + '</b> edited &middot; <b>' + nAdd + '</b> added, held <b>in memory only</b> &mdash; this ' +
+        'browser refused localStorage, so the change is lost on reload. The tiles above stay the computed register.'
+      : '<b>' + nEdit + '</b> edited &middot; <b>' + nAdd + '</b> added, held in this browser only ' +
+        '(<span class="mono">' + STORE_KEY + '</span>). The tiles above stay the computed register and do not count them.';
+  }
+
+  function paintAll() {
+    V.rows = buildRows();
+    paintTabs();
+    paintRaised();
+    paintTable();
+    paintLocalBar();
+  }
+
+  /* ============================================================== DRAWER */
+  var ov = $('ov'), lastFocus = null, wowChart = null, draft = null;
+
+  function fmtWow(w) {
+    if (w == null) return { txt: 'NO DATA', cls: 'nd' };
+    return { txt: SY.fmtSigned(w, 1), cls: w > 0 ? 'up' : (w < 0 ? 'dn' : '') };
+  }
+  function etaSelects(eta) {
+    var day = (eta == null) ? '' : String(Math.floor(eta / DAY) + 1);
+    var hr = (eta == null) ? '' : String(Math.floor((eta % DAY) / 12));
+    var h = '<div class="row"><select id="eta-d" aria-label="ETA day"><option value="">no ETA</option>';
+    for (var i = 1; i <= 7; i++) h += '<option value="' + i + '"' + (day === String(i) ? ' selected' : '') + '>' + esc(SY.dayLabel(i)) + '</option>';
+    h += '</select><select id="eta-h" aria-label="ETA hour">';
+    for (var j = 0; j < 24; j++) {
+      var lab = (j < 10 ? '0' + j : j) + ':00';
+      h += '<option value="' + j + '"' + (hr === String(j) ? ' selected' : '') + '>' + lab + '</option>';
+    }
+    h += '</select></div>';
+    return h;
+  }
+  function readEta() {
+    var d = $('eta-d'), hh = $('eta-h');
+    if (!d || !d.value) return null;
+    return (parseInt(d.value, 10) - 1) * DAY + parseInt(hh.value || '0', 10) * 12;
+  }
+
+  function drawerBody(r, det) {
+    var s = svcInfo(r.svc), i;
+    var ev = det ? det.evidence : null;
+    var h = '';
+
+    /* --- identity ------------------------------------------------------ */
+    h += '<div class="ovh"><div class="t" id="ov-title-txt">' + esc(r.title) + '</div>' +
+         '<div class="d">' + esc(s.name) + (s.deploy ? ' &middot; ' + esc(s.deploy) : '') +
+         (r.route ? ' &middot; ' + esc(r.route) : '') + '</div>' +
+         '<div class="d">raised ' + esc(r.createdLabel) + ' &middot; updated ' + esc(r.updatedLabel) +
+         ' &middot; source <span class="badge src">' + esc(r.source) + '</span>' +
+         (r.local ? ' &middot; <span class="badge">added in this browser</span>' : '') + '</div></div>';
+
+    /* --- severity + status buttons ------------------------------------- */
+    h += '<div class="ovsec"><h4>Severity</h4><span class="sh">' + esc(sevLabel(r.sev)) + '</span></div>';
+    h += '<div class="chips" id="ov-sev" role="group" aria-label="Severity">';
+    var sevs = (det && det.severities) ? det.severities : ['P1', 'P2', 'P3', 'P4'];
+    for (i = 0; i < sevs.length; i++)
+      h += '<button class="chip' + (draft.sev === sevs[i] ? ' on' : '') + '" type="button" ' +
+           'data-sev="' + sevs[i] + '" aria-pressed="' + (draft.sev === sevs[i]) + '">' + sevs[i] + '</button>';
+    h += '</div>';
+
+    h += '<div class="ovsec"><h4>Status</h4><span class="sh">where the issue stands</span></div>';
+    h += '<div class="chips" id="ov-status" role="group" aria-label="Status">';
+    var sts = (det && det.statuses) ? det.statuses : D.statuses;
+    for (i = 0; i < sts.length; i++)
+      h += '<button class="chip' + (draft.status === sts[i] ? ' on' : '') + '" type="button" ' +
+           'data-status="' + esc(sts[i]) + '" aria-pressed="' + (draft.status === sts[i]) + '">' + esc(sts[i]) + '</button>';
+    h += '</div>';
+
+    /* --- description ---------------------------------------------------- */
+    h += '<div class="ovsec"><h4>Description</h4><span class="sh">what happened and why it matters</span></div>' +
+         '<div class="ff"><textarea id="ov-desc" aria-label="Description" ' +
+         'placeholder="What happened? What is the customer-visible effect?">' + esc(draft.desc || '') + '</textarea></div>';
+
+    /* --- ownership ------------------------------------------------------ */
+    h += '<div class="ovsec"><h4>Ownership</h4><span class="sh">who is accountable and when it is due</span></div>' +
+         '<div class="grid2 even" style="gap:10px">' +
+           '<div class="ff"><span class="fl">PIC</span>' +
+             '<div class="row"><input type="text" id="ov-pic" aria-label="Person in charge" ' +
+             'placeholder="name@example-bank.mm" value="' + esc(draft.picEmail || '') + '"/>' +
+             '<button class="btn" type="button" id="ov-me" title="Assign to the signed-in operator">me</button></div>' +
+             '<span class="fh">' + (r.pic ? esc(r.pic.name) + ' &middot; ' + esc(r.pic.team) + ' (mock roster)'
+                                          : 'unassigned') + '</span></div>' +
+           '<div class="ff"><span class="fl">ETA</span>' + etaSelects(draft.eta) +
+             '<span class="fh">timeline stamp inside the replayed week; now is ' + esc(SY.dstamp(NOW)) + '</span></div>' +
+         '</div>' +
+         '<div class="ff"><span class="fl">CC</span>' +
+           '<input type="text" id="ov-cc" aria-label="CC emails" placeholder="comma-separated addresses" value="' +
+           esc((draft.cc || []).join(', ')) + '"/></div>';
+
+    /* --- decision ------------------------------------------------------- */
+    h += '<div class="ovsec"><h4>Decision</h4><span class="sh">captured from the operations review</span></div>' +
+         '<div class="ff"><textarea id="ov-dec" aria-label="Decision" style="min-height:66px" ' +
+         'placeholder="What did the team decide? Who owns the next step?">' + esc(draft.decision || '') + '</textarea></div>';
+
+    /* --- related dashboard links ---------------------------------------- */
+    h += '<div class="ovsec"><h4>Related dashboard links</h4><span class="sh">our own menus &middot; no vendor console</span></div>' +
+         '<div class="rel">';
+    /* a row synth knows about carries its own related[]; a row added in this
+       browser is not in the register, so the page offers the two menu-wide
+       views for its service and says where they came from */
+    var rel = (det && det.related) ? det.related : [
+      { label: 'Service health - ' + r.svc, href: 'service-health.html?service=' + encodeURIComponent(r.svc) },
+      { label: 'SLA weekly - critical services', href: 'sla-weekly.html' }
+    ];
+    for (i = 0; i < rel.length; i++)
+      h += '<a href="' + esc(rel[i].href) + '">' + esc(rel[i].label) +
+           '<span class="h">' + esc(rel[i].href) + '</span></a>';
+    h += '</div>';
+    if (!det) h += '<p class="note">These two links are page-built: a locally added row is not in the register, ' +
+                   'so <span class="mono">issueDetail()</span> has no related list for it.</p>';
+
+    /* --- evidence -------------------------------------------------------- */
+    h += '<div class="ovsec"><h4>Evidence</h4><span class="sh">' +
+         (ev ? 'recomputed from the spine &middot; ' + esc(ev.metric) : 'no spine metric behind this row') +
+         '</span></div>';
+    if (!ev) {
+      h += '<div class="card flat"><div class="empty">' +
+           '<span class="pill unk">No data</span><div style="margin-top:7px">' +
+           'This issue was added in this browser, so there is no collected series behind it. ' +
+           'The register never shows 0 where it has nothing.</div></div></div>';
+    } else {
+      var w = fmtWow(ev.wow);
+      h += '<div class="evkv">' +
+        '<div class="evrow"><span class="k">Last week &middot; ' + esc(ev.metric) + '</span>' +
+          '<span class="v" data-qa="ev-lastweek">' + num(ev.lastWeek) + '</span></div>' +
+        '<div class="evrow"><span class="k">Prior week</span>' +
+          '<span class="v" data-qa="ev-priorweek">' + num(ev.priorWeek) + '</span></div>' +
+        '<div class="evrow"><span class="k">WoW change</span>' +
+          '<span class="v ' + w.cls + '" data-qa="ev-wow">' + esc(w.txt) + '</span></div>' +
+        '<div class="evrow"><span class="k">Daily average</span>' +
+          '<span class="v">' + num(ev.dailyAvg) + '</span></div>' +
+        '<div class="evrow"><span class="k">Customer impact</span>' +
+          '<span class="v" data-qa="ev-impact">' + num(ev.customerImpact) + '</span></div>' +
+        (ev.windowLabel
+          ? '<div class="evrow"><span class="k">Incident window</span><span class="v">' +
+            esc('WK34 · Incident ' + ev.window + ' — ' + ev.windowLabel) + '</span></div>'
+          : '') +
+      '</div>';
+
+      /* --- week over week ------------------------------------------------ */
+      var ws = (det && det.wowSeries) ? det.wowSeries : [];
+      h += '<div class="ovsec"><h4>Week over week</h4><span class="sh">this replayed week against the seeded prior week</span></div>';
+      h += '<p class="wowline">Prior week <b>' + num(ev.priorWeek) + '</b> ' +
+           '<span class="delta ' + (ev.wow > 0 ? 'up' : 'down') + '">' + esc(w.txt) + '</span> ' +
+           'current <b>' + num(ev.lastWeek) + '</b> &middot; about <b>' + num(ev.dailyAvg) + '</b> a day.</p>';
+      if (ws.length) h += '<div class="card flat" style="padding:9px 4px 4px"><div class="chartbox" id="ovwow"></div>' +
+        '<div class="legend" style="padding:0 9px 6px"><span><i class="c1"></i>this week</span>' +
+        '<span><i class="c2"></i>prior week</span></div></div>';
+    }
+
+    /* --- rca note -------------------------------------------------------- */
+    if (det && det.rca) {
+      h += '<div class="ovsec"><h4>Node context</h4><span class="sh">from the flow map&#39;s RCA register</span></div>' +
+           '<p class="note">' + esc(det.rca.desc) + '</p>' +
+           '<p class="note"><b>Owner</b> ' + esc(det.rca.owner.team) + ' &middot; ' + esc(det.rca.owner.name) +
+           ' &middot; ' + esc(det.rca.owner.channel) + '</p>';
+    }
+    h += '<p class="note">' + esc((det && det.lineage) || D.lineage) + '</p>';
+    return h;
+  }
+
+  function openIssue(id, newRow) {
+    var r = null, det = null, i;
+    if (newRow) { r = newRow; det = null; }
+    else {
+      for (i = 0; i < V.rows.length; i++) if (V.rows[i].id === id) r = V.rows[i];
+      if (!r) return;
+      det = r.local ? null : SY.issueDetail(id);
+    }
+    draft = { id: r.id, sev: r.sev, status: r.status, title: r.title, desc: r.desc || '',
+              decision: r.decision || '', picEmail: r.picEmail || (r.pic ? r.pic.email : ''),
+              eta: r.eta, cc: (r.cc || []).slice(), isNew: !!newRow, base: r };
+
+    $('ovk').textContent = r.id;
+    $('ovt').textContent = newRow ? 'New issue' : ('Issue ' + r.id);
+    $('ovbody').innerHTML = drawerBody(r, det);
+    $('ovmsg').textContent = 'Saved to this browser only (localStorage · ' + STORE_KEY + ').';
+    /* Revert means "back to the computed register", which only exists for a row
+       the register knows about — never for one added in this browser */
+    $('ovrevert').hidden = !!newRow || !!r.local;
+
+    lastFocus = document.activeElement;
+    ov.className = 'overlay open';
+    ov.setAttribute('aria-hidden', 'false');
+
+    /* the WoW chart is built after the panel is on screen so it measures the
+       real drawer width; responsive:false keeps listeners from piling up */
+    wowChart = null;
+    var box = $('ovwow');
+    if (box && det && det.wowSeries && det.wowSeries.length) {
+      wowChart = C.render('#ovwow', {
+        type: 'bars', responsive: false, ratio: .40, minH: 140, maxH: 200,
+        groups: det.wowSeries.map(function (b) { return b.day; }),
+        series: [{ name: 'this week', values: det.wowSeries.map(function (b) { return b.cur; }) },
+                 { name: 'prior week', values: det.wowSeries.map(function (b) { return b.prev; }) }],
+        yFmt: 'compact', legend: false, label: 'daily count, this week against the prior week'
+      });
+    }
+    var f = ov.querySelector('.ov-x');
+    if (f && f.focus) f.focus();
+  }
+
+  function closeOv() {
+    ov.className = 'overlay';
+    ov.setAttribute('aria-hidden', 'true');
+    wowChart = null;
+    if (lastFocus && lastFocus.focus) { try { lastFocus.focus(); } catch (e) {} }
+  }
+
+  function collectDraft() {
+    if (!draft) return null;
+    var cc = ($('ov-cc') ? $('ov-cc').value : '').split(',');
+    var out = [], i;
+    for (i = 0; i < cc.length; i++) { var v = cc[i].replace(/^\s+|\s+$/g, ''); if (v) out.push(v); }
+    return {
+      sev: draft.sev, status: draft.status, title: draft.title,
+      desc: $('ov-desc') ? $('ov-desc').value : draft.desc,
+      decision: $('ov-dec') ? $('ov-dec').value : draft.decision,
+      picEmail: $('ov-pic') ? $('ov-pic').value.replace(/^\s+|\s+$/g, '') : draft.picEmail,
+      eta: readEta(), cc: out
+    };
+  }
+
+  /* The drawer is updated in place rather than torn down and rebuilt: a rebuild
+     would throw away the reader's scroll position mid-form, and it used to
+     overwrite the save confirmation with the drawer's default footer note. */
+  function saveDrawer() {
+    if (!draft) return;
+    var patch = collectDraft(), id = draft.id;
+    if (draft.isNew) {
+      var row = draft.base;
+      row.sev = patch.sev; row.status = patch.status; row.desc = patch.desc;
+      row.decision = patch.decision; row.picEmail = patch.picEmail; row.eta = patch.eta; row.cc = patch.cc;
+      row.title = ($('ov-newtitle') && $('ov-newtitle').value) ? $('ov-newtitle').value : row.title;
+      draft.title = row.title;
+      STORE.added.push(row);
+      draft.isNew = false;
+    } else {
+      patch.title = draft.title;
+      STORE.edits[id] = patch;
+      mirrorStore(id, patch, 'adeptio_ops_' + id);
+    }
+    var wrote = saveStore();
+    draft.sev = patch.sev; draft.status = patch.status; draft.eta = patch.eta;
+    draft.desc = patch.desc; draft.decision = patch.decision;
+    draft.picEmail = patch.picEmail; draft.cc = patch.cc;
+    paintAll();                                   /* the register behind refreshes */
+    $('ovt').textContent = 'Issue ' + id;
+    $('ovmsg').textContent = wrote
+      ? 'Saved ' + id + ' to this browser (' + STORE_KEY + ').'
+      : 'This browser refused localStorage. ' + id + ' is held in memory only and will be lost on reload.';
+  }
+
+  function revertDrawer() {
+    if (!draft || draft.isNew) return;
+    var id = draft.id;
+    delete STORE.edits[id];
+    try { window.localStorage.removeItem('adeptio_ops_' + id); } catch (e) {}
+    saveStore();
+    paintAll();
+    closeOv();
+    openIssue(id);
+    $('ovmsg').textContent = id + ' reverted to the computed register.';
+  }
+
+  function newIssue() {
+    var n = STORE.added.length + 1;
+    var id = 'OPS-L' + (n < 10 ? '0' + n : n);
+    var row = { id: id, sev: 'P3', status: 'open',
+      title: 'New issue raised from the operations review',
+      svc: 'gateway', route: null, source: 'ops-review', desc: '', decision: '', comments: 0,
+      pic: null, picKey: null, picEmail: '', cc: [], node: null, incKey: null,
+      created: NOW, updated: NOW, eta: null, evidence: null,
+      ticket: null, ticketLink: null, flowLink: null, local: true };
+    row.createdLabel = SY.dstamp(row.created);
+    row.updatedLabel = SY.dstamp(row.updated);
+    row.etaLabel = null;
+    row.overdue = false;
+    row.severityLabel = sevLabel(row.sev);
+    openIssue(id, row);
+    /* the title is editable for a new row */
+    var host = $('ovbody');
+    var block = document.createElement('div');
+    block.className = 'ff';
+    block.style.marginTop = '2px';
+    block.innerHTML = '<span class="fl">Title</span><input type="text" id="ov-newtitle" ' +
+      'aria-label="Issue title" value="' + esc(row.title) + '"/>' +
+      '<span class="fh">Locally added rows carry no evidence series and are marked <b>local</b> in the register.</span>';
+    host.insertBefore(block, host.firstChild.nextSibling);
+    var t = $('ov-newtitle');
+    if (t && t.focus) t.focus();
+  }
+
+  /* ================================================================ WIRING */
+  S.ready(function () {
+    S.setLineage(SY.lineage('ops-issues') || D.lineage);
+
+    /* selects */
+    function opts(sel, list, allLabel) {
+      var h = '<option value="">' + allLabel + '</option>', i;
+      for (i = 0; i < list.length; i++) h += '<option value="' + esc(list[i]) + '">' + esc(list[i]) + '</option>';
+      sel.innerHTML = h;
+    }
+    opts($('f-status'), D.statuses, 'All statuses');
+    opts($('f-sev'), D.groups.map(function (g) { return g.sev; }), 'All severities');
+    opts($('f-src'), D.sources, 'All sources');
+
+    paintTiles();
+    paintSevCards();
+    $('note-reg').innerHTML = esc(D.note) +
+      ' The <b>Open</b> tile counts everything not resolved and not won&#39;t fix (' + D.tiles.open + '); ' +
+      'the <b>Open</b> tab below is narrower — open, discussing and decided — because in-progress work has its own tab.';
+    $('note-tbl').innerHTML =
+      'Rows are grouped by severity band, sorted inside the band, and every figure in a row comes from ' +
+      '<span class="mono">PULSE_SYNTH.opsIssues()</span>. Click or press Enter on a row to open the issue. ' +
+      'Incident links resolve through <span class="mono">tickets.js byWindow</span>; the flow-map link opens the ' +
+      'front page at the incident peak.';
+
+    paintAll();
+
+    /* tabs */
+    $('tabs').addEventListener('click', function (ev) {
+      var n = up(ev.target, this, 'data-tab');
+      if (!n) return;
+      V.tab = n.getAttribute('data-tab');
+      paintTabs(); paintTable();
+    });
+
+    /* raised chips */
+    $('raised').addEventListener('click', function (ev) {
+      var n = up(ev.target, this, 'data-raised');
+      if (!n) return;
+      V.raised = n.getAttribute('data-raised');
+      paintTabs(); paintRaised(); paintTable();
+    });
+
+    /* selects + search */
+    $('f-status').addEventListener('change', function () { V.status = this.value; paintTabs(); paintTable(); });
+    $('f-sev').addEventListener('change', function () { V.sev = this.value; paintTabs(); paintTable(); });
+    $('f-src').addEventListener('change', function () { V.src = this.value; paintTabs(); paintTable(); });
+    var qtid = null;
+    $('f-q').addEventListener('input', function () {
+      var self = this;
+      if (qtid) clearTimeout(qtid);
+      qtid = setTimeout(function () { V.q = self.value.toLowerCase().replace(/^\s+|\s+$/g, ''); paintTabs(); paintTable(); }, 120);
+    });
+    $('reset').addEventListener('click', function () {
+      V.tab = 'All'; V.status = ''; V.sev = ''; V.src = ''; V.q = ''; V.raised = 'all';
+      V.sort = 'id'; V.dir = 1; V.gdir = 1;
+      $('f-status').value = ''; $('f-sev').value = ''; $('f-src').value = ''; $('f-q').value = '';
+      paintTabs(); paintRaised(); paintTable();
+    });
+
+    $('newissue').addEventListener('click', newIssue);
+    $('clearlocal').addEventListener('click', function () { clearStore(); paintAll(); });
+
+    /* sortable headers — pointer and keyboard */
+    function headSort(ev) {
+      if (ev.type === 'keydown' && ev.key !== 'Enter' && ev.key !== ' ') return;
+      var n = up(ev.target, this, 'data-sort');
+      if (!n) return;
+      if (ev.type === 'keydown') ev.preventDefault();
+      var k = n.getAttribute('data-sort');
+      if (k === 'sev') { V.gdir = -V.gdir; paintTable(); return; }
+      if (V.sort === k) V.dir = -V.dir;
+      else { V.sort = k; V.dir = (k === 'comments' || k === 'eta') ? -1 : 1; }
+      paintTable();
+    }
+    var thead = document.querySelector('.ptable thead');
+    thead.addEventListener('click', headSort);
+    thead.addEventListener('keydown', headSort);
+
+    /* register rows */
+    var body = $('rows');
+    body.addEventListener('click', function (ev) {
+      if (ev.target && ev.target.tagName === 'A') return;      /* cross-links win */
+      var n = up(ev.target, this, 'data-id');
+      if (n) openIssue(n.getAttribute('data-id'));
+    });
+    body.addEventListener('keydown', function (ev) {
+      if (ev.key !== 'Enter' && ev.key !== ' ') return;
+      var t = ev.target;
+      if (t && t.getAttribute && t.getAttribute('data-id')) { ev.preventDefault(); openIssue(t.getAttribute('data-id')); }
+    });
+
+    /* drawer */
+    $('ovbody').addEventListener('click', function (ev) {
+      var sv = up(ev.target, this, 'data-sev');
+      if (sv) {
+        draft.sev = sv.getAttribute('data-sev');
+        var bs = this.querySelectorAll('[data-sev]'), i;
+        for (i = 0; i < bs.length; i++) {
+          var on = bs[i].getAttribute('data-sev') === draft.sev;
+          bs[i].className = on ? 'chip on' : 'chip';
+          bs[i].setAttribute('aria-pressed', on ? 'true' : 'false');
+        }
+        return;
+      }
+      var st = up(ev.target, this, 'data-status');
+      if (st) {
+        draft.status = st.getAttribute('data-status');
+        var cs = this.querySelectorAll('[data-status]'), j;
+        for (j = 0; j < cs.length; j++) {
+          var onj = cs[j].getAttribute('data-status') === draft.status;
+          cs[j].className = onj ? 'chip on' : 'chip';
+          cs[j].setAttribute('aria-pressed', onj ? 'true' : 'false');
+        }
+        return;
+      }
+      if (ev.target && ev.target.id === 'ov-me') {
+        var me = $('ov-pic');
+        if (me) me.value = 'ops.duty@example-bank.mm';
+      }
+    });
+    $('ovsave').addEventListener('click', saveDrawer);
+    $('ovrevert').addEventListener('click', revertDrawer);
+    ov.addEventListener('click', function (ev) {
+      if (ev.target.hasAttribute && ev.target.hasAttribute('data-ov-close')) closeOv();
+    });
+    document.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Escape' && ov.className.indexOf('open') > -1) closeOv();
+    });
+
+    /* one debounced resize handler for the drawer chart */
+    var rtid = null;
+    window.addEventListener('resize', function () {
+      if (rtid) clearTimeout(rtid);
+      rtid = setTimeout(function () { if (wowChart && ov.className.indexOf('open') > -1) wowChart.draw(); }, 160);
+    });
+  });
+})();
+</script>
+</body>
+</html>

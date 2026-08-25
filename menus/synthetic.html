@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<link rel="icon" href="data:,"/>
+
+<!-- ===========================================================================
+     ADEPTIO Pulse — menu 5 · API SYNTHETIC INSIGHT
+     Built from menus/_template.html. Every figure comes from
+     PULSE_SYNTH.synthetic(range) — the page formats, it never computes.
+     =========================================================================== -->
+
+<title>API Synthetic Insight &mdash; Adeptio Pulse</title>
+
+<link rel="stylesheet" href="../assets/tokens.css"/>
+<link rel="stylesheet" href="../assets/shell.css"/>
+<link rel="stylesheet" href="../assets/menus.css"/>
+
+<style>
+/* ------------------------------------------------------------- page-local
+   Six small additions this screen needs and the shared kit does not carry.
+   Tokens only; status colours are used for status only. -------------------*/
+
+/* the uptime figure is a status reading, so it takes a status colour */
+.uv{font-weight:700;font-variant-numeric:tabular-nums}
+.uv.ok{color:var(--ok)} .uv.warn{color:var(--warn)}
+.uv.crit{color:var(--crit)} .uv.unk{color:var(--unk)}
+
+/* badge variants: failed-check count, control monitor, incident cross-link */
+.badge.fails{color:var(--crit);border-color:color-mix(in srgb,var(--crit) 42%,transparent);
+  background:color-mix(in srgb,var(--crit) 12%,transparent)}
+.badge.ctl{color:var(--unk);border-color:color-mix(in srgb,var(--unk) 42%,transparent)}
+.badge.inc{text-decoration:none;color:var(--warn);
+  border-color:color-mix(in srgb,var(--warn) 42%,transparent);
+  background:color-mix(in srgb,var(--warn) 12%,transparent)}
+.badge.inc.crit{color:var(--crit);border-color:color-mix(in srgb,var(--crit) 42%,transparent);
+  background:color-mix(in srgb,var(--crit) 12%,transparent)}
+.badge.inc:hover{border-color:currentColor}
+
+/* the monitor cell is two lines: identity, then the URL it actually probes */
+.mline{display:flex;align-items:center;gap:7px;flex-wrap:wrap;min-width:0}
+.mline .mn{font-weight:650;color:var(--ink)}
+
+/* column widths: the bar strip and the sparkline are furniture, not text */
+.ptable td.bars,.ptable th.bars{min-width:236px;width:26%}
+.ptable td.spk,.ptable th.spk{width:120px}
+.ptable td.bars .uptime-bars{height:20px}
+
+/* links inside a row detail sit on one line and do not inherit the row cursor */
+.dlinks{display:flex;gap:10px;flex-wrap:wrap;align-items:center;font-size:11px}
+.dlinks a{text-decoration:none;border-bottom:1px solid transparent}
+.dlinks a:hover{border-bottom-color:currentColor}
+
+@media (prefers-reduced-motion:reduce){
+  .rt-c,.statusbar > i{transition:none}
+}
+</style>
+</head>
+
+<body data-shell="page"
+      data-title="API Synthetic Insight"
+      data-subtitle="computed from: L1 synthetic probes (probe_success, assertion_result, probe_duration_seconds, vantage) &middot; no APM &middot; Aug 23 &ndash; 29, 2027"
+      data-ranges="24h,48h,7d,14d,30d"
+      data-range="24h"
+      data-lineage="L1 synthetic probes only">
+
+<div id="pulse-main">
+
+  <!-- ===================================================== window / range -->
+  <div class="card">
+    <div class="toolbar">
+      <span class="clbl">Window</span>
+      <span class="mono" id="winlabel">&mdash;</span>
+      <span class="csep"></span>
+      <span class="note" id="wininfo"></span>
+      <div class="sp"></div>
+      <span class="note" id="winclamp"></span>
+      <a class="btn" id="winflow" href="../index.html">Open on the flow map</a>
+    </div>
+  </div>
+
+  <!-- ================================================================ tiles -->
+  <section class="tiles" id="tiles" aria-label="Headline figures"></section>
+
+  <!-- ============================================================ vantages -->
+  <section class="sect"><h2>Vantages</h2>
+    <span class="sh">where the prober sits &mdash; a probe is only as honest as its path</span></section>
+  <div class="card">
+    <div class="toolbar">
+      <span class="clbl">Filter by vantage</span>
+      <div class="chips" id="vchips" role="group" aria-label="Filter by vantage"></div>
+      <div class="sp"></div>
+      <span class="note">Up / total at the last check in this window.</span>
+    </div>
+  </div>
+
+  <!-- ============================================================= monitors -->
+  <section class="sect"><h2>Monitors</h2>
+    <span class="sh">one row per monitor &middot; one bar per interval &middot; 5-min schedule</span>
+    <span class="sp"></span>
+    <span class="note" id="shown"></span>
+  </section>
+
+  <div class="card">
+    <div class="toolbar">
+      <span class="clbl">Sort</span>
+      <div class="chips" id="schips" role="group" aria-label="Sort monitors"></div>
+      <span class="csep"></span>
+      <button class="chip" type="button" id="f-ctl" aria-pressed="true">Control monitors<span class="n" id="f-ctl-n"></span></button>
+      <div class="sp"></div>
+      <label class="field"><span class="fl">Filter</span>
+        <input type="text" id="q" placeholder="name, URL, method or vantage" aria-label="Filter monitors"/></label>
+      <button class="btn" type="button" id="reset">Reset</button>
+    </div>
+  </div>
+
+  <div class="card pad0">
+    <div class="twrap" style="--tmax:70vh">
+      <table class="ptable" style="--tmin:1040px">
+        <thead>
+          <tr>
+            <th class="sortable" data-sort="name" scope="col">Monitor<span class="sarr"></span></th>
+            <th scope="col">Vantage</th>
+            <th class="num sortable" data-sort="uptime" scope="col">Uptime<span class="sarr"></span></th>
+            <th class="num sortable" data-sort="response" scope="col">Avg RT<span class="sarr"></span></th>
+            <th scope="col">Last check</th>
+            <th class="bars" scope="col">Intervals</th>
+            <th class="spk" scope="col">Trend</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <div id="none" class="empty" hidden>No monitor matches these filters. Clear the filter box or widen the vantage selection.</div>
+  </div>
+
+  <div class="legend">
+    <span><i class="ok"></i>100%</span>
+    <span><i class="warn"></i>&ge;80%</span>
+    <span><i class="crit"></i>&lt;80%</span>
+    <span><i class="unk"></i>no data</span>
+    <span class="csep"></span>
+    <span class="muted" id="lgwin"></span>
+  </div>
+
+  <!-- ============================================================ honesty -->
+  <section class="sect"><h2>How this page counts</h2>
+    <span class="sh">three rules that keep the uptime figure honest</span></section>
+  <div class="grid3">
+    <div class="card"><header><h3>Control monitors</h3><span class="ch">the standing 3 down</span></header>
+      <p class="note" id="n-controls"></p></div>
+    <div class="card"><header><h3>No data is not a failure</h3><span class="ch">the fourth bar state</span></header>
+      <p class="note" id="n-nodata"></p></div>
+    <div class="card"><header><h3>Assertion in the numerator</h3><span class="ch">200 is not success</span></header>
+      <p class="note" id="n-assert"></p></div>
+  </div>
+
+</div><!-- /#pulse-main -->
+
+<!-- ===================================================== LOAD ORDER ======= -->
+<script src="../data/manifest.js"></script>
+<script src="../data/rcameta.js"></script>
+<script src="../data/tickets.js"></script>
+<script src="../data/registry.js"></script>
+<script src="../data/spine.js"></script>
+<script src="../assets/synth.js"></script>
+<script src="../assets/charts.js"></script>
+<script src="../assets/shell.js"></script>
+
+<script>
+/* ------------------------------------------------------------------ page */
+(function () {
+  "use strict";
+
+  var C  = window.PULSE_CHARTS,
+      S  = window.PULSE_SHELL,
+      SY = window.PULSE_SYNTH,
+      REG = window.PULSE_REG,
+      TK = window.ADEPTIO_TICKETS || { byWindow: {} },
+      DA = window.ADEPTIO_DATA;
+
+  var esc = C.esc;
+  var $ = function (id) { return document.getElementById(id); };
+
+  /* view state — filters and sort live on the page, every number lives in the
+     payload. Changing any of these re-orders or hides rows, never re-computes. */
+  var V = { sort: 'status', dir: 1, q: '', vantage: null, controls: true };
+  var DEF_DIR = { status: 1, name: 1, uptime: 1, response: -1 };
+  var SORT_LABEL = { status: 'Status', name: 'Name', uptime: 'Uptime', response: 'Response Time' };
+  var open = {};          /* which rows are expanded, kept across re-renders */
+  var cur = null;         /* the payload currently on screen                 */
+
+  /* --------------------------------------------------------------- format */
+  function pct(v)  { return v == null ? 'NO DATA' : SY.fmtPct(v, 2); }
+  function ms(v)   { return v == null ? 'NO DATA' : SY.fmtMs(v); }
+  function num(v)  { return v == null ? 'NO DATA' : SY.fmtNum(v); }
+
+  /* coverage state for a row, through the shared synth helper — a probe that
+     could not run is missing evidence, never a failed probe. */
+  function cov(r) {
+    var planned = r.checks + r.noData;
+    return SY.covState(planned ? r.checks / planned : 1);
+  }
+
+  /* incident windows this monitor is coupled to inside the visible range.
+     The coupling is registry metadata (the same map the spine reads); the
+     numbers stay in the payload. */
+  function incidents(r, rng) {
+    var m = REG.byMonitor[r.id] || {}, inc = m.inc || {}, outp = [], k;
+    for (k in DA.INC) {
+      if (!Object.prototype.hasOwnProperty.call(DA.INC, k)) continue;
+      if (!inc[k]) continue;
+      var w = DA.INC[k];
+      if (w[w.length - 1] < rng.t0 || w[0] > rng.t1) continue;
+      var meta = DA.INCMETA[k] || [k, 'warn'];
+      outp.push({ key: k, label: meta[0], sev: meta[1], peak: w[1],
+                  peakLabel: SY.dstamp(w[1]), ticket: (TK.byWindow || {})[k] || null });
+    }
+    outp.sort(function (a, b) {
+      if (a.sev !== b.sev) return a.sev === 'crit' ? -1 : 1;
+      return a.peak - b.peak;
+    });
+    return outp;
+  }
+
+  /* ---------------------------------------------------------------- tiles */
+  function tiles(d) {
+    var t = d.tiles, target = REG.thresholds.availabilityTarget;
+    var upBand = t.uptimeExControls == null ? 'unk'
+               : t.uptimeExControls >= target ? 'ok'
+               : t.uptimeExControls >= 99 ? 'warn' : 'crit';
+    var h = '';
+
+    h += '<div class="tile ' + (t.down > 3 ? 'crit' : 'ok') + '" id="tile-monitors">' +
+         '<div class="label"><span>Monitors</span></div>' +
+         '<div class="value"><span class="v">' + esc(String(t.monitorsUp)) + '</span>' +
+         '<u> / ' + esc(String(t.monitorsTotal)) + '</u></div>' +
+         '<div class="sub">' + esc(String(t.down)) + ' down at the last check &middot; ' +
+         '<b>3</b> of those are permanent controls</div>' +
+         '<div class="tilefoot"><span class="pf ' + (t.down > 3 ? 'fail' : 'pass') + '">' +
+         (t.down > 3 ? 'Outage' : 'Expected') + '</span></div></div>';
+
+    h += '<div class="tile ' + upBand + '" id="tile-uptime">' +
+         '<div class="label"><span>Uptime</span></div>' +
+         '<div class="value"><span class="v">' + esc(pct(t.uptime)) + '</span></div>' +
+         '<div class="sub">all ' + esc(String(t.monitorsTotal)) + ' monitors &middot; ' +
+         '<b>' + esc(pct(t.uptimeExControls)) + '</b> excluding the 3 controls</div>' +
+         '<div class="tilefoot"><span class="pf ' + (upBand === 'ok' ? 'pass' : upBand === 'unk' ? 'na' : 'fail') + '">' +
+         (upBand === 'unk' ? 'No data' : upBand === 'ok' ? 'Pass' : 'Fail') + '</span>' +
+         '<span class="note">vs ' + esc(SY.fmtPct(target, 2)) + ' ex-controls</span></div></div>';
+
+    h += '<div class="tile plain" id="tile-response">' +
+         '<div class="label"><span>Avg response</span></div>' +
+         '<div class="value"><span class="v">' + esc(t.avgResponse == null ? 'NO DATA' : String(t.avgResponse)) + '</span>' +
+         (t.avgResponse == null ? '' : '<u>s</u>') + '</div>' +
+         '<div class="sub">' + esc(t.avgResponseMs == null ? 'no successful checks' : num(t.avgResponseMs) + ' ms') +
+         ' across all monitors</div>' +
+         '<div class="tilefoot"><span class="note">mean of every successful check</span></div></div>';
+
+    h += '<div class="tile plain" id="tile-checks">' +
+         '<div class="label"><span>Total checks</span></div>' +
+         '<div class="value"><span class="v">' + esc(SY.fmtCompact(t.totalChecks)) + '</span></div>' +
+         '<div class="sub">' + esc(num(t.totalChecks)) + ' ran of <b>' + esc(num(t.expectedChecks)) +
+         '</b> scheduled' + (t.expectedChecks > t.totalChecks
+            ? ' &middot; ' + esc(num(t.expectedChecks - t.totalChecks)) + ' no-data' : '') + '</div>' +
+         '<div class="tilefoot"><span class="note">5-min schedule &times; ' +
+         esc(String(t.monitorsTotal)) + ' monitors</span></div></div>';
+
+    $('tiles').innerHTML = h;
+  }
+
+  /* -------------------------------------------------------------- vantages */
+  function vantages(d) {
+    var h = '', k, keys = ['dmz', 'app-zone', 'telco'];
+    h += '<button class="chip' + (V.vantage === null ? ' on' : '') + '" type="button" data-v="" ' +
+         'aria-pressed="' + (V.vantage === null ? 'true' : 'false') + '">All' +
+         '<span class="n">' + esc(String(d.rows.length)) + '</span></button>';
+    for (k = 0; k < keys.length; k++) {
+      var v = d.vantages[keys[k]];
+      if (!v) continue;
+      var on = V.vantage === keys[k];
+      h += '<button class="chip' + (on ? ' on' : '') + '" type="button" data-v="' + esc(keys[k]) + '" ' +
+           'aria-pressed="' + (on ? 'true' : 'false') + '" ' +
+           'title="' + esc(keys[k] + ': ' + v.up + ' of ' + v.total + ' up at the last check') + '">' +
+           '<span class="sdot ' + (v.up === v.total ? 'ok' : v.up === 0 ? 'crit' : 'warn') + '"></span>' +
+           esc(keys[k]) + '<span class="n">' + esc(String(v.up)) + '/' + esc(String(v.total)) + '</span></button>';
+    }
+    $('vchips').innerHTML = h;
+  }
+
+  /* ----------------------------------------------------------- sort chips */
+  function sortChips() {
+    var keys = (cur && cur.sortKeys) || ['status', 'name', 'uptime', 'response'], h = '', i;
+    for (i = 0; i < keys.length; i++) {
+      var k = keys[i], on = V.sort === k;
+      h += '<button class="chip' + (on ? ' on' : '') + '" type="button" data-s="' + esc(k) + '" ' +
+           'aria-pressed="' + (on ? 'true' : 'false') + '">' + esc(SORT_LABEL[k] || k) +
+           (on ? '<span class="n">' + (V.dir === 1 ? '\u2191' : '\u2193') + '</span>' : '') + '</button>';
+    }
+    $('schips').innerHTML = h;
+    var ths = document.querySelectorAll('.ptable thead th.sortable'), j;
+    for (j = 0; j < ths.length; j++) {
+      var sk = ths[j].getAttribute('data-sort'), sel = sk === V.sort;
+      ths[j].className = sel ? 'sortable sorted' + (ths[j].className.indexOf('num') > -1 ? ' num' : '')
+                             : 'sortable' + (ths[j].className.indexOf('num') > -1 ? ' num' : '');
+      var arr = ths[j].querySelector('.sarr');
+      if (arr) arr.textContent = sel ? (V.dir === 1 ? '\u2191' : '\u2193') : '';
+      ths[j].setAttribute('aria-sort', sel ? (V.dir === 1 ? 'ascending' : 'descending') : 'none');
+    }
+  }
+
+  /* --------------------------------------------------------------- filter */
+  function visible(d) {
+    var q = V.q.toLowerCase(), out = [], i;
+    for (i = 0; i < d.rows.length; i++) {
+      var r = d.rows[i];
+      if (!V.controls && r.control) continue;
+      if (V.vantage && r.vantage !== V.vantage) continue;
+      if (q) {
+        var hay = (r.name + ' ' + r.url + ' ' + r.method + ' ' + r.vantage + ' ' + r.id + ' ' + r.svc).toLowerCase();
+        if (hay.indexOf(q) < 0) continue;
+      }
+      out.push(r);
+    }
+    return out;
+  }
+
+  function sortRows(list) {
+    var dir = V.dir, key = V.sort;
+    var copy = list.slice();
+    copy.sort(function (a, b) {
+      var x, y;
+      if (key === 'name')          { return dir * a.name.localeCompare(b.name); }
+      if (key === 'uptime')        { x = a.uptime == null ? -1 : a.uptime; y = b.uptime == null ? -1 : b.uptime; }
+      else if (key === 'response') { x = a.avgRt == null ? -1 : a.avgRt;   y = b.avgRt == null ? -1 : b.avgRt; }
+      else {                       /* status: down first, then worst uptime */
+        x = (a.up ? 1 : 0); y = (b.up ? 1 : 0);
+        if (x === y) { x = a.uptime == null ? -1 : a.uptime; y = b.uptime == null ? -1 : b.uptime; }
+      }
+      if (x === y) return a.name.localeCompare(b.name);
+      return dir * (x - y);
+    });
+    return copy;
+  }
+
+  /* ----------------------------------------------------------------- rows */
+  function rowMarkup(r, rng) {
+    var id = 'd-' + r.id;
+    var cs = cov(r);
+    var unknown = cs.state === 'unknown';
+    var incs = incidents(r, rng);
+    var i;
+
+    /* bar strip + hover labels, straight off the payload */
+    var states = [], labels = [];
+    for (i = 0; i < r.bars.length; i++) {
+      var b = r.bars[i];
+      states.push(b.state === 'full' ? 'up' : b.state === 'part' ? 'part' : b.state === 'bad' ? 'down' : null);
+      labels.push(b.label + ' · ' + (b.uptime == null ? 'no data' : SY.fmtPct(b.uptime, 2)));
+    }
+
+    var incBadges = '';
+    for (i = 0; i < incs.length; i++) {
+      incBadges += '<a class="badge inc' + (incs[i].sev === 'crit' ? ' crit' : '') + '" ' +
+        'href="../index.html#t=' + incs[i].peak + '" ' +
+        'title="' + esc(incs[i].label + ' · peak ' + incs[i].peakLabel +
+                        ' — open on the flow map at this time') + '">' +
+        esc(incs[i].key) + ' ' + esc(incs[i].peakLabel) + '</a>';
+    }
+
+    var h = '';
+    h += '<tr class="row-toggle' + (open[r.id] ? ' open' : '') + '" data-row="' + id + '" data-id="' + esc(r.id) + '" ' +
+         'tabindex="0" role="button" aria-expanded="' + (open[r.id] ? 'true' : 'false') + '" ' +
+         'aria-controls="' + id + '">';
+
+    /* 1 · monitor */
+    h += '<td class="nm"><div class="mline"><span class="rt-c">&#9656;</span>' +
+         '<span class="sdot ' + (r.up ? 'ok' : 'crit') + '" title="' +
+         (r.up ? 'up at the last check' : 'down at the last check') + '"></span>' +
+         '<span class="mn">' + esc(r.name) + '</span>' +
+         '<span class="badge">' + esc(r.method) + '</span>' +
+         (r.fails ? '<span class="badge fails">' + esc(num(r.fails)) + ' fails</span>' : '') +
+         (r.control ? '<span class="badge ctl">Control</span>' : '') +
+         (cs.provisional && !unknown ? '<span class="badge provisional">Provisional ' +
+            esc(SY.fmtPct(cs.coverage * 100, 1)) + '</span>' : '') +
+         (unknown ? '<span class="badge provisional">No data</span>' : '') +
+         (r.noData && !cs.provisional ? '<span class="badge">' + esc(num(r.noData)) + ' no-data</span>' : '') +
+         incBadges +
+         '</div><span class="sub mono">' + esc(r.url) + '</span></td>';
+
+    /* 2 · vantage */
+    h += '<td><span class="badge src">' + esc(r.vantage) + '</span></td>';
+
+    /* 3 · uptime */
+    h += '<td class="num c-uptime"><span class="uv ' + esc(unknown ? 'unk' : r.band) + '">' +
+         esc(unknown ? 'NO DATA' : pct(r.uptime)) + '</span></td>';
+
+    /* 4 · avg rt */
+    h += '<td class="num c-rt">' + esc(ms(r.avgRt)) + '</td>';
+
+    /* 5 · last check */
+    h += '<td class="mono c-last">' + esc(r.lastCheck == null ? 'NO DATA' : r.lastCheck) +
+         (r.lastStatus == null ? '' : '<span class="sub">HTTP ' + esc(String(r.lastStatus)) + '</span>') + '</td>';
+
+    /* 6 · intervals */
+    h += '<td class="bars">' + C.uptimeBars(states, {
+           max: 96, labels: labels, label: r.name + ' — uptime per interval' }) + '</td>';
+
+    /* 7 · trend */
+    h += '<td class="spk">' + C.sparkline(r.spark, {
+           w: 108, h: 22, state: unknown ? 'unk' : r.band, fmt: 'pct',
+           label: r.name + ' uptime trend' }) + '</td>';
+    h += '</tr>';
+
+    /* ------------------------------------------------------------- detail */
+    var links = '<a href="../index.html#t=' + (r.lastCheckT == null ? rng.t1 : r.lastCheckT) + '">' +
+                'Open the flow map at ' + esc(r.lastCheck == null ? SY.dstamp(rng.t1) : r.lastCheck) + '</a>';
+    for (i = 0; i < incs.length; i++) {
+      links += '<span class="csep"></span><a href="../index.html#t=' + incs[i].peak + '">Flow map at ' +
+               esc(incs[i].key) + ' peak (' + esc(incs[i].peakLabel) + ')</a>';
+      if (incs[i].ticket) {
+        links += '<a href="../incident-trace.html#' + esc(incs[i].ticket) + '">' +
+                 esc(incs[i].ticket) + ' &mdash; ' + esc(incs[i].label) + '</a>';
+      }
+    }
+
+    var mix = C.statusBar({ ok: r.checks - r.fails, crit: r.fails, unk: r.noData },
+                          { thin: true, label: r.name + ' check outcomes' });
+
+    h += '<tr class="row-detail' + (open[r.id] ? ' open' : '') + '" id="' + id + '"><td colspan="7"><div class="dgrid">' +
+      '<div><div class="label muted">Assertion</div><div class="mono">' + esc(r.assertion) + '</div>' +
+      '<div class="note">A check counts as successful only when the assertion passed.</div></div>' +
+      '<div><div class="label muted">Checks in this window</div>' +
+        '<div><b>' + esc(num(r.checks)) + '</b> ran &middot; <b>' + esc(num(r.fails)) + '</b> failed &middot; <b>' +
+        esc(num(r.noData)) + '</b> no data</div>' + mix + '</div>' +
+      '<div><div class="label muted">Schedule &amp; path</div>' +
+        '<div>every ' + esc(String(r.interval)) + ' min &middot; vantage <b>' + esc(r.vantage) + '</b></div>' +
+        '<div class="note">node <span class="mono">' + esc(r.node) + '</span> &middot; service <span class="mono">' +
+        esc(r.svc) + '</span></div></div>' +
+      '<div><div class="label muted">Coverage</div>' +
+        '<div class="uv ' + (cs.state === 'ok' ? 'ok' : 'unk') + '">' + esc(SY.fmtPct(cs.coverage * 100, 2)) + '</div>' +
+        '<div class="note">' + (cs.state === 'ok'
+            ? 'every scheduled check produced evidence.'
+            : cs.state === 'unknown'
+              ? 'too little evidence to state an uptime for this window.'
+              : 'some scheduled checks produced no evidence; the figure is provisional.') + '</div></div>' +
+      (incs.length
+        ? '<div><div class="label muted">Incident windows in range</div>' + incidentList(incs) + '</div>'
+        : '<div><div class="label muted">Incident windows in range</div>' +
+          '<div class="note">none &mdash; this monitor is not coupled to an incident inside this window.</div></div>') +
+      '<div style="grid-column:1/-1"><div class="label muted">Cross-links</div>' +
+        '<div class="dlinks">' + links + '</div></div>' +
+      '</div></td></tr>';
+
+    return h;
+  }
+
+  function incidentList(incs) {
+    var h = '', i;
+    for (i = 0; i < incs.length; i++) {
+      h += '<div style="margin-top:3px"><span class="pill ' + (incs[i].sev === 'crit' ? 'crit' : 'warn') + '">' +
+           esc('W34·' + incs[i].key) + '</span> ' + esc(incs[i].label) +
+           '<span class="sub">peak ' + esc(incs[i].peakLabel) +
+           (incs[i].ticket ? ' &middot; ' + esc(incs[i].ticket) : '') + '</span></div>';
+    }
+    return h;
+  }
+
+  function table(d) {
+    var list = sortRows(visible(d)), h = '', i;
+    for (i = 0; i < list.length; i++) h += rowMarkup(list[i], d.range);
+    $('rows').innerHTML = h;
+    $('none').hidden = list.length > 0;
+    $('shown').textContent = 'showing ' + list.length + ' of ' + d.rows.length + ' monitors';
+  }
+
+  /* --------------------------------------------------------------- render */
+  function render(rangeKey) {
+    var d = SY.synthetic(rangeKey);
+    cur = d;
+
+    /* window strip */
+    $('winlabel').textContent = d.range.label;
+    $('wininfo').textContent = d.range.buckets + ' intervals per monitor · 5-min schedule · ' +
+                               SY.fmtNum(d.tiles.expectedChecks) + ' checks scheduled';
+    $('winclamp').textContent = d.range.clamped
+      ? 'the seeded replay is one week long, so this range is clamped to Aug 23 00:00 - Aug 29 23:55'
+      : '';
+    $('winflow').setAttribute('href', '../index.html#t=' + d.range.t1);
+
+    tiles(d);
+    vantages(d);
+
+    var ctl = 0, i;
+    for (i = 0; i < d.rows.length; i++) if (d.rows[i].control) ctl++;
+    $('f-ctl-n').textContent = String(ctl);
+    $('f-ctl').className = V.controls ? 'chip on' : 'chip';
+    $('f-ctl').setAttribute('aria-pressed', V.controls ? 'true' : 'false');
+
+    sortChips();
+    table(d);
+
+    /* legend footer: what one bar covers, straight off the first bar */
+    var b0 = d.rows[0] && d.rows[0].bars[0];
+    var per = b0 ? (b0.t1 - b0.t0 + 1) * 5 : 5;
+    $('lgwin').textContent = d.range.label + ' · one bar = ' + SY.fmtDur(per) +
+                             ' · ' + (d.rows[0] ? d.rows[0].bars.length : 0) + ' bars per row';
+
+    $('n-controls').textContent = d.notes.controls;
+    $('n-nodata').textContent   = d.notes.nodata;
+    $('n-assert').textContent   = d.notes.assertion;
+
+    S.setLineage(SY.lineage('synthetic'));
+  }
+
+  function repaint() { if (cur) { vantages(cur); sortChips(); table(cur); } }
+
+  /* ---------------------------------------------------------- interactions */
+  function toggleRow(tr) {
+    var det = $(tr.getAttribute('data-row'));
+    var isOpen = tr.className.indexOf('open') > -1;
+    var id = tr.getAttribute('data-id');
+    tr.className = isOpen ? 'row-toggle' : 'row-toggle open';
+    tr.setAttribute('aria-expanded', isOpen ? 'false' : 'true');
+    if (det) det.className = isOpen ? 'row-detail' : 'row-detail open';
+    if (isOpen) delete open[id]; else open[id] = 1;
+  }
+
+  S.ready(function () {
+    S.setLineage(SY.lineage('synthetic'));
+    render(S.getRange() || '24h');
+
+    /* range chips */
+    S.onRange(function (ev) { render(ev.detail.range); });
+
+    /* sort chips */
+    $('schips').addEventListener('click', function (ev) {
+      var n = ev.target;
+      while (n && n !== this && !(n.getAttribute && n.getAttribute('data-s'))) n = n.parentNode;
+      if (!n || n === this) return;
+      var k = n.getAttribute('data-s');
+      if (V.sort === k) V.dir = -V.dir; else { V.sort = k; V.dir = DEF_DIR[k] || 1; }
+      repaint();
+    });
+
+    /* sortable table headers mirror three of the chips */
+    var thead = document.querySelector('.ptable thead');
+    thead.addEventListener('click', function (ev) {
+      var n = ev.target;
+      while (n && n !== this && !(n.getAttribute && n.getAttribute('data-sort'))) n = n.parentNode;
+      if (!n || n === this) return;
+      var k = n.getAttribute('data-sort');
+      if (V.sort === k) V.dir = -V.dir; else { V.sort = k; V.dir = DEF_DIR[k] || 1; }
+      repaint();
+    });
+
+    /* vantage chips */
+    $('vchips').addEventListener('click', function (ev) {
+      var n = ev.target;
+      while (n && n !== this && !(n.getAttribute && n.hasAttribute('data-v'))) n = n.parentNode;
+      if (!n || n === this) return;
+      var v = n.getAttribute('data-v');
+      V.vantage = v ? v : null;
+      repaint();
+    });
+
+    /* control-monitor toggle */
+    $('f-ctl').addEventListener('click', function () {
+      V.controls = !V.controls;
+      this.className = V.controls ? 'chip on' : 'chip';
+      this.setAttribute('aria-pressed', V.controls ? 'true' : 'false');
+      repaint();
+    });
+
+    /* filter box */
+    $('q').addEventListener('input', function () { V.q = this.value.trim(); repaint(); });
+
+    /* reset */
+    $('reset').addEventListener('click', function () {
+      V.q = ''; V.vantage = null; V.controls = true; V.sort = 'status'; V.dir = DEF_DIR.status;
+      $('q').value = '';
+      $('f-ctl').className = 'chip on';
+      $('f-ctl').setAttribute('aria-pressed', 'true');
+      repaint();
+    });
+
+    /* expandable rows — pointer and keyboard; links inside a row stay links */
+    var body = $('rows');
+    body.addEventListener('click', function (ev) {
+      var n = ev.target;
+      while (n && n !== this) {
+        if (n.tagName === 'A') return;
+        if (n.className && String(n.className).indexOf('row-toggle') === 0) { toggleRow(n); return; }
+        n = n.parentNode;
+      }
+    });
+    body.addEventListener('keydown', function (ev) {
+      if (ev.key !== 'Enter' && ev.key !== ' ') return;
+      var n = ev.target;
+      if (n && n.className && String(n.className).indexOf('row-toggle') === 0) { ev.preventDefault(); toggleRow(n); }
+    });
+  });
+})();
+</script>
+</body>
+</html>

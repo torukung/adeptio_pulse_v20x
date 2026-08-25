@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<link rel="icon" href="data:,"/>
+<!-- scaffolding lives in docs/dev/, the shipped pages live in the site root and
+     in menus/ + admin/. This <base> points every relative URL — the ones below
+     and the ones assets/shell.js builds for the nav — back at the site root, so
+     the page works unchanged from here. Shipped pages carry no <base>. -->
+<base href="../../"/>
+
+<!-- ===========================================================================
+     ADEPTIO Pulse — MENU PAGE TEMPLATE  (copy this file to build a page)
+     ---------------------------------------------------------------------------
+     Markup + boot only. Everything loads with plain <link>/<script src> so the
+     page opens straight off disk (file://) — no fetch, no modules, no CDN.
+
+     HOW TO USE
+       1. cp _template.html <page>.html
+       2. fill the six slots marked  <!-- SLOT: … -->
+       3. write the page's render() at the bottom; it re-runs on 'pulse:range'
+     The shell (left nav, top bar, theme, range chips, footer) is built by
+     assets/shell.js from the data-* attributes on <body> — nothing to wire.
+     =========================================================================== -->
+
+<!-- SLOT: TITLE — browser tab title. PULSE_SHELL also renders it in the top bar
+     unless data-title below overrides it. -->
+<title>Page title &mdash; Adeptio Pulse</title>
+
+<link rel="stylesheet" href="assets/tokens.css"/>
+<link rel="stylesheet" href="assets/shell.css"/>
+<link rel="stylesheet" href="assets/menus.css"/>
+</head>
+
+<!-- data-shell="page"  builds the full frame (left nav + top bar + footer)
+     data-title        SLOT: TITLE      — top-bar heading
+     data-subtitle     SLOT: SUBTITLE   — "computed from: … · no APM"; if the page
+                       shows day-level marks, this is where the year goes, ONCE,
+                       as "Aug 23 – 29, 2027"
+     data-ranges       SLOT: RANGE CHIPS— comma list; '' hides the chip row
+     data-range        the chip selected on load (default 24h when present)
+     data-lineage      SLOT: FOOTER LINEAGE — lanes/fields, from PULSE_SYNTH.lineage() -->
+
+<!-- LABEL CONVENTIONS (v2.0.2) — the forms every shipped page uses. Take them
+     from PULSE_SYNTH rather than writing them out by hand:
+       PULSE_SYNTH.dstamp(t)      -> "Aug 27 20:10"   date + time, never a year
+       PULSE_SYNTH.dayLabel(d)    -> "Aug 23"         day index 1..7 of the week
+       PULSE_SYNTH.incDisplay(k)  -> "WK34 · Incident F — CORE OUTAGE — cascade"
+       PULSE_SYNTH.incShort(k)    -> "W34·F"          only where a cell is tight
+     The demo week is WK34 of 2027, Mon Aug 23 – Sun Aug 29. Print incDisplay(k)
+     ON ITS OWN — it already carries the week, the word "Incident" and the letter.
+     Incident KEYS stay bare letters (INC / INCMETA / byWindow / incKey), and the
+     INC-10xx values are ticket numbers, not window letters. -->
+<body data-shell="page"
+      data-title="Page title"
+      data-subtitle="computed from: &lt;lane&gt; &middot; &lt;lane&gt; &middot; no APM"
+      data-ranges="1h,4h,12h,24h,7d"
+      data-range="24h"
+      data-lineage="access logs (ts, route, status, duration_ms) &middot; probe results &middot; error groups">
+
+<!-- Everything inside #pulse-main is moved into the shell's <main> at boot. -->
+<div id="pulse-main">
+
+  <!-- ================================================== SLOT: TILES ======
+       Header tiles. .tile[.ok|.warn|.crit|.unk] colours the value; the pass /
+       fail pill goes in .tilefoot. Built by JS in render() below, or written
+       out by hand here. -->
+  <section class="tiles" id="tiles" aria-label="Headline figures">
+    <div class="tile ok">
+      <div class="label"><span>Tile label</span></div>
+      <div class="value">99.94<u>%</u></div>
+      <div class="sub">target 99.90% &middot; <b>7 d</b></div>
+      <div class="tilefoot"><span class="pf pass">Pass</span></div>
+    </div>
+  </section>
+
+  <!-- ================================================ SLOT: CONTENT ======
+       The page body. Every shared component lives in assets/menus.css and is
+       demonstrated with dummy data in menus/_kit.html:
+         .card .grid2 .grid3        layout
+         .twrap > .ptable           table (sticky head, .row-toggle rows)
+         .pill.ok/.warn/.crit/.unk  status
+         .statusbar .uptime-bars    distribution / per-interval bars
+         .funnel .funnel-step       journey funnel
+         .legend .badge.provisional .overlay .board
+       Charts come from window.PULSE_CHARTS (assets/charts.js) as SVG strings. -->
+  <section class="sect"><h2>Section heading</h2><span class="sh">what this answers</span></section>
+
+  <div class="card">
+    <header><h3>Chart</h3><span class="ch">5-min buckets</span></header>
+    <div class="chartbox" id="chart"></div>
+    <div class="legend">
+      <span><i class="c1"></i>series one</span>
+      <span><i class="line" style="background:var(--warn)"></i>target</span>
+    </div>
+  </div>
+
+  <div class="card pad0">
+    <div class="twrap">
+      <table class="ptable">
+        <thead><tr><th>Name</th><th class="num">Requests</th><th class="num">Errors</th><th>Status</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div><!-- /#pulse-main -->
+
+<!-- right-side detail drawer (optional; delete if the page has no detail view) -->
+<div class="overlay" id="ov" aria-hidden="true">
+  <div class="ov-scrim" data-ov-close></div>
+  <aside class="ov-panel" role="dialog" aria-modal="true" aria-labelledby="ovt">
+    <header><h3 id="ovt">Detail</h3><button class="ov-x" type="button" data-ov-close aria-label="Close">&#10005;</button></header>
+    <div class="ov-body" id="ovbody"></div>
+  </aside>
+</div>
+
+<!-- ===================================================== LOAD ORDER =======
+     1 · data      manifest (topology + INC) -> rcameta (owners) -> tickets
+     2 · registry  the account-agnostic reference model  (window.PULSE_REG)
+     3 · spine     the seeded canonical week              (window.PULSE_SPINE)
+     4 · synth     the synthesis API every page reads     (window.PULSE_SYNTH)
+     5 · charts    inline-SVG helpers                     (window.PULSE_CHARTS)
+     6 · shell     builds the frame, fires 'pulse:range'  (window.PULSE_SHELL)
+     ======================================================================== -->
+<script src="data/manifest.js"></script>
+<script src="data/rcameta.js"></script>
+<script src="data/tickets.js"></script>
+<script src="data/registry.js"></script>
+<script src="data/spine.js"></script>
+<script src="assets/synth.js"></script>
+<script src="assets/charts.js"></script>
+<script src="assets/shell.js"></script>
+
+<script>
+/* ---------------------------------------------------------------- page boot
+   shell.js has already built the frame by the time this runs (both are classic
+   scripts at the end of <body>, and shell.js autoboots on DOM ready). */
+(function () {
+  "use strict";
+  var C = window.PULSE_CHARTS, S = window.PULSE_SHELL;
+
+  function render(range) {
+    /* const d = window.PULSE_SYNTH.serviceHealth(range);   <- real data goes here */
+
+    /* tiles */
+    /* document.getElementById('tiles').innerHTML = …; */
+
+    /* chart — C.render() measures the container and builds at exactly that
+       width, so label text keeps its true size at every breakpoint (and
+       redraws itself on resize). Pass opt.w instead if you want a fixed size. */
+    var vals = [], i;
+    for (i = 0; i < 288; i++) vals.push(99.9 - (i > 180 && i < 210 ? 1.2 : 0));
+    C.render('#chart', {
+      type: 'line',
+      series: [{ name: 'success %', values: vals }],
+      threshold: 99.9, thresholdLabel: 'SLA 99.90%',
+      yFmt: 'pct2', xLabels: ['00:00', '06:00', '12:00', '18:00', '23:55'], area: true
+    });
+
+    /* table */
+    var rows = '', names = ['gateway', 'auth', 'payment'];
+    for (i = 0; i < names.length; i++) {
+      rows += '<tr><td class="nm">' + names[i] + '</td><td class="num">' + (1200 + i * 310) +
+              '</td><td class="num">' + i + '</td><td><span class="pill ok">OK</span></td></tr>';
+    }
+    document.getElementById('rows').innerHTML = rows;
+
+    /* footer lineage may change with the range: S.setLineage('…'); */
+  }
+
+  /* first paint + every range change */
+  S.ready(function () { render(S.getRange()); });
+  S.onRange(function (ev) { render(ev.detail.range); });
+
+  /* detail drawer */
+  var ov = document.getElementById('ov');
+  if (ov) {
+    ov.addEventListener('click', function (ev) {
+      if (ev.target.hasAttribute && ev.target.hasAttribute('data-ov-close')) closeOv();
+    });
+    document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape') closeOv(); });
+  }
+  function closeOv() { if (ov) { ov.className = 'overlay'; ov.setAttribute('aria-hidden', 'true'); } }
+})();
+</script>
+</body>
+</html>

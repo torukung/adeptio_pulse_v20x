@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<link rel="icon" href="data:,"/>
+
+<!-- ===========================================================================
+     ADEPTIO Pulse — menu 4 · SERVICE HEALTH
+     Built from menus/_template.html. Every figure comes from
+     PULSE_SYNTH.serviceHealth(range) — the page formats, sorts and filters,
+     it never computes a number.
+     =========================================================================== -->
+
+<title>Service Health &mdash; Adeptio Pulse</title>
+
+<link rel="stylesheet" href="../assets/tokens.css"/>
+<link rel="stylesheet" href="../assets/shell.css"/>
+<link rel="stylesheet" href="../assets/menus.css"/>
+
+<style>
+/* ---------------------------------------------------------------- page-local
+   Seven small additions this screen needs and the shared kit does not carry.
+   Tokens only; status colours stay on status readings. ---------------------*/
+
+/* 1 · the service cell is three lines and must wrap (the kit's cells do not) */
+.ptable td.svc{white-space:normal;min-width:250px}
+.sline{display:flex;align-items:center;gap:7px;flex-wrap:wrap;min-width:0}
+.sline .sn{font-weight:650;color:var(--ink)}
+
+/* 2 · the "counted differently" marker + its note, shown in full on the row */
+.rnote{display:flex;gap:6px;align-items:flex-start;margin-top:4px;
+  color:var(--muted);font-size:10.5px;font-weight:400;line-height:1.45;max-width:62ch}
+.imark{flex:0 0 auto;width:13px;height:13px;margin-top:1px;border-radius:999px;
+  border:1px solid var(--line);background:var(--panel2);color:var(--ink2);
+  font-size:9px;font-weight:800;line-height:11.5px;text-align:center;font-style:normal}
+
+/* 3 · a rate or a coverage figure IS a status reading, so it takes a status
+       colour; the raw counts beside it stay chrome. */
+.ev{font-weight:700;font-variant-numeric:tabular-nums}
+.ev.ok{color:var(--ok)} .ev.warn{color:var(--warn)}
+.ev.crit{color:var(--crit)} .ev.unk{color:var(--unk)}
+
+/* 4 · badge variants: HTTP status, route introduced mid-week, incident link */
+.badge.http{font-family:var(--mono)}
+.badge.http.tech{color:var(--crit);border-color:color-mix(in srgb,var(--crit) 42%,transparent);
+  background:color-mix(in srgb,var(--crit) 12%,transparent)}
+.badge.http.biz{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 42%,transparent);
+  background:color-mix(in srgb,var(--warn) 12%,transparent)}
+.badge.newd{color:var(--maint);border-color:color-mix(in srgb,var(--maint) 42%,transparent)}
+.badge.inc{text-decoration:none;color:var(--warn);
+  border-color:color-mix(in srgb,var(--warn) 42%,transparent);
+  background:color-mix(in srgb,var(--warn) 12%,transparent)}
+.badge.inc.crit{color:var(--crit);border-color:color-mix(in srgb,var(--crit) 42%,transparent);
+  background:color-mix(in srgb,var(--crit) 12%,transparent)}
+.badge.inc:hover{border-color:currentColor}
+.badge.hit{color:var(--chipink);border-color:var(--chipline);background:var(--chipbg)}
+
+/* 5 · sub-sections inside an expanded row */
+.dsec{margin-top:13px}
+.dh{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin:0 0 7px;
+  font-size:9.5px;font-weight:750;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+.dh .dhn{color:var(--ink2)}
+.dh .dhs{font-size:10.5px;font-weight:400;letter-spacing:0;text-transform:none;color:var(--muted)}
+
+/* 6 · ERROR TYPES list — one bordered line per exception group */
+.etypes{display:flex;flex-direction:column;gap:6px}
+.etype{display:flex;gap:10px;align-items:flex-start;padding:7px 10px;
+  border:1px solid var(--line);border-radius:9px;background:var(--panel)}
+.etype .ec{flex:0 0 auto;min-width:34px;text-align:center;padding:2px 6px;border-radius:7px;
+  font-size:11px;font-weight:800;font-variant-numeric:tabular-nums;
+  background:var(--panel2);border:1px solid var(--line);color:var(--ink2)}
+.etype .ec.tech{color:var(--crit);border-color:color-mix(in srgb,var(--crit) 42%,transparent);
+  background:color-mix(in srgb,var(--crit) 12%,transparent)}
+.etype .ec.biz{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 42%,transparent);
+  background:color-mix(in srgb,var(--warn) 12%,transparent)}
+.etype .eb{min-width:0}
+.etype .ecls{font-family:var(--mono);font-size:11px;color:var(--ink);overflow-wrap:anywhere}
+.etype .emeta{margin-top:3px;font-size:10.5px;color:var(--muted);
+  display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+
+/* 7 · link rows inside a detail keep their own cursor and underline */
+.dlinks{display:flex;gap:10px;flex-wrap:wrap;align-items:center;font-size:11px}
+.dlinks a{text-decoration:none;border-bottom:1px solid transparent}
+.dlinks a:hover{border-bottom-color:currentColor}
+.ptable td.tlink a{text-decoration:none;border-bottom:1px solid transparent;color:var(--ink2)}
+.ptable td.tlink a:hover{border-bottom-color:currentColor;color:var(--ink)}
+
+/* 8 · the spec screen carries all seven tiles on one line; the kit's auto-fit
+       would leave the seventh alone on a second row at the design width. Below
+       1380 the seven columns start clipping the longest label, so the auto-fit
+       takes over again and the tiles wrap instead. */
+@media (min-width:1380px){
+  #tiles{grid-template-columns:repeat(7,minmax(0,1fr))}
+}
+@media (max-width:768px){
+  .ptable td.svc{min-width:210px}
+  .rnote{max-width:none}
+}
+@media (prefers-reduced-motion:reduce){
+  .rt-c{transition:none}
+}
+</style>
+</head>
+
+<body data-shell="page"
+      data-title="Service Health"
+      data-subtitle="computed from: L3 gateway access log (ts_utc_ms, svc, route_template, status, dur_ms) &middot; L3 application logs joined on rid (exception.type, exception.message) &middot; no APM &middot; Aug 23 &ndash; 29, 2027"
+      data-ranges="1h,4h,24h,yesterday,7d"
+      data-range="24h"
+      data-lineage="L3 gateway rows for RED + L3 application logs for error types">
+
+<div id="pulse-main">
+
+  <!-- ====================================================== window / range -->
+  <div class="card">
+    <div class="toolbar">
+      <span class="clbl">Window</span>
+      <span class="mono" id="winlabel">&mdash;</span>
+      <span class="csep"></span>
+      <span class="note" id="wininfo"></span>
+      <div class="sp"></div>
+      <span class="note" id="wininc"></span>
+      <a class="btn" id="winflow" href="../index.html">Open on the flow map</a>
+    </div>
+  </div>
+
+  <!-- =============================================================== tiles -->
+  <section class="tiles" id="tiles" aria-label="Headline figures"></section>
+
+  <!-- =============================================================== chart -->
+  <section class="sect"><h2>Where the failures are</h2>
+    <span class="sh">technical (5xx) beside business (4xx and declines on HTTP 200) &mdash; the two never share a bar</span></section>
+  <div class="card">
+    <header><h3>Failures by service</h3><span class="ch" id="chartch">&mdash;</span></header>
+    <div class="chartbox" id="chart"></div>
+    <p class="note" id="chartnote"></p>
+  </div>
+
+  <!-- =========================================================== scorecard -->
+  <section class="sect"><h2>Service Health Scorecard</h2>
+    <span class="sh">one row per service &middot; expand a row for its endpoints, error types and recent errors</span>
+    <span class="sp"></span>
+    <span class="note" id="shown"></span>
+  </section>
+
+  <div class="card">
+    <div class="toolbar">
+      <span class="clbl">Search</span>
+      <label class="field"><span class="fl">Service or endpoint</span>
+        <input type="text" id="q" placeholder="payment, pulse-gateway-deploy, /v1/bills/pay&hellip;"
+               aria-label="Search by service, deploy or endpoint path"/></label>
+      <button class="btn" type="button" id="reset">Reset</button>
+      <div class="sp"></div>
+      <span class="note" id="qnote"></span>
+    </div>
+  </div>
+
+  <div class="card pad0">
+    <div class="twrap" style="--tmax:78vh">
+      <table class="ptable" id="scorecard" style="--tmin:920px">
+        <thead>
+          <tr>
+            <th class="svc sortable" data-sort="name" scope="col" tabindex="0">Service<span class="sarr"></span></th>
+            <th class="num sortable" data-sort="requests" scope="col" tabindex="0">Requests<span class="sarr"></span></th>
+            <th class="num sortable" data-sort="errors" scope="col" tabindex="0">Errors<span class="sarr"></span></th>
+            <th class="num sortable" data-sort="errorRate" scope="col" tabindex="0">Error rate<span class="sarr"></span></th>
+            <th class="num sortable" data-sort="p75" scope="col" tabindex="0">p75<span class="sarr"></span></th>
+            <th class="num sortable" data-sort="p95" scope="col" tabindex="0">p95<span class="sarr"></span></th>
+            <th class="num sortable" data-sort="p99" scope="col" tabindex="0">p99<span class="sarr"></span></th>
+            <th class="sortable" data-sort="status" scope="col" tabindex="0">Status<span class="sarr"></span></th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <div id="none" class="empty" hidden>No service or endpoint matches that search. Clear the box to see all twelve.</div>
+  </div>
+
+  <div class="legend">
+    <span><i class="ok"></i>error rate below 0.10%</span>
+    <span><i class="warn"></i>0.10% to 1.00%</span>
+    <span><i class="crit"></i>1.00% and above</span>
+    <span><i class="unk"></i>no data &mdash; never 0%</span>
+    <span class="csep"></span>
+    <span class="muted" id="lgwin"></span>
+  </div>
+
+  <!-- ======================================================= recent errors -->
+  <section class="sect"><h2>Recent errors across the estate</h2>
+    <span class="sh">sampled occurrences from the application log, newest first &middot; the time opens the flow map at that bucket</span></section>
+  <div class="card pad0">
+    <div class="twrap" style="--tmax:420px">
+      <table class="ptable" style="--tmin:900px">
+        <thead>
+          <tr>
+            <th scope="col">Time</th><th scope="col">Service</th><th scope="col">Resource</th>
+            <th scope="col">Type</th><th scope="col">Message</th><th class="num" scope="col">Duration</th>
+          </tr>
+        </thead>
+        <tbody id="recent"></tbody>
+      </table>
+    </div>
+    <div id="norecent" class="empty" hidden>No sampled occurrence falls inside this window.</div>
+  </div>
+
+  <!-- ============================================================= honesty -->
+  <section class="sect"><h2>How this page counts</h2>
+    <span class="sh">three rules that keep the scorecard from flattering itself</span></section>
+  <div class="grid3">
+    <div class="card"><header><h3>The tiles are ingress only</h3><span class="ch">no double counting</span></header>
+      <p class="note" id="n-ingress"></p></div>
+    <div class="card"><header><h3>The gateway row is not the estate</h3><span class="ch">a denominator, stated</span></header>
+      <p class="note" id="n-gateway"></p></div>
+    <div class="card"><header><h3>No data is not zero</h3><span class="ch">coverage and percentiles</span></header>
+      <p class="note" id="n-nodata"></p></div>
+  </div>
+
+</div><!-- /#pulse-main -->
+
+<!-- ===================================================== LOAD ORDER ======= -->
+<script src="../data/manifest.js"></script>
+<script src="../data/rcameta.js"></script>
+<script src="../data/tickets.js"></script>
+<script src="../data/registry.js"></script>
+<script src="../data/spine.js"></script>
+<script src="../assets/synth.js"></script>
+<script src="../assets/charts.js"></script>
+<script src="../assets/shell.js"></script>
+
+<script>
+/* ------------------------------------------------------------------- page */
+(function () {
+  "use strict";
+
+  var C   = window.PULSE_CHARTS,
+      S   = window.PULSE_SHELL,
+      SY  = window.PULSE_SYNTH,
+      REG = window.PULSE_REG,
+      TK  = window.ADEPTIO_TICKETS || { byWindow: {} },
+      DA  = window.ADEPTIO_DATA;
+
+  var esc = C.esc;
+  var $ = function (id) { return document.getElementById(id); };
+  var has = function (o, k) { return Object.prototype.hasOwnProperty.call(o, k); };
+
+  /* view state — search and sort live on the page; every number lives in the
+     payload. Changing either re-orders or hides rows, never re-computes. */
+  var V = { q: '', sort: 'requests', dir: -1 };
+  var DEF_DIR = { name: 1, requests: -1, errors: -1, errorRate: -1, p75: -1, p95: -1, p99: -1, status: -1 };
+  var open = {};      /* service keys the reader expanded, kept across renders */
+  var cur = null;     /* the payload currently on screen                       */
+  var chart = null;   /* PULSE_CHARTS.render handle                            */
+
+  /* -------------------------------------------------------------- formats */
+  function num(v)  { return v == null ? 'NO DATA' : SY.fmtNum(v); }
+  function cmp(v)  { return v == null ? 'NO DATA' : SY.fmtCompact(v); }
+  function rate(v) { return v == null ? 'NO DATA' : SY.fmtRate(v); }
+  function ms(v)   { return v == null ? 'NO DATA' : SY.fmtMs(v); }
+  var PILL = { ok: 'OK', warn: 'Warn', critical: 'Critical', unknown: 'No data' };
+  var PILLCLS = { ok: 'ok', warn: 'warn', critical: 'crit', unknown: 'unk' };
+  var RANK = { critical: 3, warn: 2, ok: 1, unknown: 0 };
+
+  /* ------------------------------------------------- incident couplings
+     Registry metadata, not a measurement: a route (or, for a service measured
+     on the egress lane, the edges it calls) declares which incident windows
+     move it. The numbers stay in the payload; this only decides which windows
+     are worth a cross-link. */
+  var SVC_INC = (function () {
+    var m = {}, i, j, k, r, d, cal;
+    for (i = 0; i < REG.routes.length; i++) {
+      r = REG.routes[i];
+      if (!m[r.svc]) m[r.svc] = {};
+      for (k in (r.inc || {})) if (has(r.inc, k)) m[r.svc][k] = 1;
+    }
+    for (i = 0; i < REG.services.length; i++) {
+      var sk = REG.services[i].key;
+      if (m[sk]) continue;                       /* has ingress routes already */
+      m[sk] = {};
+      for (j = 0; j < REG.downstreams.length; j++) {
+        d = REG.downstreams[j]; cal = d.callers || [];
+        if (cal.indexOf(sk) < 0) continue;
+        for (k in (d.inc || {})) if (has(d.inc, k)) m[sk][k] = 1;
+      }
+    }
+    return m;
+  }());
+
+  /* the incident windows keep their letters as identity (DA.INC, DA.INCMETA
+     and TK.byWindow are all keyed on them); these are only the names a reader
+     sees. incShort() is the compact form the scorecard row badge uses — it
+     sits inline with up to four other badges in one 250px cell. */
+  function incLabel(key) { return 'WK34 · Incident ' + key; }
+  function incShort(key) { return 'W34·' + key; }
+
+  function incidents(svcKey, rng) {
+    var keys = SVC_INC[svcKey] || {}, out = [], k;
+    for (k in DA.INC) {
+      if (!has(DA.INC, k) || !keys[k]) continue;
+      var w = DA.INC[k];
+      if (w[w.length - 1] < rng.t0 || w[0] > rng.t1) continue;
+      var meta = DA.INCMETA[k] || [k, 'warn'];
+      out.push({ key: k, label: meta[0], sev: meta[1], peak: w[1],
+                 peakLabel: SY.dstamp(w[1]), ticket: (TK.byWindow || {})[k] || null });
+    }
+    out.sort(function (a, b) {
+      if (a.sev !== b.sev) return a.sev === 'crit' ? -1 : 1;
+      return a.peak - b.peak;
+    });
+    return out;
+  }
+
+  /* ----------------------------------------------------------------- tiles */
+  function tiles(d) {
+    var t = d.tiles, h = '';
+    var rateBand = SY.errBand(t.errorRate);
+
+    h += '<div class="tile plain" id="tile-services">' +
+         '<div class="label"><span>Services</span></div>' +
+         '<div class="value"><span class="v">' + esc(String(t.services)) + '</span></div>' +
+         '<div class="sub">every deploy with a route template or an egress edge</div>' +
+         '<div class="tilefoot"><span class="note">ingress lane, except <b>Core Adapter</b> on egress</span></div></div>';
+
+    h += '<div class="tile plain" id="tile-requests">' +
+         '<div class="label"><span>Total requests</span></div>' +
+         '<div class="value"><span class="v">' + esc(cmp(t.totalRequests)) + '</span></div>' +
+         '<div class="sub">' + esc(num(t.totalRequests)) + ' ingress transactions</div>' +
+         '<div class="tilefoot"><span class="note">egress lane carries <b>' +
+         esc(cmp(t.egressCalls)) + '</b> outbound calls, counted separately</span></div></div>';
+
+    h += '<div class="tile ' + (t.totalErrors > 0 ? 'crit' : 'ok') + '" id="tile-errors">' +
+         '<div class="label"><span>Total errors</span></div>' +
+         '<div class="value"><span class="v">' + esc(cmp(t.totalErrors)) + '</span></div>' +
+         '<div class="sub">' + esc(num(t.totalErrors)) + ' ingress 5xx</div>' +
+         '<div class="tilefoot"><span class="note">plus <b>' + esc(num(t.egress5xx)) +
+         '</b> upstream 5xx on the egress lane</span></div></div>';
+
+    h += '<div class="tile ' + rateBand + '" id="tile-rate">' +
+         '<div class="label"><span>Error rate</span></div>' +
+         '<div class="value"><span class="v">' + esc(t.errorRate == null ? 'NO DATA' : SY.fmtPct(t.errorRate, 2)) + '</span></div>' +
+         '<div class="sub">' + esc(rate(t.errorRate)) + ' at four decimals</div>' +
+         /* C2: the note goes first. This foot is the only one in the row wide
+            enough to wrap, and with the pill first the pill was pushed onto the
+            upper line while every other tile's pill sat on the bottom line —
+            a visibly ragged row of pills. Pill last = pill on the last line. */
+         '<div class="tilefoot"><span class="note">band 0.10% / 1.00%</span>' +
+         '<span class="pf ' +
+         (rateBand === 'ok' ? 'pass' : rateBand === 'warn' ? 'part' : rateBand === 'unk' ? 'na' : 'fail') + '">' +
+         (rateBand === 'ok' ? 'Within band' : rateBand === 'warn' ? 'Watch' : rateBand === 'unk' ? 'No data' : 'Out of band') +
+         '</span></div></div>';
+
+    h += '<div class="tile ' + (t.criticalServices > 0 ? 'crit' : 'ok') + '" id="tile-critical">' +
+         '<div class="label"><span>Critical services</span></div>' +
+         '<div class="value"><span class="v">' + esc(String(t.criticalServices)) + '</span></div>' +
+         '<div class="sub">error rate at or above <b>5%</b> for the window</div>' +
+         '<div class="tilefoot"><span class="pf ' + (t.criticalServices > 0 ? 'fail' : 'pass') + '">' +
+         (t.criticalServices > 0 ? 'Attention' : 'Clear') + '</span></div></div>';
+
+    h += '<div class="tile ' + (t.alertingMonitors > 3 ? 'crit' : t.warnMonitors > 0 ? 'warn' : 'ok') + '" id="tile-monitors">' +
+         '<div class="label"><span>Alerting monitors</span></div>' +
+         '<div class="value"><span class="v">' + esc(String(t.alertingMonitors)) + '</span></div>' +
+         '<div class="sub"><b>' + esc(String(t.alertingMonitors)) + '</b> alert &middot; <b>' +
+         esc(String(t.warnMonitors)) + '</b> warn &middot; L1 probes</div>' +
+         '<div class="tilefoot"><span class="note">3 of these are the permanent controls</span></div></div>';
+
+    h += '<div class="tile ' + (t.openIssues > 0 ? 'warn' : 'ok') + '" id="tile-issues">' +
+         '<div class="label"><span>Open issues</span></div>' +
+         '<div class="value"><span class="v">' + esc(String(t.openIssues)) + '</span></div>' +
+         '<div class="sub">raised from SLA, errors and ops review</div>' +
+         '<div class="tilefoot"><a class="note" href="ops-issues.html">Open the issue register</a></div></div>';
+
+    $('tiles').innerHTML = h;
+  }
+
+  /* ----------------------------------------------------------------- chart
+     Values are taken straight off the payload rows: the page picks WHICH rows
+     to draw, never what they say. */
+  function chartCard(d) {
+    var top = d.rows.slice().sort(function (a, b) {
+      var x = (b.errors || 0) - (a.errors || 0);
+      return x !== 0 ? x : (b.businessFail || 0) - (a.businessFail || 0);
+    }).slice(0, 6);
+
+    var groups = [], tech = [], biz = [], i;
+    for (i = 0; i < top.length; i++) {
+      groups.push(top[i].key);
+      tech.push(top[i].errors);
+      biz.push(top[i].businessFail);
+    }
+    $('chartch').textContent = 'top ' + top.length + ' services by 5xx · ' + d.range.label;
+    /* responsive:false, then ONE resize listener below — re-rendering with the
+       helper's own listener would stack a new one on every range change. */
+    chart = C.render('#chart', {
+      type: 'bars', groups: groups, ratio: 0.26, minH: 172, maxH: 240, yFmt: 'compact',
+      responsive: false,
+      series: [{ name: 'technical (5xx)', values: tech, cls: 's-crit' },
+               { name: 'business (4xx + declines)', values: biz, cls: 's-warn' }],
+      label: 'failures by service for ' + d.range.label
+    });
+    $('chartnote').textContent =
+      'Business failures outnumber technical ones on most windows and are invisible to an HTTP-200 check — ' +
+      'that is the whole reason the two are drawn apart. Hover a bar for its exact count.';
+  }
+
+  /* ---------------------------------------------------------------- search
+     A query can match the service identity or an endpoint path. When it only
+     matches endpoints, the row opens itself and the endpoint table narrows to
+     the hits, so the reader lands on the thing they searched for. */
+  function match(r, q) {
+    if (!q) return { show: true, self: true, eps: null, hits: 0 };
+    var self = (r.key + ' ' + r.name + ' ' + r.deploy + ' ' + r.zone + ' ' + r.node).toLowerCase().indexOf(q) > -1;
+    var eps = [], i;
+    for (i = 0; i < r.endpoints.length; i++) {
+      /* the route template only: matching the API-group name as well would make
+         "payment" pull in every service serving a route in the Bill Payment
+         group, which is not what the box says it does. */
+      if (r.endpoints[i].route.toLowerCase().indexOf(q) > -1) eps.push(r.endpoints[i]);
+    }
+    return { show: self || eps.length > 0, self: self, eps: eps.length ? eps : null, hits: eps.length };
+  }
+
+  function visible(d) {
+    var q = V.q.toLowerCase(), out = [], i;
+    for (i = 0; i < d.rows.length; i++) {
+      var m = match(d.rows[i], q);
+      if (m.show) out.push({ r: d.rows[i], m: m });
+    }
+    return out;
+  }
+
+  function sortRows(list) {
+    var dir = V.dir, key = V.sort;
+    return list.slice().sort(function (A, B) {
+      var a = A.r, b = B.r, x, y;
+      if (key === 'name') return dir * a.name.localeCompare(b.name);
+      if (key === 'status') { x = RANK[a.status]; y = RANK[b.status]; }
+      else { x = a[key] == null ? -1 : a[key]; y = b[key] == null ? -1 : b[key]; }
+      if (x === y) return a.name.localeCompare(b.name);
+      return dir * (x - y);
+    });
+  }
+
+  /* ------------------------------------------------------------ sort chrome */
+  function sortHeads() {
+    var ths = document.querySelectorAll('#scorecard thead th.sortable'), j;
+    for (j = 0; j < ths.length; j++) {
+      var th = ths[j];
+      if (!th.getAttribute('data-sort')) continue;
+      var sk = th.getAttribute('data-sort'), sel = sk === V.sort;
+      var base = 'sortable' + (th.className.indexOf('num') > -1 ? ' num' : '') +
+                 (th.className.indexOf('svc') > -1 ? ' svc' : '');
+      th.className = sel ? base + ' sorted' : base;
+      var arr = th.querySelector('.sarr');
+      if (arr) arr.textContent = sel ? (V.dir === 1 ? '↑' : '↓') : '';
+      th.setAttribute('aria-sort', sel ? (V.dir === 1 ? 'ascending' : 'descending') : 'none');
+    }
+  }
+
+  /* ------------------------------------------------------------- endpoints */
+  function endpointsTable(r, eps, filtered) {
+    if (!r.endpoints.length) {
+      return '<div class="empty">' + esc(r.name) + ' serves no ingress route template. Its traffic is ' +
+        'measured on the egress lane instead &mdash; see <a href="downstream.html">Downstream Health</a> ' +
+        'and <a href="dependencies.html">Dependencies</a>.</div>';
+    }
+    var h = '<div class="twrap plain" style="--tmax:none"><table class="ptable eptable" style="--tmin:860px">' +
+      '<thead><tr><th scope="col">Resource</th><th scope="col">Group</th>' +
+      '<th class="num" scope="col">Requests</th><th class="num" scope="col">Errors</th>' +
+      '<th class="num" scope="col">Error rate</th><th class="num" scope="col">p75</th>' +
+      '<th class="num" scope="col">p95</th><th class="num" scope="col">p99</th></tr></thead><tbody>';
+    var i;
+    for (i = 0; i < eps.length; i++) {
+      var e = eps[i], unk = e.state === 'unknown';
+      h += '<tr><td class="mono">' + esc(e.route) +
+           (e.newInD ? ' <span class="badge newd">new Aug 29</span>' : '') +
+           (e.provisional && !unk ? ' <span class="badge provisional">Provisional</span>' : '') +
+           (unk ? ' <span class="badge provisional">No data</span>' : '') + '</td>' +
+           '<td>' + esc(e.group) + '</td>' +
+           '<td class="num">' + esc(unk ? 'NO DATA' : cmp(e.requests)) + '</td>' +
+           '<td class="num">' + esc(unk ? 'NO DATA' : num(e.errors)) + '</td>' +
+           '<td class="num"><span class="ev ' + esc(unk ? 'unk' : SY.errBand(e.errorRate)) + '">' +
+           esc(unk ? 'NO DATA' : rate(e.errorRate)) + '</span></td>' +
+           '<td class="num">' + esc(ms(e.p75)) + '</td>' +
+           '<td class="num">' + esc(ms(e.p95)) + '</td>' +
+           '<td class="num">' + esc(ms(e.p99)) + '</td></tr>';
+    }
+    h += '</tbody></table></div>';
+    if (filtered) {
+      h += '<p class="note">Narrowed to the ' + eps.length + ' endpoint' + (eps.length === 1 ? '' : 's') +
+           ' matching the search; this service serves ' + r.endpoints.length + '.</p>';
+    }
+    return h;
+  }
+
+  /* ------------------------------------------------------------ error types */
+  function errorTypes(r) {
+    if (!r.errorTypes.length) {
+      return '<div class="empty">No exception group logged an occurrence for this service inside the window.</div>';
+    }
+    var h = '<div class="etypes">', i;
+    for (i = 0; i < r.errorTypes.length; i++) {
+      var g = r.errorTypes[i], kind = g.kind === 'business' ? 'biz' : 'tech';
+      h += '<div class="etype">' +
+        '<span class="ec ' + kind + '">' + esc(num(g.count)) + '</span>' +
+        '<div class="eb"><div class="ecls">' + esc(g.cls) + '</div>' +
+        '<div class="emeta"><span class="badge http ' + kind + '">HTTP ' + esc(String(g.status)) + '</span>' +
+        '<span class="mono">' + esc(g.endpoint) + '</span>' +
+        '<span>Last seen ' + esc(g.lastSeen == null ? 'not in this window' : g.lastSeen) + '</span>' +
+        (g.lastSeenT == null ? '' :
+          '<a href="../index.html#t=' + g.lastSeenT + '">Open on the flow map</a>') +
+        '</div></div></div>';
+    }
+    return h + '</div>';
+  }
+
+  /* ----------------------------------------------------------- recent errors */
+  function recentTable(list, withSvc) {
+    var h = '<div class="twrap plain" style="--tmax:none"><table class="ptable rtable" style="--tmin:' +
+            (withSvc ? '900' : '820') + 'px"><thead><tr><th scope="col">Time</th>' +
+            (withSvc ? '<th scope="col">Service</th>' : '') +
+            '<th scope="col">Resource</th><th scope="col">Type</th>' +
+            '<th scope="col">Message</th><th class="num" scope="col">Duration</th></tr></thead><tbody>';
+    h += recentRows(list, withSvc);
+    return h + '</tbody></table></div>';
+  }
+
+  function recentRows(list, withSvc) {
+    var h = '', i;
+    for (i = 0; i < list.length; i++) {
+      var e = list[i];
+      h += '<tr><td class="mono tlink"><a href="../index.html#t=' + e.t + '" ' +
+           'title="Open on the flow map at ' + esc(e.ts) + '">' + esc(e.ts) + '</a></td>' +
+           (withSvc ? '<td>' + esc(e.svc) + '</td>' : '') +
+           '<td class="mono">' + esc(e.resource) + '</td>' +
+           '<td class="mono">' + esc(e.type) + '</td>' +
+           '<td class="wrap">' + esc(e.message) + '</td>' +
+           '<td class="num">' + esc(ms(e.duration)) + '</td></tr>';
+    }
+    return h;
+  }
+
+  /* ------------------------------------------------------------------ rows */
+  /* Every route this deploy serves was introduced AFTER the window closed:
+     the window has nothing to rate. Registry metadata, not a measurement. */
+  function introducedAfter(r, rng) {
+    if (!r.endpoints.length) return null;
+    var first = null, i, rt;
+    for (i = 0; i < r.endpoints.length; i++) {
+      rt = REG.byRoute[r.endpoints[i].route];
+      if (!rt || rt.introducedAt == null || rt.introducedAt <= rng.t1) return null;
+      if (first === null || rt.introducedAt < first) first = rt.introducedAt;
+    }
+    return first;
+  }
+
+  function rowMarkup(item, rng) {
+    var r = item.r, m = item.m, id = 'd-' + r.key;
+    /* two different silences, kept apart: no evidence (a collector gap) and no
+       denominator (nothing was served). Neither is ever drawn as 0%. */
+    var unk = r.state === 'unknown';
+    var noRate = r.errorRate == null;
+    var newAt = noRate ? introducedAfter(r, rng) : null;
+    var band = noRate ? 'unk' : SY.errBand(r.errorRate);
+    var incs = incidents(r.key, rng);
+    var autoOpen = !!(V.q && !m.self && m.hits);
+    var isOpen = !!open[r.key] || autoOpen;
+    var i;
+
+    var incBadges = '';
+    for (i = 0; i < incs.length; i++) {
+      incBadges += '<a class="badge inc' + (incs[i].sev === 'crit' ? ' crit' : '') + '" ' +
+        'href="../index.html#t=' + incs[i].peak + '" ' +
+        'title="' + esc(incLabel(incs[i].key) + ' — ' + incs[i].label + ' · peak ' + incs[i].peakLabel +
+                        ' — open on the flow map at this time') + '">' +
+        esc(incShort(incs[i].key)) + ' ' + esc(incs[i].peakLabel) + '</a>';
+    }
+
+    var h = '';
+    h += '<tr class="row-toggle' + (isOpen ? ' open' : '') + '" data-row="' + id + '" data-key="' + esc(r.key) + '" ' +
+         'tabindex="0" role="button" aria-expanded="' + (isOpen ? 'true' : 'false') + '" aria-controls="' + id + '">';
+
+    /* 1 · service */
+    h += '<td class="svc nm"><div class="sline"><span class="rt-c">&#9656;</span>' +
+         '<span class="sdot ' + esc(PILLCLS[r.status] || 'unk') + '" aria-hidden="true"></span>' +
+         '<span class="sn">' + esc(r.name) + '</span>' +
+         (r.critical ? '<span class="badge">critical</span>' : '') +
+         (r.derivedFrom ? '<span class="badge">egress lane</span>' : '') +
+         (r.provisional && !unk ? '<span class="badge provisional">Provisional ' +
+            esc(SY.fmtPct(r.coverage * 100, 1)) + '</span>' : '') +
+         (unk ? '<span class="badge provisional">No data</span>' : '') +
+         (newAt != null ? '<span class="badge newd">not deployed until ' + esc(SY.dstamp(newAt)) + '</span>' : '') +
+         (m.hits && !m.self ? '<span class="badge hit">' + m.hits + ' endpoint match' +
+            (m.hits === 1 ? '' : 'es') + '</span>' : '') +
+         incBadges +
+         '</div><span class="sub mono">' + esc(r.deploy) + ' &middot; ' + esc(r.zone) +
+         ' &middot; node ' + esc(r.node) + ' &middot; ' + esc(r.lanes.join(' ')) + '</span>' +
+         (r.note ? '<div class="rnote"><i class="imark" aria-hidden="true">i</i><span>' + esc(r.note) + '</span></div>' : '') +
+         '</td>';
+
+    /* 2..7 · RED */
+    h += '<td class="num c-req">' + esc(unk ? 'NO DATA' : cmp(r.requests)) +
+         '<span class="sub">' + esc(unk ? '—' : num(r.requests)) + '</span></td>';
+    h += '<td class="num c-err">' + esc(unk ? 'NO DATA' : num(r.errors)) +
+         '<span class="sub">' + esc(unk ? '—' : num(r.businessFail) + ' business') + '</span></td>';
+    h += '<td class="num c-rate"><span class="ev ' + esc(band) + '">' +
+         esc(noRate ? 'NO DATA' : rate(r.errorRate)) + '</span></td>';
+    h += '<td class="num c-p75">' + esc(ms(r.p75)) + '</td>';
+    h += '<td class="num c-p95">' + esc(ms(r.p95)) + '</td>';
+    h += '<td class="num c-p99">' + esc(ms(r.p99)) + '</td>';
+
+    /* 8 · status */
+    h += '<td class="c-status"><span class="pill ' + esc(PILLCLS[r.status] || 'unk') + '">' +
+         esc(PILL[r.status] || 'No data') + '</span></td>';
+    h += '</tr>';
+
+    /* ---------------------------------------------------------- the detail */
+    var links = '<a href="../index.html#t=' + rng.t1 + '">Open on the flow map at ' + esc(SY.dstamp(rng.t1)) + '</a>';
+    for (i = 0; i < incs.length; i++) {
+      links += '<span class="csep"></span><a href="../index.html#t=' + incs[i].peak + '">' +
+               'Open on the flow map at ' + esc(incLabel(incs[i].key)) + ' peak (' +
+               esc(incs[i].peakLabel) + ')</a>';
+      if (incs[i].ticket) {
+        links += '<a href="../incident-trace.html#' + esc(incs[i].ticket) + '">' +
+                 esc(incs[i].ticket) + ' &mdash; ' + esc(incs[i].label) + '</a>';
+      }
+    }
+    links += '<span class="csep"></span><a href="dependencies.html">Dependencies for this service</a>' +
+             '<a href="errors.html">Errors Explorer</a>';
+
+    var okCount = r.requests - r.errors - r.businessFail;
+    var mix = C.statusBar({ ok: okCount < 0 ? 0 : okCount, warn: r.businessFail, crit: r.errors },
+                          { thin: true, label: r.name + ' request outcomes' });
+
+    var eps = m.eps && !m.self ? m.eps : r.endpoints;
+    var epFiltered = !!(m.eps && !m.self && m.eps.length !== r.endpoints.length);
+
+    h += '<tr class="row-detail' + (isOpen ? ' open' : '') + '" id="' + id + '"><td colspan="8">';
+
+    h += '<div class="dgrid">' +
+      '<div><div class="label muted">Request outcomes</div>' + (r.requests > 0 ? mix : '') +
+        '<div class="note">' + (unk ? 'no evidence in this window'
+          : r.requests === 0 ? 'no request reached this deploy inside the window, so there is no denominator to rate'
+          : esc(num(r.requests)) + ' requests &middot; ' + esc(num(r.businessFail)) + ' business &middot; ' +
+            esc(num(r.errors)) + ' technical') +
+        '</div></div>' +
+      '<div><div class="label muted">Latency</div>' +
+        '<div>p75 <b>' + esc(ms(r.p75)) + '</b> &middot; p95 <b>' + esc(ms(r.p95)) +
+        '</b> &middot; p99 <b>' + esc(ms(r.p99)) + '</b></div>' +
+        '<div class="note">volume-weighted mean of the per-bucket percentile &mdash; a documented ' +
+        'approximation, not an exact quantile.</div></div>' +
+      '<div><div class="label muted">Coverage</div>' +
+        '<div class="ev ' + (r.state === 'ok' ? 'ok' : 'unk') + '">' + esc(SY.fmtPct(r.coverage * 100, 2)) + '</div>' +
+        '<div class="note">' + (newAt != null
+          ? 'these route templates were introduced at ' + esc(SY.dstamp(newAt)) + ', after this window closed. ' +
+            'Not-deployed buckets are out of scope for coverage, so the rate reads NO DATA rather than a flattering 0%.'
+          : r.state === 'ok'
+            ? 'every 5-minute bucket in this window produced evidence.'
+            : r.state === 'unknown'
+              ? 'too little evidence to state a rate for this window; the figures read NO DATA, never 0%.'
+              : 'some buckets produced no evidence; the figures are provisional.') + '</div></div>' +
+      '<div><div class="label muted">Owner</div>' +
+        '<div>' + esc(r.owner ? r.owner.name : 'unassigned') + '</div>' +
+        '<div class="note">' + esc(r.owner ? r.owner.team + ' · ext ' + r.owner.ext + ' (mock roster)' : '—') +
+        '</div></div>' +
+      (r.derivedFrom
+        ? '<div style="grid-column:1/-1"><div class="label muted">Derived from</div>' +
+          '<div>' + esc(r.derivedFrom) + '</div>' +
+          '<div class="note">Requests are outbound calls and errors are upstream 5xx, so this row is kept ' +
+          'out of the estate tiles &mdash; counting it there would record the same customer transaction twice.</div></div>'
+        : '') +
+      '<div style="grid-column:1/-1"><div class="label muted">Cross-links</div>' +
+        '<div class="dlinks">' + links + '</div></div>' +
+      '</div>';
+
+    h += '<div class="dsec"><div class="dh">Endpoints <span class="dhn">(' + r.endpoints.length + ')</span>' +
+         '<span class="dhs">route templates this deploy serves directly</span></div>' +
+         endpointsTable(r, eps, epFiltered) + '</div>';
+
+    h += '<div class="dsec"><div class="dh">Error types <span class="dhn">(' + r.errorTypes.length + ')</span>' +
+         '<span class="dhs">exception groups from the application log, newest first</span></div>' +
+         errorTypes(r) + '</div>';
+
+    h += '<div class="dsec"><div class="dh">Recent errors <span class="dhn">(' + r.recentErrors.length + ')</span>' +
+         '<span class="dhs">sampled occurrences inside this window</span></div>' +
+         (r.recentErrors.length
+            ? recentTable(r.recentErrors, false)
+            : '<div class="empty">No occurrence was sampled for this service inside the window.</div>') +
+         '</div>';
+
+    h += '</td></tr>';
+    return h;
+  }
+
+  function table(d) {
+    var list = sortRows(visible(d)), h = '', i, hits = 0;
+    for (i = 0; i < list.length; i++) { h += rowMarkup(list[i], d.range); hits += list[i].m.hits; }
+    $('rows').innerHTML = h;
+    $('none').hidden = list.length > 0;
+    $('shown').textContent = 'showing ' + list.length + ' of ' + d.rows.length + ' services';
+    $('qnote').textContent = V.q
+      ? (hits ? hits + ' endpoint path' + (hits === 1 ? '' : 's') + ' matched — those rows opened themselves'
+              : 'matched on service, deploy, zone or node')
+      : 'the search reads service names, deploy ids and endpoint paths';
+    sortHeads();
+  }
+
+  /* --------------------------------------------------------------- render */
+  function render(rangeKey) {
+    var d = SY.serviceHealth(rangeKey);
+    cur = d;
+
+    var inc = SY.incidentAt(d.range.t0, d.range.t1);
+    $('winlabel').textContent = d.range.label;
+    $('wininfo').textContent = d.range.buckets + ' five-minute buckets · ' +
+      d.rows.length + ' services · ' + SY.fmtNum(d.tiles.totalRequests) + ' ingress transactions';
+    $('wininc').textContent = inc
+      ? 'incident window in range: ' + incLabel(inc.key) + ' — ' + inc.label + ' · peak ' + inc.peakLabel
+      : 'no incident window opens inside this range';
+    $('winflow').setAttribute('href', '../index.html#t=' + (inc ? inc.peak : d.range.t1));
+    $('winflow').textContent = inc
+      ? 'Open on the flow map at ' + inc.peakLabel
+      : 'Open on the flow map at ' + SY.dstamp(d.range.t1);
+
+    tiles(d);
+    chartCard(d);
+    table(d);
+
+    $('recent').innerHTML = recentRows(d.recentErrors, true);
+    $('norecent').hidden = d.recentErrors.length > 0;
+
+    $('lgwin').textContent = d.range.label + ' · rates carry four decimals: at this volume the second ' +
+      'decimal hides real failures';
+
+    $('n-ingress').textContent =
+      'Total Requests, Total Errors and Error Rate sum the ingress rows only. Core Adapter is measured on the ' +
+      'egress lane, where its ' + SY.fmtNum(d.tiles.egressCalls) + ' outbound calls and ' +
+      SY.fmtNum(d.tiles.egress5xx) + ' upstream 5xx describe the same customer transactions a second time. ' +
+      'Adding them to the tile would inflate both volume and errors, so they are shown beside the tile instead of inside it.';
+    $('n-gateway').textContent =
+      'Every request in the estate crosses the API Gateway deploy, so a scorecard row that counted all of them ' +
+      'would just repeat the estate tile. The row counts the two /v2/ aggregation routes the gateway serves ' +
+      'directly — which is why it can read Critical while the estate reads ' +
+      (d.tiles.errorRate == null ? 'NO DATA' : SY.fmtPct(d.tiles.errorRate, 2)) + '.';
+    $('n-nodata').textContent =
+      'Coverage is observed buckets over observed plus unknown. At or above 98% the figure stands; below that it ' +
+      'is provisional; below 50% the row reads NO DATA rather than 0%, because a collector that stopped is missing ' +
+      'evidence, not a service at zero errors. Percentiles are volume-weighted means of the per-bucket percentile.';
+
+    S.setLineage(SY.lineage('service-health'));
+  }
+
+  function repaint() { if (cur) { table(cur); } }
+
+  /* --------------------------------------------------------- interactions */
+  function toggleRow(tr) {
+    var det = $(tr.getAttribute('data-row'));
+    var isOpen = tr.className.indexOf('open') > -1;
+    var key = tr.getAttribute('data-key');
+    tr.className = isOpen ? 'row-toggle' : 'row-toggle open';
+    tr.setAttribute('aria-expanded', isOpen ? 'false' : 'true');
+    if (det) det.className = isOpen ? 'row-detail' : 'row-detail open';
+    if (isOpen) delete open[key]; else open[key] = 1;
+  }
+
+  function sortBy(k) {
+    if (V.sort === k) V.dir = -V.dir; else { V.sort = k; V.dir = DEF_DIR[k] || 1; }
+    repaint();
+  }
+
+  S.ready(function () {
+    S.setLineage(SY.lineage('service-health'));
+    render(S.getRange() || '24h');
+
+    /* range chips */
+    S.onRange(function (ev) { render(ev.detail.range); });
+
+    /* one debounced resize redraw for the chart (render is called with
+       responsive:false so re-rendering never stacks listeners) */
+    var tid = null;
+    window.addEventListener('resize', function () {
+      if (tid) window.clearTimeout(tid);
+      tid = window.setTimeout(function () { if (chart) chart.draw(); }, 140);
+    });
+
+    /* sortable headers */
+    var thead = document.querySelector('#scorecard thead');
+    thead.addEventListener('click', function (ev) {
+      var n = ev.target;
+      while (n && n !== this && !(n.getAttribute && n.getAttribute('data-sort'))) n = n.parentNode;
+      if (!n || n === this) return;
+      sortBy(n.getAttribute('data-sort'));
+    });
+    thead.addEventListener('keydown', function (ev) {
+      if (ev.key !== 'Enter' && ev.key !== ' ') return;
+      var n = ev.target;
+      if (n && n.getAttribute && n.getAttribute('data-sort')) { ev.preventDefault(); sortBy(n.getAttribute('data-sort')); }
+    });
+
+    /* search box */
+    $('q').addEventListener('input', function () { V.q = this.value.trim(); repaint(); });
+
+    /* reset */
+    $('reset').addEventListener('click', function () {
+      V.q = ''; V.sort = 'requests'; V.dir = DEF_DIR.requests;
+      $('q').value = '';
+      repaint();
+    });
+
+    /* expandable rows — pointer and keyboard; links inside a row stay links */
+    var body = $('rows');
+    body.addEventListener('click', function (ev) {
+      var n = ev.target;
+      while (n && n !== this) {
+        if (n.tagName === 'A') return;
+        if (n.className && String(n.className).indexOf('row-toggle') === 0) { toggleRow(n); return; }
+        n = n.parentNode;
+      }
+    });
+    body.addEventListener('keydown', function (ev) {
+      if (ev.key !== 'Enter' && ev.key !== ' ') return;
+      var n = ev.target;
+      if (n && n.className && String(n.className).indexOf('row-toggle') === 0) { ev.preventDefault(); toggleRow(n); }
+    });
+  });
+})();
+</script>
+</body>
+</html>

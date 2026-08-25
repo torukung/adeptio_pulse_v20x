@@ -1,0 +1,909 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<link rel="icon" href="data:,"/>
+
+<!-- ===========================================================================
+     ADEPTIO Pulse — menu 11 · ERROR TRACKING
+     Built from menus/_template.html. Every figure comes from
+     PULSE_SYNTH.errorTracking() — the page filters, sorts and formats it, and
+     never computes a number of its own. Status changes are a local workflow
+     state kept in localStorage 'pulse_tracking_v1'; they never touch the data.
+     =========================================================================== -->
+
+<title>Error Tracking &mdash; Adeptio Pulse</title>
+
+<link rel="stylesheet" href="../assets/tokens.css"/>
+<link rel="stylesheet" href="../assets/shell.css"/>
+<link rel="stylesheet" href="../assets/menus.css"/>
+
+<style>
+/* ------------------------------------------------------------- page-local
+   Seven small additions this screen needs and the shared kit does not carry.
+   Tokens only. Status colours stay on status: the health reading (SLA %,
+   overdue, incident tag) and the workflow state (Backlog -> Done, which the
+   shared .bcol marks already colour --muted/--unk/--maint/--ok).
+
+   C2: the Biz / Tech split was originally drawn in chrome tokens here on the
+   argument that a taxonomy is not a status. Two other menus already draw the
+   same split in warn/crit — Errors Explorer (.badge.biz/.tec, its tiles and its
+   stacked bars) and Service Health ("Failures by service") — so keeping a third
+   encoding made one taxonomy change colour as the reader moved between menus.
+   The site's encoding wins: business = warn, technical = crit, everywhere. --*/
+
+/* type tag — matches Errors Explorer's .badge.biz / .badge.tec exactly */
+.badge.biz {color:var(--warn);border-color:color-mix(in srgb,var(--warn) 40%,transparent);
+  background:color-mix(in srgb,var(--warn) 12%,transparent)}
+.badge.tech{color:var(--crit);border-color:color-mix(in srgb,var(--crit) 40%,transparent);
+  background:color-mix(in srgb,var(--crit) 12%,transparent)}
+
+/* incident cross-link + overdue marker (both are status readings) */
+.badge.inc{text-decoration:none;color:var(--warn);
+  border-color:color-mix(in srgb,var(--warn) 42%,transparent);
+  background:color-mix(in srgb,var(--warn) 12%,transparent)}
+.badge.inc.crit{color:var(--crit);border-color:color-mix(in srgb,var(--crit) 42%,transparent);
+  background:color-mix(in srgb,var(--crit) 12%,transparent)}
+.badge.inc:hover{border-color:currentColor}
+.badge.od{color:var(--crit);border-color:color-mix(in srgb,var(--crit) 42%,transparent);
+  background:color-mix(in srgb,var(--crit) 12%,transparent)}
+.badge.loc{color:var(--chipink);border-color:var(--chipline);background:var(--chipbg)}
+
+/* the SLA reading and the NO DATA state */
+.uv{font-weight:700;font-variant-numeric:tabular-nums}
+.uv.ok{color:var(--ok)} .uv.warn{color:var(--warn)}
+.uv.crit{color:var(--crit)} .uv.unk{color:var(--unk)}
+.nodata{color:var(--unk);font-size:10.5px;font-weight:750;letter-spacing:.05em}
+
+/* the error code doubles as the row's "open detail" control */
+.ck{font-family:var(--mono);font-size:11px;font-weight:650;color:var(--ink);
+  background:none;border:none;padding:0;cursor:pointer;text-align:left;
+  border-bottom:1px dashed var(--line)}
+.ck:hover{color:var(--chipink);border-bottom-color:currentColor}
+
+/* status control in a cell — the four workflow states carry the board's marks */
+.stsel{font-family:var(--font);font-size:11px;font-weight:650;color:var(--ink2);
+  background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--muted);
+  border-radius:8px;padding:3px 6px;cursor:pointer;max-width:130px}
+.stsel:hover{border-color:var(--chipink);color:var(--ink)}
+.stsel.s-todo{border-left-color:var(--unk)}
+.stsel.s-prog{border-left-color:var(--maint)}
+.stsel.s-done{border-left-color:var(--ok)}
+
+/* progress — geometry only; the fraction beside it is the payload's own */
+.pgb{width:52px;height:6px;border-radius:999px;background:var(--panel2);
+  border:1px solid var(--line);overflow:hidden;display:inline-block;vertical-align:middle}
+.pgb > i{display:block;height:100%;background:var(--maint);transition:width .18s}
+.pgw{display:flex;align-items:center;gap:7px;font-variant-numeric:tabular-nums;font-size:11px}
+
+/* link cell */
+.dlinks{display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:11px}
+.dlinks a{text-decoration:none;border-bottom:1px solid transparent;color:var(--ink2)}
+.dlinks a:hover{color:var(--ink);border-bottom-color:currentColor}
+
+/* top-10 occurrence bars (page-local: the payload carries no series here) */
+.tbl{display:flex;flex-direction:column;gap:6px}
+.tbrow{display:grid;grid-template-columns:minmax(104px,auto) minmax(60px,1fr) minmax(122px,auto);
+  gap:10px;align-items:center;background:none;border:none;padding:3px 2px;cursor:pointer;
+  text-align:left;border-radius:8px;width:100%}
+.tbrow:hover{background:var(--panel2)}
+.tb-n{font-family:var(--mono);font-size:11px;color:var(--ink)}
+.tb-bar{height:9px;border-radius:999px;background:var(--panel2);border:1px solid var(--line);overflow:hidden}
+.tb-bar > i{display:block;height:100%;background:var(--warn)}
+.tb-bar > i.t2{background:var(--crit)}
+.tb-v{font-size:11px;color:var(--ink2);font-variant-numeric:tabular-nums;text-align:right}
+.tb-v b{color:var(--ink);font-weight:700}
+
+/* drawer: it lives outside .pshell, so it needs its own focus ring */
+#ov :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+.ovlinks{display:flex;flex-direction:column;gap:6px;font-size:12px}
+.ovlinks a{color:var(--ink2);text-decoration:none;border-bottom:1px solid transparent;width:fit-content}
+.ovlinks a:hover{color:var(--ink);border-bottom-color:currentColor}
+
+/* wide register: the table scrolls inside .twrap, never the page */
+.ptable td.msg{white-space:normal;overflow-wrap:anywhere;min-width:210px;max-width:320px}
+.ptable td.pcell{white-space:normal;min-width:132px}
+
+/* .card and .board set their own display, which would beat the UA rule for
+   [hidden]; the view toggle needs hiding to actually hide. */
+.card[hidden],.board[hidden]{display:none}
+
+@media (max-width:768px){
+  .tbrow{grid-template-columns:minmax(96px,auto) minmax(40px,1fr) minmax(104px,auto)}
+}
+@media (prefers-reduced-motion:reduce){
+  .pgb > i,.rt-c{transition:none}
+}
+</style>
+</head>
+
+<body data-shell="page"
+      data-title="Error Tracking"
+      data-subtitle="computed from: L3 result_code (B-/T- taxonomy) in the gateway and application log &middot; P5 ticket service &middot; no APM &middot; Aug 23 &ndash; 29, 2027"
+      data-ranges=""
+      data-lineage="L3 result_code from the gateway access log and the application log (B-/T- taxonomy), joined to the P5 ticket service. http_status and error_code stay in separate columns and are never merged.">
+
+<div id="pulse-main">
+
+  <!-- ==================================================== register scope -->
+  <div class="card">
+    <div class="toolbar">
+      <span class="clbl">Register</span>
+      <span class="mono" id="scope">&mdash;</span>
+      <span class="csep"></span>
+      <span class="note">one row per result code, counted over the whole week</span>
+      <div class="sp"></div>
+      <a class="btn" id="flowlink" href="../index.html">Open on the flow map</a>
+    </div>
+  </div>
+
+  <!-- =============================================================== tiles -->
+  <section class="tiles" id="tiles" aria-label="Tracking counts"></section>
+
+  <!-- ============================================================ controls -->
+  <section class="sect"><h2>Tracking register</h2>
+    <span class="sh">error codes carrying work &middot; status is workflow, count is evidence</span>
+    <span class="sp"></span>
+    <span class="note" id="shown"></span>
+  </section>
+
+  <div class="card">
+    <div class="toolbar">
+      <span class="clbl">View</span>
+      <div class="chips" id="vchips" role="group" aria-label="Choose a view"></div>
+      <span class="csep"></span>
+      <span class="clbl">Status</span>
+      <div class="chips" id="stchips" role="group" aria-label="Filter by status"></div>
+    </div>
+    <div class="toolbar">
+      <span class="clbl">Type</span>
+      <div class="chips" id="tychips" role="group" aria-label="Filter by type"></div>
+      <span class="csep"></span>
+      <span class="clbl">Priority</span>
+      <div class="chips" id="prchips" role="group" aria-label="Filter by priority"></div>
+      <div class="sp"></div>
+      <label class="field"><span class="fl">Search</span>
+        <input type="text" id="q" placeholder="code, message, service, PIC or ticket" aria-label="Search the register"/></label>
+      <button class="btn" type="button" id="reset">Reset filters</button>
+      <button class="btn pri" type="button" id="csv">Export CSV</button>
+    </div>
+    <div class="toolbar">
+      <span class="note" id="say">&nbsp;</span>
+      <div class="sp"></div>
+      <button class="btn" type="button" id="clearlocal" hidden>Discard local status changes</button>
+    </div>
+  </div>
+
+  <!-- ======================================================== top-10 codes -->
+  <div class="card" id="topcard">
+    <header><h3>Weekly occurrences &mdash; top 10 codes</h3>
+      <span class="ch">count and share as published by the register &middot; the ten largest, whatever the
+        filters below say &middot; select a bar to open the code</span></header>
+    <div class="tbl" id="topbars"></div>
+    <div class="legend">
+      <span><i class="warn"></i>business result code (B-)</span>
+      <span><i class="crit"></i>technical result code (T-)</span>
+    </div>
+  </div>
+
+  <!-- =============================================================== table -->
+  <div class="card pad0" id="tablecard">
+    <div class="twrap" style="--tmax:72vh">
+      <table class="ptable" style="--tmin:1580px">
+        <thead>
+          <tr>
+            <th class="num sortable" data-sort="rank" tabindex="0" scope="col">#<span class="sarr"></span></th>
+            <th class="sortable" data-sort="code" tabindex="0" scope="col">Error code<span class="sarr"></span></th>
+            <th class="sortable" data-sort="type" tabindex="0" scope="col">Type<span class="sarr"></span></th>
+            <th class="num sortable" data-sort="http" tabindex="0" scope="col">HTTP<span class="sarr"></span></th>
+            <th class="num sortable" data-sort="count" tabindex="0" scope="col">Count<span class="sarr"></span></th>
+            <th class="sortable" data-sort="svc" tabindex="0" scope="col">Service<span class="sarr"></span></th>
+            <th class="sortable" data-sort="message" tabindex="0" scope="col">Message<span class="sarr"></span></th>
+            <th class="sortable" data-sort="status" tabindex="0" scope="col">Status<span class="sarr"></span></th>
+            <th class="sortable" data-sort="priority" tabindex="0" scope="col">Priority<span class="sarr"></span></th>
+            <th class="sortable" data-sort="progress" tabindex="0" scope="col">Progress<span class="sarr"></span></th>
+            <th class="sortable" data-sort="eta" tabindex="0" scope="col">ETA<span class="sarr"></span></th>
+            <th class="num sortable" data-sort="sla" tabindex="0" scope="col">SLA %<span class="sarr"></span></th>
+            <th class="sortable" data-sort="pic" tabindex="0" scope="col">PIC<span class="sarr"></span></th>
+            <th class="sortable" data-sort="link" tabindex="0" scope="col">Link<span class="sarr"></span></th>
+            <th class="num sortable" data-sort="cmt" tabindex="0" scope="col">Cmt<span class="sarr"></span></th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <div class="empty" id="empty" hidden>No rows match these filters. Clear a chip or empty the search box.</div>
+  </div>
+
+  <!-- =============================================================== board -->
+  <div class="board" id="board" style="--bcols:4" hidden></div>
+
+  <!-- =============================================================== notes -->
+  <section class="sect"><h2>How to read this register</h2>
+    <span class="sh">what each column is, and what it is not</span></section>
+  <div class="grid2">
+    <div class="card flat">
+      <header><h3>Codes, not HTTP statuses</h3></header>
+      <p class="note" id="note">&mdash;</p>
+      <p class="note">Count is the seeded week's occurrences of that result code, and share is its
+        portion of the whole register &mdash; both published by <code>errorTracking()</code>. The page
+        sorts and filters them; it never recomputes one. There are no range chips on this screen:
+        the register <em>is</em> the week (Aug 23 00:00 &ndash; Aug 29 23:55), and a code with a shorter
+        window would not be the same row.</p>
+    </div>
+    <div class="card flat">
+      <header><h3>SLA %, ETA and the workflow state</h3></header>
+      <p class="note"><b>SLA %</b> is the owning service's response-time compliance for the week (its
+        share of requests inside <code>T_ms</code>). It is a property of the service, not of the code,
+        so several codes on one service read alike. Core Adapter has no ingress route of its own &mdash;
+        it is measured from egress edges, where response-time compliance cannot be derived &mdash; so its
+        cells read <span class="nodata">NO DATA</span> rather than 0&nbsp;%.</p>
+      <p class="note"><b>ETA</b> is a timeline index into the same week, printed as <code>&lt;month&gt; &lt;day&gt; HH:MM</code>;
+        an ETA past <b>Aug 29 23:55</b> reads Aug 30 and is still open. <b>Status</b> is workflow, not health:
+        changing it stores a local override in this browser only
+        (<code>localStorage</code> key <code>pulse_tracking_v1</code>, written inside try/catch) and
+        leaves every number untouched.</p>
+    </div>
+  </div>
+
+</div><!-- /#pulse-main -->
+
+<!-- right-side detail drawer -->
+<div class="overlay" id="ov" aria-hidden="true">
+  <div class="ov-scrim" data-ov-close></div>
+  <aside class="ov-panel" role="dialog" aria-modal="true" aria-labelledby="ovt">
+    <header>
+      <h3 id="ovt">Detail</h3>
+      <span class="ovk" id="ovk"></span>
+      <button class="ov-x" type="button" data-ov-close aria-label="Close the detail drawer">&#10005;</button>
+    </header>
+    <div class="ov-body" id="ovbody"></div>
+    <div class="ov-foot">
+      <button class="btn" type="button" id="ovreset">Reset this row</button>
+      <button class="btn" type="button" data-ov-close>Close</button>
+      <span class="note">Status is saved to this browser only.</span>
+    </div>
+  </aside>
+</div>
+
+<!-- ===================================================== LOAD ORDER ======= -->
+<script src="../data/manifest.js"></script>
+<script src="../data/rcameta.js"></script>
+<script src="../data/tickets.js"></script>
+<script src="../data/registry.js"></script>
+<script src="../data/spine.js"></script>
+<script src="../assets/synth.js"></script>
+<script src="../assets/charts.js"></script>
+<script src="../assets/shell.js"></script>
+
+<script>
+/* ------------------------------------------------------------------ page */
+(function () {
+  "use strict";
+
+  var C  = window.PULSE_CHARTS,
+      S  = window.PULSE_SHELL,
+      SY = window.PULSE_SYNTH,
+      TK = window.ADEPTIO_TICKETS || { byWindow: {} },
+      DA = window.ADEPTIO_DATA;
+
+  var esc = C.esc;
+  var $ = function (id) { return document.getElementById(id); };
+  var has = function (o, k) { return Object.prototype.hasOwnProperty.call(o, k); };
+
+  var LS_KEY = 'pulse_tracking_v1';
+
+  /* the payload: read once. This screen is the week's register, so there is
+     no range argument and no range chip row. */
+  var D = SY.errorTracking();
+
+  var byCode = {}, i;
+  for (i = 0; i < D.rows.length; i++) byCode[D.rows[i].code] = D.rows[i];
+
+  /* ticket -> incident window (the tickets file owns that mapping) */
+  var winOfTicket = {}, k;
+  for (k in TK.byWindow) if (has(TK.byWindow, k)) winOfTicket[TK.byWindow[k]] = k;
+
+  /* view state — filters and sort live on the page; every number lives in the
+     payload. Changing any of these hides or re-orders rows, never re-computes. */
+  var V = { view: 'Table', status: null, type: null, prio: null, q: '', sort: 'rank', dir: 1 };
+  var DEF_DIR = { rank: 1, code: 1, type: 1, http: 1, count: -1, svc: 1, message: 1,
+                  status: 1, priority: 1, progress: -1, eta: 1, sla: 1, pic: 1, link: 1, cmt: -1 };
+
+  /* local workflow overrides (this browser only) */
+  var OV = {};
+
+  /* --------------------------------------------------------------- format */
+  function pct(v)  { return v == null ? null : SY.fmtPct(v, 2); }
+  function num(v)  { return v == null ? null : SY.fmtNum(v); }
+  function nodata() { return '<span class="nodata">NO DATA</span>'; }
+
+  var PRIO_PILL = { P1: 'crit', P2: 'warn', P3: 'plain', P4: 'unk' };
+  var ST_CLASS  = { 'Backlog': '', 'To Do': 's-todo', 'In Progress': 's-prog', 'Done': 's-done' };
+  var ST_COL    = { 'Backlog': '', 'To Do': 'todo', 'In Progress': 'prog', 'Done': 'done' };
+
+  /* --------------------------------------------------------------- storage
+     Shape: {"v":1,"status":{"<code>":"<status>"}}. Anything unreadable, of the
+     wrong shape, naming an unknown code or an unknown status is discarded —
+     a corrupt entry must never be able to invent a row. */
+  function loadOv() {
+    var out = {}, raw = null;
+    try { raw = window.localStorage ? window.localStorage.getItem(LS_KEY) : null; }
+    catch (e) { return out; }
+    if (!raw) return out;
+    var p = null;
+    try { p = JSON.parse(raw); } catch (e) { return out; }
+    if (!p || typeof p !== 'object' || !p.status || typeof p.status !== 'object') return out;
+    for (var c in p.status) {
+      if (!has(p.status, c) || !byCode[c]) continue;
+      var s = p.status[c];
+      if (D.statuses.indexOf(s) < 0) continue;
+      if (s === byCode[c].status) continue;             /* same as published: not an override */
+      out[c] = s;
+    }
+    return out;
+  }
+  function saveOv() {
+    try {
+      if (!window.localStorage) return false;
+      window.localStorage.setItem(LS_KEY, JSON.stringify({ v: 1, saved: SY.freshness, status: OV }));
+      return true;
+    } catch (e) { return false; }             /* private mode / blocked origin: stay silent */
+  }
+  function ovCount() { var n = 0, c; for (c in OV) if (has(OV, c)) n++; return n; }
+  function statusOf(r) { return has(OV, r.code) ? OV[r.code] : r.status; }
+  function setStatus(code, s) {
+    var r = byCode[code];
+    if (!r || D.statuses.indexOf(s) < 0) return;
+    if (s === r.status) { if (has(OV, code)) delete OV[code]; }
+    else OV[code] = s;
+    var okSave = saveOv();
+    paint();
+    say(okSave
+      ? r.code + ' moved to ' + s + ' — stored in this browser only (' + LS_KEY + ').'
+      : r.code + ' moved to ' + s + ' — this browser blocks storage, so the change lasts for this visit only.');
+  }
+
+  /* ---------------------------------------------------------- status line */
+  function say(msg) { $('say').innerHTML = msg ? esc(msg) : '&nbsp;'; }
+
+  /* ----------------------------------------------------------------- tiles
+     Values come straight from the payload's own tiles. When a local override
+     exists the effective counts are shown instead, with a "local" badge, so a
+     changed row and the header can never disagree. */
+  function counts() {
+    var n = ovCount();
+    if (!n) return { total: D.tiles.total, backlog: D.tiles.backlog, todo: D.tiles.todo,
+                     inprog: D.tiles.inprog, done: D.tiles.done, local: 0 };
+    var c = { total: D.rows.length, backlog: 0, todo: 0, inprog: 0, done: 0, local: n };
+    for (var j = 0; j < D.rows.length; j++) {
+      var s = statusOf(D.rows[j]);
+      if (s === 'Backlog') c.backlog++;
+      else if (s === 'To Do') c.todo++;
+      else if (s === 'In Progress') c.inprog++;
+      else c.done++;
+    }
+    return c;
+  }
+
+  function tiles() {
+    var c = counts(), h = '';
+    var loc = c.local ? ' <span class="badge loc">' + c.local + ' local</span>' : '';
+    function tile(cls, id, label, value, sub) {
+      return '<div class="tile ' + cls + '" id="' + id + '">' +
+             '<div class="label"><span>' + label + '</span></div>' +
+             '<div class="value"><span class="v">' + esc(String(value)) + '</span></div>' +
+             '<div class="sub">' + sub + '</div></div>';
+    }
+    h += tile('plain', 'tile-total', 'Total', c.total,
+              'result codes in the register &middot; <b>' + esc(SY.fmtNum(D.rows.length)) + '</b> rows' + loc);
+    /* C2: these were 'unk'. --unk is the site's NO-DATA colour (provisional
+       badges, NO DATA cells, the Aug 26 collector gap), so 31 real rows were being
+       painted as if they were missing evidence. A workflow state that is simply
+       "not started" is a plain count; only Done carries a status reading. */
+    h += tile('plain', 'tile-backlog', 'Backlog', c.backlog, 'raised, not yet picked up');
+    h += tile('plain', 'tile-todo',    'To Do',   c.todo,    'accepted, waiting on a start');
+    h += tile('plain', 'tile-inprog',  'In Progress', c.inprog, 'someone is on it now');
+    h += tile('ok',    'tile-done',    'Done',    c.done,    'closed &middot; the count stays for evidence');
+    $('tiles').innerHTML = h;
+  }
+
+  /* ----------------------------------------------------------------- chips */
+  function chip(on, label, n, attr) {
+    return '<button class="chip' + (on ? ' on' : '') + '" type="button" aria-pressed="' +
+           (on ? 'true' : 'false') + '" ' + attr + '>' + esc(label) +
+           (n == null ? '' : '<span class="n">' + esc(String(n)) + '</span>') + '</button>';
+  }
+  function typeCount(t) { var n = 0; for (var j = 0; j < D.rows.length; j++) if (D.rows[j].type === t) n++; return n; }
+  function prioCount(p) { var n = 0; for (var j = 0; j < D.rows.length; j++) if (D.rows[j].priority === p) n++; return n; }
+
+  function chips() {
+    var c = counts(), h = '', j;
+
+    h = '';
+    for (j = 0; j < D.views.length; j++)
+      h += chip(V.view === D.views[j], D.views[j], null, 'data-view="' + esc(D.views[j]) + '"');
+    $('vchips').innerHTML = h;
+
+    var stn = { 'Backlog': c.backlog, 'To Do': c.todo, 'In Progress': c.inprog, 'Done': c.done };
+    h = chip(V.status === null, 'All', c.total, 'data-st=""');
+    for (j = 0; j < D.statuses.length; j++)
+      h += chip(V.status === D.statuses[j], D.statuses[j], stn[D.statuses[j]],
+                'data-st="' + esc(D.statuses[j]) + '"');
+    $('stchips').innerHTML = h;
+
+    /* chip counts are row populations, not metrics — the title says so, so a
+       reader can never mistake "26 codes" for "26 errors". */
+    function pop(n) { return ' title="' + n + ' of ' + D.rows.length + ' codes"'; }
+    h = chip(V.type === null, 'All', null, 'data-ty=""') +
+        chip(V.type === 'Biz',  'Business (B-)',  typeCount('Biz'),  'data-ty="Biz"' + pop(typeCount('Biz'))) +
+        chip(V.type === 'Tech', 'Technical (T-)', typeCount('Tech'), 'data-ty="Tech"' + pop(typeCount('Tech')));
+    $('tychips').innerHTML = h;
+
+    var prios = ['P1', 'P2', 'P3', 'P4'];
+    h = chip(V.prio === null, 'All', null, 'data-pr=""');
+    for (j = 0; j < prios.length; j++)
+      h += chip(V.prio === prios[j], prios[j], prioCount(prios[j]),
+                'data-pr="' + prios[j] + '"' + pop(prioCount(prios[j])));
+    $('prchips').innerHTML = h;
+
+    var n = ovCount();
+    $('clearlocal').hidden = !n;
+    $('clearlocal').textContent = 'Discard local status changes (' + n + ')';
+  }
+
+  /* -------------------------------------------------------------- filtering */
+  function match(r) {
+    if (V.status && statusOf(r) !== V.status) return false;
+    if (V.type && r.type !== V.type) return false;
+    if (V.prio && r.priority !== V.prio) return false;
+    if (!V.q) return true;
+    var q = V.q.toLowerCase();
+    var hay = [r.code, r.message, r.svcName, r.svc, r.type, r.priority, statusOf(r),
+               r.pic ? r.pic.name : '', r.pic ? r.pic.team : '', r.link || '',
+               r.http == null ? '' : String(r.http), r.etaLabel || ''].join(' ').toLowerCase();
+    return hay.indexOf(q) > -1;
+  }
+  function sortKey(r, key) {
+    switch (key) {
+      case 'rank':     return r.rank;
+      case 'code':     return r.code;
+      case 'type':     return r.type;
+      case 'http':     return r.http;
+      case 'count':    return r.count;
+      case 'svc':      return r.svcName;
+      case 'message':  return r.message;
+      case 'status':   return D.statuses.indexOf(statusOf(r));
+      case 'priority': return r.priority;
+      case 'progress': return r.progressPct;
+      case 'eta':      return r.eta;
+      case 'sla':      return r.sla;
+      case 'pic':      return r.pic ? r.pic.name : null;
+      case 'link':     return r.link;
+      case 'cmt':      return r.cmt;
+    }
+    return r.rank;
+  }
+  function visible() {
+    var out = [], j;
+    for (j = 0; j < D.rows.length; j++) if (match(D.rows[j])) out.push(D.rows[j]);
+    var key = V.sort, dir = V.dir;
+    out.sort(function (a, b) {
+      var x = sortKey(a, key), y = sortKey(b, key);
+      if (x == null && y == null) return a.rank - b.rank;
+      if (x == null) return 1;                        /* missing values sort last, both ways */
+      if (y == null) return -1;
+      if (typeof x === 'string' || typeof y === 'string') {
+        var r = String(x).localeCompare(String(y));
+        return r ? r * dir : a.rank - b.rank;
+      }
+      return x === y ? a.rank - b.rank : (x < y ? -1 : 1) * dir;
+    });
+    return out;
+  }
+
+  /* ------------------------------------------------------------ incidents */
+  function incOf(r) {
+    if (!r.link) return null;
+    var w = winOfTicket[r.link];
+    if (!w || !DA.INC[w]) return null;
+    var meta = DA.INCMETA[w] || [w, 'warn'], band = DA.INC[w];
+    return { key: w, label: meta[0], sev: meta[1], peak: band[1], peakLabel: SY.dstamp(band[1]),
+             ticket: r.link, ticketHref: r.linkHref, flow: '../index.html#t=' + band[1] };
+  }
+
+  /* ------------------------------------------------------------ top bars */
+  function topBars() {
+    var top = D.rows.slice(0, 10), h = '', j;
+    var max = 0;
+    for (j = 0; j < top.length; j++) if (top[j].count > max) max = top[j].count;
+    for (j = 0; j < top.length; j++) {
+      var r = top[j], w = max ? (r.count / max * 100) : 0;
+      h += '<button class="tbrow" type="button" data-open="' + esc(r.code) + '" ' +
+           'aria-label="' + esc(r.code + ' — ' + r.message) + '">' +
+           '<span class="tb-n">' + esc(r.code) + '</span>' +
+           '<span class="tb-bar"><i class="' + (r.type === 'Tech' ? 't2' : '') + '" style="width:' +
+           w.toFixed(1) + '%"></i></span>' +
+           '<span class="tb-v"><b>' + esc(SY.fmtNum(r.count)) + '</b> &middot; ' +
+           esc(SY.fmtPct(r.share, 2)) + '</span></button>';
+    }
+    $('topbars').innerHTML = h;
+  }
+
+  /* ---------------------------------------------------------------- table */
+  function statusCell(r) {
+    var s = statusOf(r), h = '', j;
+    h += '<select class="stsel ' + ST_CLASS[s] + '" data-code="' + esc(r.code) + '" ' +
+         'aria-label="Status for ' + esc(r.code) + '">';
+    for (j = 0; j < D.statuses.length; j++)
+      h += '<option value="' + esc(D.statuses[j]) + '"' + (D.statuses[j] === s ? ' selected' : '') +
+           '>' + esc(D.statuses[j]) + '</option>';
+    h += '</select>';
+    if (has(OV, r.code)) h += ' <span class="badge loc" title="local override; the register says ' +
+                              esc(r.status) + '">local</span>';
+    return h;
+  }
+  function linkCell(r) {
+    if (!r.link) return '<span class="muted">&mdash;</span>';
+    return '<span class="dlinks"><a href="' + esc(r.linkHref) + '" class="mono" ' +
+           'title="Open the ticket in Incident Trace">' + esc(r.link) + '</a></span>';
+  }
+  /* incident tag — the house pattern: key + peak, linking to the flow map */
+  function incBadge(inc) {
+    if (!inc) return '';
+    return '<a class="badge inc' + (inc.sev === 'crit' ? ' crit' : '') + '" href="' + esc(inc.flow) + '" ' +
+           'title="' + esc('WK34 · Incident ' + inc.key + ' — ' + inc.label +
+                          ' · peak ' + inc.peakLabel +
+                          ' — open on the flow map at this time') + '">' +
+           esc('W34·' + inc.key) + ' ' + esc(inc.peakLabel) + '</a>';
+  }
+  function etaCell(r) {
+    if (r.eta == null) return '<span class="muted">no ETA</span>';
+    return '<span class="mono">' + esc(r.etaLabel) + '</span>' +
+           (r.overdue ? ' <span class="badge od">overdue</span>' : '');
+  }
+  function slaCell(r) {
+    if (r.sla == null) return nodata();
+    return '<span class="uv ' + esc(r.slaBand) + '">' + esc(pct(r.sla)) + '</span>';
+  }
+
+  function table(list) {
+    var h = '', j;
+    for (j = 0; j < list.length; j++) {
+      var r = list[j], inc = incOf(r);
+      h += '<tr data-code="' + esc(r.code) + '">' +
+        '<td class="num" title="register row ' + r.n + '">' + r.rank + '</td>' +
+        '<td><button class="ck" type="button" data-open="' + esc(r.code) + '">' + esc(r.code) + '</button></td>' +
+        '<td><span class="badge ' + (r.type === 'Tech' ? 'tech' : 'biz') + '">' + esc(r.type) + '</span></td>' +
+        '<td class="num mono">' + (r.http == null ? '&mdash;' : esc(String(r.http))) + '</td>' +
+        '<td class="num">' + esc(num(r.count)) +
+          '<span class="sub">' + esc(SY.fmtPct(r.share, 2)) + ' of the register</span></td>' +
+        '<td class="nm">' + esc(r.svcName) + '<span class="sub">' + esc(r.svc) + '</span></td>' +
+        '<td class="msg">' + esc(r.message) + (inc ? ' ' + incBadge(inc) : '') + '</td>' +
+        '<td class="pcell">' + statusCell(r) + '</td>' +
+        '<td><span class="pill ' + PRIO_PILL[r.priority] + '">' + esc(r.priority) + '</span></td>' +
+        '<td><span class="pgw"><span class="pgb"><i style="width:' + r.progressPct + '%"></i></span>' +
+          r.progress[0] + '/' + r.progress[1] + '</span></td>' +
+        '<td>' + etaCell(r) + '</td>' +
+        '<td class="num">' + slaCell(r) + '</td>' +
+        '<td class="nm">' + (r.pic ? esc(r.pic.name) + '<span class="sub">' + esc(r.pic.team) +
+          (r.pic.mock ? ' (mock)' : '') + '</span>' : '<span class="muted">unassigned</span>') + '</td>' +
+        '<td>' + linkCell(r) + '</td>' +
+        '<td class="num">' + r.cmt + '</td>' +
+        '</tr>';
+    }
+    $('rows').innerHTML = h;
+    $('empty').hidden = list.length > 0;
+  }
+
+  /* ---------------------------------------------------------------- board */
+  function board(list) {
+    var h = '', j, s;
+    for (s = 0; s < D.statuses.length; s++) {
+      var st = D.statuses[s], inner = '', n = 0;
+      for (j = 0; j < list.length; j++) {
+        var r = list[j];
+        if (statusOf(r) !== st) continue;
+        n++;
+        var inc = incOf(r);
+        inner += '<div class="bcard" tabindex="0" role="button" data-open="' + esc(r.code) + '" ' +
+          'aria-label="' + esc(r.code + ' — ' + r.message) + '">' +
+          '<div class="bk">' + esc(r.code) + ' &middot; ' + (r.http == null ? '&mdash;' : esc(String(r.http))) + '</div>' +
+          '<div class="bs">' + esc(r.message) + '</div>' +
+          '<div class="bm"><span class="pill ' + PRIO_PILL[r.priority] + '">' + esc(r.priority) + '</span>' +
+          '<span class="badge ' + (r.type === 'Tech' ? 'tech' : 'biz') + '">' + esc(r.type) + '</span>' +
+          '<span>' + esc(r.svcName) + '</span>' +
+          '<span class="mono">' + esc(num(r.count)) + '</span>' +
+          (inc ? '<span class="badge inc' + (inc.sev === 'crit' ? ' crit' : '') + '" title="' +
+                 esc(inc.label + ' · peak ' + inc.peakLabel) + '">' + esc(inc.key) + ' ' +
+                 esc(inc.peakLabel) + '</span>' : '') +
+          '</div></div>';
+      }
+      h += '<div class="bcol ' + ST_COL[st] + '"><div class="bcol-h"><span class="bmark"></span>' +
+           '<span class="bt">' + esc(st) + '</span><span class="bn">' + n + '</span></div>' +
+           '<div class="bcol-b">' + (inner || '<p class="note">nothing here under these filters</p>') +
+           '</div></div>';
+    }
+    $('board').innerHTML = h;
+  }
+
+  /* ------------------------------------------------------------ sort heads */
+  function sortHeads() {
+    var ths = document.querySelectorAll('.ptable thead th.sortable'), j;
+    for (j = 0; j < ths.length; j++) {
+      var sk = ths[j].getAttribute('data-sort'), sel = sk === V.sort;
+      var base = 'sortable' + (ths[j].className.indexOf('num') > -1 ? ' num' : '');
+      ths[j].className = sel ? base + ' sorted' : base;
+      var arr = ths[j].querySelector('.sarr');
+      if (arr) arr.textContent = sel ? (V.dir === 1 ? '↑' : '↓') : '';
+      ths[j].setAttribute('aria-sort', sel ? (V.dir === 1 ? 'ascending' : 'descending') : 'none');
+    }
+  }
+
+  /* ----------------------------------------------------------------- paint */
+  function paint() {
+    var list = visible();
+    tiles();
+    chips();
+    sortHeads();
+    table(list);
+    board(list);
+    $('tablecard').hidden = V.view !== 'Table';
+    $('topcard').hidden   = V.view !== 'Table';
+    $('board').hidden     = V.view !== 'Board';
+    $('shown').innerHTML  = 'showing <b>' + list.length + '</b> of ' + D.rows.length +
+                            ' codes &middot; ' + esc(V.view.toLowerCase()) + ' view';
+    if (ovOpen) drawer(ovOpen);
+  }
+
+  /* ---------------------------------------------------------------- drawer */
+  var ovOpen = null;
+  function kv(dt, dd) { return '<dt>' + dt + '</dt><dd>' + dd + '</dd>'; }
+  function drawer(code) {
+    var r = byCode[code];
+    if (!r) return;
+    ovOpen = code;
+    var inc = incOf(r), s = statusOf(r);
+    $('ovt').textContent = r.message;
+    $('ovk').textContent = r.code;
+
+    var h = '';
+    h += '<div class="toolbar">' +
+         '<span class="badge ' + (r.type === 'Tech' ? 'tech' : 'biz') + '">' + esc(r.type) + '</span>' +
+         '<span class="pill ' + PRIO_PILL[r.priority] + '">' + esc(r.priority) + '</span>' +
+         '<span class="csep"></span>' + statusCell(r) + '</div>';
+
+    h += '<dl class="ov-kv">';
+    h += kv('Error code', '<span class="mono">' + esc(r.code) + '</span>');
+    h += kv('HTTP status', r.http == null ? '&mdash;' :
+            '<span class="mono">' + esc(String(r.http)) + '</span> <span class="muted">carried beside the code, never merged into it</span>');
+    h += kv('Service', esc(r.svcName) + ' <span class="muted">(' + esc(r.svc) + ')</span>');
+    h += kv('Occurrences', '<b>' + esc(num(r.count)) + '</b> this week &middot; ' +
+            esc(SY.fmtPct(r.share, 2)) + ' of the register &middot; rank ' + r.rank);
+    h += kv('Response-time SLA', (r.sla == null
+            ? nodata() + ' <span class="muted">no ingress route of its own; measured from egress edges</span>'
+            : '<span class="uv ' + esc(r.slaBand) + '">' + esc(pct(r.sla)) + '</span> <span class="muted">owning service, this week</span>'));
+    h += kv('Progress', '<span class="pgw"><span class="pgb"><i style="width:' + r.progressPct + '%"></i></span>' +
+            r.progress[0] + '/' + r.progress[1] + ' &middot; ' + r.progressPct + '%</span>');
+    h += kv('ETA', etaCell(r));
+    h += kv('PIC', r.pic ? esc(r.pic.name) + ' &middot; ' + esc(r.pic.team) + (r.pic.mock ? ' (mock)' : '') +
+            '<br><span class="mono">' + esc(r.pic.email || '') + '</span>' : 'unassigned');
+    h += kv('Comments', String(r.cmt));
+    h += kv('Register status', esc(r.status) + (s === r.status ? '' :
+            ' <span class="badge loc">now ' + esc(s) + ' in this browser</span>'));
+    h += '</dl>';
+
+    h += '<div class="card flat"><header><h3>Where this code came from</h3>' +
+         '<span class="ch">one week, one spine</span></header><div class="ovlinks">';
+    if (inc) {
+      h += '<a href="' + esc(inc.ticketHref) + '">Incident Trace &mdash; ' + esc(inc.ticket) + '</a>';
+      h += '<a href="' + esc(inc.flow) + '">Open on the flow map at this time &mdash; ' +
+           esc(inc.peakLabel) + ' &middot; ' + esc('WK34 · Incident ' + inc.key + ' — ' + inc.label) + '</a>';
+    } else {
+      h += '<span class="note">No ticket is mapped to this code: it is ordinary background volume, not an incident.</span>';
+    }
+    h += '<a href="errors.html">Errors Explorer &mdash; exceptions and result codes by service</a>';
+    h += '<a href="service-health.html">Service Health &mdash; ' + esc(r.svcName) + ' scorecard</a>';
+    h += '<a href="ops-issues.html">Ops Issues &mdash; the systemic register</a>';
+    h += '</div></div>';
+
+    h += '<p class="note">' + esc(D.note) + '</p>';
+    $('ovbody').innerHTML = h;
+  }
+  function openOv(code) {
+    drawer(code);
+    var ov = $('ov');
+    ov.className = 'overlay open';
+    ov.setAttribute('aria-hidden', 'false');
+    var x = ov.querySelector('.ov-x'); if (x && x.focus) x.focus();
+  }
+  function closeOv() {
+    ovOpen = null;
+    var ov = $('ov');
+    ov.className = 'overlay';
+    ov.setAttribute('aria-hidden', 'true');
+  }
+
+  /* ------------------------------------------------------------------ CSV */
+  var CSV_COLS = ['rank', 'code', 'type', 'http', 'count', 'share', 'service', 'message',
+                  'status', 'register_status', 'priority', 'progress', 'eta', 'sla_pct',
+                  'pic', 'link', 'comments'];
+  function q(v) {
+    var s = v == null ? '' : String(v);
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }
+  function toCsv(list) {
+    var lines = [CSV_COLS.join(',')], j;
+    for (j = 0; j < list.length; j++) {
+      var r = list[j];
+      lines.push([
+        r.rank, r.code, r.type, r.http == null ? '' : r.http, r.count, r.share,
+        r.svcName, r.message, statusOf(r), r.status, r.priority,
+        r.progress[0] + '/' + r.progress[1], r.etaLabel == null ? '' : r.etaLabel,
+        r.sla == null ? 'NO DATA' : r.sla, r.pic ? r.pic.name : '', r.link || '', r.cmt
+      ].map(q).join(','));
+    }
+    return lines.join('\r\n') + '\r\n';
+  }
+  function copyText(txt) {
+    try {
+      var ta = document.createElement('textarea');
+      ta.value = txt; ta.setAttribute('readonly', 'readonly');
+      ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      var okc = document.execCommand && document.execCommand('copy');
+      document.body.removeChild(ta);
+      return !!okc;
+    } catch (e) { return false; }
+  }
+  function doCsv() {
+    var list = visible(), txt = toCsv(list), name = 'pulse-error-tracking-Aug23-Aug29.csv';
+    try {
+      var blob = new Blob([txt], { type: 'text/csv;charset=utf-8' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url; a.download = name; a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(function () {
+        try { URL.revokeObjectURL(url); } catch (e) {}
+        if (a.parentNode) a.parentNode.removeChild(a);
+      }, 250);
+      say('CSV written — ' + name + ' (' + list.length + ' rows, ' + CSV_COLS.length + ' columns).');
+    } catch (e) {
+      say(copyText(txt)
+        ? 'Download was blocked, so the CSV is on the clipboard instead.'
+        : 'Download was blocked and the clipboard is unavailable.');
+    }
+  }
+
+  /* ----------------------------------------------------------------- boot */
+  S.ready(function () {
+    /* the footer strip is the synth's own lineage string for this page */
+    S.setLineage(SY.lineage('error-tracking'));
+
+    OV = loadOv();
+
+    var wk = SY.range('wk');
+    $('scope').textContent = D.rows.length + ' result codes · ' + wk.label;
+    $('note').textContent = D.note;
+
+    /* front-page cross-link at the week's largest incident (manifest INC) */
+    var fpeak = DA.INC && DA.INC.F ? DA.INC.F[1] : null;
+    if (fpeak != null) {
+      var fl = $('flowlink');
+      fl.href = '../index.html#t=' + fpeak;
+      fl.textContent = 'Open on the flow map at ' + SY.dstamp(fpeak);
+      fl.title = (DA.INCMETA.F || ['core outage'])[0];
+    }
+
+    topBars();
+    paint();
+    if (ovCount()) say(ovCount() + ' local status change(s) restored from this browser (' + LS_KEY + ').');
+
+    /* view chips */
+    $('vchips').addEventListener('click', function (ev) {
+      var n = ev.target;
+      while (n && n !== this && !(n.getAttribute && n.hasAttribute('data-view'))) n = n.parentNode;
+      if (!n || n === this) return;
+      V.view = n.getAttribute('data-view');
+      paint();
+    });
+
+    /* status / type / priority chips */
+    function chipFilter(host, attr, prop) {
+      $(host).addEventListener('click', function (ev) {
+        var n = ev.target;
+        while (n && n !== this && !(n.getAttribute && n.hasAttribute(attr))) n = n.parentNode;
+        if (!n || n === this) return;
+        var v = n.getAttribute(attr);
+        V[prop] = v ? v : null;
+        paint();
+      });
+    }
+    chipFilter('stchips', 'data-st', 'status');
+    chipFilter('tychips', 'data-ty', 'type');
+    chipFilter('prchips', 'data-pr', 'prio');
+
+    /* search */
+    $('q').addEventListener('input', function () { V.q = this.value.trim(); paint(); });
+
+    /* reset filters */
+    $('reset').addEventListener('click', function () {
+      V.status = null; V.type = null; V.prio = null; V.q = '';
+      V.sort = 'rank'; V.dir = DEF_DIR.rank;
+      $('q').value = '';
+      paint();
+      say('Filters cleared. Local status changes are kept — use the other button to drop those.');
+    });
+
+    /* discard local overrides */
+    $('clearlocal').addEventListener('click', function () {
+      OV = {};
+      saveOv();
+      paint();
+      say('Local status changes discarded; every row is back to what the register publishes.');
+    });
+
+    /* CSV */
+    $('csv').addEventListener('click', doCsv);
+
+    /* sortable headers — pointer and keyboard */
+    var thead = document.querySelector('.ptable thead');
+    function sortBy(n) {
+      var key = n.getAttribute('data-sort');
+      if (V.sort === key) V.dir = -V.dir; else { V.sort = key; V.dir = DEF_DIR[key] || 1; }
+      paint();
+    }
+    thead.addEventListener('click', function (ev) {
+      var n = ev.target;
+      while (n && n !== this && !(n.getAttribute && n.getAttribute('data-sort'))) n = n.parentNode;
+      if (n && n !== this) sortBy(n);
+    });
+    thead.addEventListener('keydown', function (ev) {
+      if (ev.key !== 'Enter' && ev.key !== ' ') return;
+      var n = ev.target;
+      if (n && n.getAttribute && n.getAttribute('data-sort')) { ev.preventDefault(); sortBy(n); }
+    });
+
+    /* status selects (table and drawer) */
+    document.addEventListener('change', function (ev) {
+      var n = ev.target;
+      if (!n || !n.className || String(n.className).indexOf('stsel') < 0) return;
+      setStatus(n.getAttribute('data-code'), n.value);
+    });
+
+    /* open the drawer: error-code button, board card, top-10 bar */
+    document.addEventListener('click', function (ev) {
+      var n = ev.target;
+      while (n && n !== document) {
+        if (n.tagName === 'A') return;                       /* links stay links */
+        if (n.getAttribute && n.hasAttribute('data-open')) { openOv(n.getAttribute('data-open')); return; }
+        n = n.parentNode;
+      }
+    });
+    document.addEventListener('keydown', function (ev) {
+      if (ev.key !== 'Enter' && ev.key !== ' ') return;
+      var n = ev.target;
+      if (n && n.className && String(n.className).indexOf('bcard') === 0) {
+        ev.preventDefault(); openOv(n.getAttribute('data-open'));
+      }
+    });
+
+    /* drawer plumbing */
+    var ov = $('ov');
+    ov.addEventListener('click', function (ev) {
+      if (ev.target.hasAttribute && ev.target.hasAttribute('data-ov-close')) closeOv();
+    });
+    document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape') closeOv(); });
+    $('ovreset').addEventListener('click', function () {
+      if (!ovOpen) return;
+      var r = byCode[ovOpen];
+      setStatus(ovOpen, r.status);
+    });
+  });
+})();
+</script>
+</body>
+</html>

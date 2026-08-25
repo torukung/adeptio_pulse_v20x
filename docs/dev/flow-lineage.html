@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<base href="../../">
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<link rel="icon" href="data:,"/>
+
+<!-- ===========================================================================
+     ADEPTIO Pulse — FLOW INSTRUMENTATION  (page 2)
+     ---------------------------------------------------------------------------
+     The use case, fully instrumented: every journey step, the object it lands
+     on, what runs there, which collection lane watches it, the health checks
+     that band it, and the nine fault fingerprints those checks draw — each one
+     already routed to a case in the Incident Trace portal.
+
+     Nothing here is measured by an APM agent. Everything on the page is read
+     from the same four files the whole site reads:
+       data/manifest.js   the 16 objects, 17 links, 61 objectives, 9 windows
+       data/rcameta.js    first checks + questions + owner per objective
+       data/registry.js   journeys, services, routes, downstreams, lanes
+       data/tickets.js    the case each window is routed to
+     and the live figures come from PULSE_SYNTH.journeys('7d') — the same
+     payload menus/journey.html renders, so the two pages cannot disagree.
+
+     Markup + boot only, classic <link>/<script src>, no fetch, no modules —
+     opens straight off disk over file://.
+     =========================================================================== -->
+
+<title>Flow instrumentation &mdash; Adeptio Pulse</title>
+
+<link rel="stylesheet" href="assets/tokens.css"/>
+<link rel="stylesheet" href="assets/shell.css"/>
+<link rel="stylesheet" href="assets/menus.css"/>
+
+<style>
+/* ------------------------------------------------------------- PAGE-LOCAL
+   Five things the shared kit does not carry: the cross-page link, the journey
+   identity header, the instrumented-step row (the funnel grid carries a bar
+   where this page needs a lane), the lane tag, and the fingerprint detail
+   grid. Tokens only — no new colours, and status colours stay on status. */
+.card[hidden],.note[hidden],a[hidden],div[hidden],tr[hidden]{display:none}
+
+a.tlink{color:var(--chipink);text-decoration:none;border-bottom:1px solid var(--chipline);
+  font-size:11.5px;white-space:nowrap}
+a.tlink:hover{border-bottom-color:var(--chipink)}
+.ptable td a.tlink{font-size:11px}
+
+/* ------------------------------------------------------ journey identity */
+.jhead{display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;min-width:0}
+.jid{min-width:0;flex:1 1 240px;display:flex;flex-direction:column;gap:4px}
+.jid .jn{font-size:19px;font-weight:750;letter-spacing:-.02em;color:var(--ink)}
+.jid .jd{font-family:var(--mono);font-size:11.5px;color:var(--muted)}
+.jstats{display:flex;gap:20px;flex-wrap:wrap;margin-left:auto}
+.jstat{min-width:74px}
+.jstat .sl{font-size:9.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;
+  color:var(--muted);white-space:nowrap}
+.jstat .sv{font-size:17px;font-weight:750;letter-spacing:-.02em;color:var(--ink);
+  font-variant-numeric:tabular-nums}
+.jstat .sv.ok{color:var(--ok)} .jstat .sv.warn{color:var(--warn)}
+.jstat .sv.crit{color:var(--crit)} .jstat .sv.unk{color:var(--unk)}
+
+/* -------------------------------------------------- instrumented step row
+   [ n · label + screen/api ] [ what observes it ] [ sessions ]  — the same
+   three-column rhythm as .funnel-step, with the lane where the bar would be. */
+.jsteps{display:flex;flex-direction:column;gap:2px}
+.jstep{display:grid;grid-template-columns:minmax(150px,1.3fr) minmax(0,2fr) auto;
+  align-items:center;gap:12px;min-width:0;padding:7px 0;border-top:1px solid var(--line2)}
+.jstep:first-child{border-top:0}
+.jstep .sn{display:flex;align-items:center;gap:7px;min-width:0;font-size:12px;
+  font-weight:650;color:var(--ink)}
+.jstep .sn .t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fidx{display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;
+  border-radius:50%;background:var(--panel2);border:1px solid var(--line);flex:0 0 auto;
+  font-size:9.5px;font-weight:750;color:var(--muted);font-variant-numeric:tabular-nums}
+.jstep .sk{font-size:10.5px;color:var(--muted);font-family:var(--mono);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-left:24px}
+.jstep .so{font-size:11px;color:var(--ink2);min-width:0;display:flex;gap:7px;
+  align-items:center;flex-wrap:wrap}
+.jstep .sv{font-size:11.5px;color:var(--ink2);text-align:right;white-space:nowrap;
+  min-width:96px;font-variant-numeric:tabular-nums}
+.jstep .sv b{color:var(--ink);font-weight:700}
+
+/* ------------------------------------------------------------- lane tag */
+.lane{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:9.5px;
+  font-weight:700;letter-spacing:.04em;padding:1px 6px;border-radius:5px;color:var(--ink2);
+  background:var(--panel2);border:1px solid var(--line);white-space:nowrap}
+.mpill{display:inline-block;font-family:var(--mono);font-size:9.5px;font-weight:700;
+  letter-spacing:.04em;padding:1px 6px;border-radius:5px;color:var(--ink2);
+  background:var(--panel2);border:1px solid var(--line)}
+
+/* ------------------------------------------------------- fingerprint rows */
+.fpchips{display:flex;gap:6px;flex-wrap:wrap}
+.fpg{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}
+.fpsec{display:flex;flex-direction:column;gap:7px;min-width:0}
+.fpsec > h4{font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;
+  color:var(--muted)}
+.fplist{display:flex;flex-direction:column;gap:5px;font-size:11.5px;color:var(--ink2)}
+.fplist .fr{display:flex;align-items:center;gap:8px;min-width:0}
+.fplist .fr .fo{font-family:var(--mono);font-size:10.5px;color:var(--muted);
+  flex:0 0 62px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fplist .fr .fc{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fplist .fr .fv{margin-left:auto;font-variant-numeric:tabular-nums;white-space:nowrap;
+  font-size:11px;color:var(--muted)}
+.fmove{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.detwrap{display:flex;flex-direction:column;gap:13px;padding:2px 0 6px}
+.dlinks{display:flex;gap:14px;flex-wrap:wrap;align-items:center;padding-top:9px;
+  border-top:1px solid var(--line2)}
+
+/* --------------------------------------------------------- check detail */
+.ckq{display:flex;flex-direction:column;gap:6px;font-size:11.5px;color:var(--ink2);
+  line-height:1.5}
+.ckq li{margin-left:15px;padding-left:2px}
+.ckq ol,.ckq ul{display:flex;flex-direction:column;gap:5px}
+.owner{font-size:11px;color:var(--muted)}
+.owner b{color:var(--ink2);font-weight:650}
+
+/* the register is wide; below 900px the two soft columns fold away rather
+   than pushing the table into a horizontal scroll it does not need */
+@media (max-width:900px){ .c-soft{display:none} }
+@media (min-width:900px){ #tiles{grid-template-columns:repeat(5,minmax(0,1fr))} }
+</style>
+</head>
+
+<body data-shell="page"
+      data-title="Flow instrumentation"
+      data-subtitle="computed from: L1 synthetic journey &middot; L2 protocol polling &middot; L3 log streams &middot; L5 file feeds &middot; Aug 23 &ndash; 29, 2027 &middot; no APM"
+      data-ranges=""
+      data-lineage="the instrument itself: 16 objects and 61 objectives from data/manifest.js, the first checks and owners from data/rcameta.js, journeys/routes/lanes from data/registry.js. Live figures are PULSE_SYNTH.journeys('7d') - the same payload the Customer Journey menu renders.">
+
+<div id="pulse-main">
+
+  <section class="tiles" id="tiles" aria-label="What is instrumented"></section>
+
+  <section class="sect"><h2>01 &middot; The journey, step by step</h2>
+    <span class="sh">every step, and the lane that can see it without an agent in the app</span></section>
+
+  <div class="card">
+    <header><h3>Journey</h3><span class="ch">six instrumented journeys &middot; pick one</span></header>
+    <div class="chips" id="jchips" role="tablist" aria-label="Journey"></div>
+  </div>
+
+  <div class="card" id="jcard">
+    <header><h3 id="jtitle">Journey</h3><span class="ch" id="jch"></span></header>
+    <div class="jhead" id="jhead"></div>
+    <div class="jsteps" id="jsteps"></div>
+    <div class="legend">
+      <span><b>screen</b> a step with no server call &mdash; seen only by the L1 synthetic journey</span>
+      <span><b>api</b> one route in the L3 access log</span>
+      <span><b>sms</b> an off-app step &mdash; seen through the SMPP probe and the DLR feed</span>
+    </div>
+  </div>
+
+  <section class="sect"><h2>02 &middot; What that journey crosses</h2>
+    <span class="sh">the objects on the path, what runs on each, and how each one is watched</span></section>
+
+  <div class="card pad0">
+    <div class="twrap">
+      <table class="ptable">
+        <thead><tr>
+          <th>Stage</th><th>Object</th><th class="c-soft">What runs there</th>
+          <th>Watched by</th><th class="c-soft">Method</th><th class="num">Checks</th><th>Owner</th>
+        </tr></thead>
+        <tbody id="hops"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <section class="sect"><h2>03 &middot; The check register</h2>
+    <span class="sh">every objective the instrument bands, and the first three things to look at when it goes red</span></section>
+
+  <div class="card">
+    <div class="toolbar">
+      <span class="clbl">Object</span>
+      <div class="chips" id="ofilter"></div>
+      <div class="sp"></div>
+      <div class="field"><span class="fl">Find</span>
+        <input id="csearch" type="search" placeholder="check, object, unit&hellip;" autocomplete="off" aria-label="Filter the check register"/></div>
+    </div>
+  </div>
+
+  <div class="card pad0">
+    <div class="twrap">
+      <table class="ptable">
+        <thead><tr>
+          <th>Object</th><th>Check</th><th class="num">Baseline</th>
+          <th class="num c-soft">Warn</th><th class="num c-soft">Crit</th>
+          <th>Watches for</th><th>Moves in</th>
+        </tr></thead>
+        <tbody id="checks"></tbody>
+      </table>
+    </div>
+    <div class="empty" id="cempty" hidden>No check matches that filter.</div>
+  </div>
+
+  <section class="sect"><h2>04 &middot; Fault fingerprints</h2>
+    <span class="sh">which checks go red together, what stays green at the same minutes, and the case it is routed to</span></section>
+
+  <div class="card pad0">
+    <div class="twrap">
+      <table class="ptable">
+        <thead><tr>
+          <th>Window</th><th>Fingerprint</th><th>Peak</th>
+          <th class="num">Checks red</th><th class="c-soft">Quiet</th><th>Case</th><th>On the map</th>
+        </tr></thead>
+        <tbody id="fps"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="note" id="fpnote"></div>
+
+</div><!-- /#pulse-main -->
+
+<!-- ===================================================== LOAD ORDER =======
+     1 · data      manifest (topology + INC) -> rcameta (owners) -> tickets
+     2 · registry  the account-agnostic reference model  (window.PULSE_REG)
+     3 · spine     the seeded canonical week              (window.PULSE_SPINE)
+     4 · synth     the synthesis API every page reads     (window.PULSE_SYNTH)
+     5 · charts    inline-SVG helpers + esc()             (window.PULSE_CHARTS)
+     6 · shell     builds the frame                       (window.PULSE_SHELL)
+     ======================================================================== -->
+<script src="data/manifest.js"></script>
+<script src="data/rcameta.js"></script>
+<script src="data/tickets.js"></script>
+<script src="data/registry.js"></script>
+<script src="data/spine.js"></script>
+<script src="assets/synth.js"></script>
+<script src="assets/charts.js"></script>
+<script src="assets/shell.js"></script>
+
+<script>
+/* ---------------------------------------------------------------- page boot */
+(function () {
+  "use strict";
+  var S  = window.PULSE_SHELL, SY = window.PULSE_SYNTH, C = window.PULSE_CHARTS;
+  var D  = window.ADEPTIO_DATA, G = window.PULSE_REG;
+  var R  = window.ADEPTIO_RCA || { nodes: {}, indicators: {} };
+  var TK = window.ADEPTIO_TICKETS || null;
+  var esc = C.esc;
+  function $(id) { return document.getElementById(id); }
+
+  /* ------------------------------------------- incident-window naming (v2.0.1)
+     The incident windows keep their single letters as IDENTITY - D.INC,
+     D.INCMETA and ADEPTIO_TICKETS.byWindow are all keyed on them, and nothing
+     below re-keys anything. These are only the names a reader sees:
+       incLabel('B') -> "WK34 · Incident B — storage creep"   the display form
+       incShort('B') -> "W34·B"                    where a cell is genuinely tight
+     incLabel() is printed ON ITS OWN - it already carries the week, the word
+     "Incident" and the letter, so it is never prefixed with the key again, and
+     the bare INCMETA descriptor in the name column is never prefixed with it.
+     PULSE_SYNTH owns these forms; the literals are only the fallback, so this
+     page and the menus cannot drift apart. */
+  function incLabel(key) {
+    if (SY && SY.incDisplay) return SY.incDisplay(key);
+    var m = D.INCMETA[key];
+    return 'WK34 · Incident ' + key + (m ? ' — ' + m[0] : '');
+  }
+  function incShort(key) {
+    return (SY && SY.incShort) ? SY.incShort(key) : ('W34·' + key);
+  }
+
+  /* ---------------------------------------------------------------- indexes */
+  var NODE = {}, i, j;
+  for (i = 0; i < D.NODES.length; i++) NODE[D.NODES[i].id] = D.NODES[i];
+
+  var SRC = {};                                  /* node -> collection source */
+  for (i = 0; i < G.sources.length; i++) SRC[G.sources[i].node] = G.sources[i];
+
+  var SVC = {};                                  /* svc key -> service */
+  for (i = 0; i < G.services.length; i++) SVC[G.services[i].key] = G.services[i];
+
+  var ADJ = {};                                  /* undirected topology */
+  for (i = 0; i < D.LINKS.length; i++) {
+    var a = D.LINKS[i][0], b = D.LINKS[i][1];
+    (ADJ[a] = ADJ[a] || []).push(b);
+    (ADJ[b] = ADJ[b] || []).push(a);
+  }
+
+  var TICKET = {};
+  if (TK && TK.tickets) for (i = 0; i < TK.tickets.length; i++) TICKET[TK.tickets[i].key] = TK.tickets[i];
+
+  /* every objective, flattened once: {node, nodeName, label, unit, base, warn,
+     crit, dir, inc{}} — this is the check register and the fingerprint source */
+  var CHECKS = [];
+  for (i = 0; i < D.NODES.length; i++) {
+    var n = D.NODES[i];
+    for (j = 0; j < n.objs.length; j++) {
+      var o = n.objs[j], inc = {};
+      if (typeof o.inc === 'string') inc[o.inc] = o.amp;
+      else if (o.inc) for (var k in o.inc) if (o.inc.hasOwnProperty(k)) inc[k] = o.inc[k];
+      CHECKS.push({ node: n.id, nodeName: n.name, idx: j, label: o.label, unit: o.unit || '',
+                    base: o.base, warn: o.warn, crit: o.crit, dir: o.dir, inc: inc, obj: o });
+    }
+  }
+
+  /* worst value this check reaches at a window's peak, and the band it lands in */
+  function worstAt(c, key) {
+    var amp = c.inc[key];
+    if (amp == null) return null;
+    var w = (c.dir === 'lo') ? c.base - amp : c.base + amp;
+    if (c.obj.max != null && w > c.obj.max) w = c.obj.max;
+    if (w < 0 && c.dir === 'lo') w = 0;
+    var band = 'ok';
+    if (c.dir === 'lo') band = (w <= c.crit) ? 'crit' : (w <= c.warn ? 'warn' : 'ok');
+    else                band = (w >= c.crit) ? 'crit' : (w >= c.warn ? 'warn' : 'ok');
+    return { v: w, band: band, amp: amp };
+  }
+  function num(v, unit) {
+    var s = (Math.abs(v) >= 100 || v === Math.round(v)) ? SY.fmtNum(Math.round(v * 100) / 100)
+                                                        : String(Math.round(v * 100) / 100);
+    return s + (unit ? '<u>' + esc(unit) + '</u>' : '');
+  }
+  function plain(v, unit) { return (Math.round(v * 100) / 100) + (unit ? ' ' + unit : ''); }
+
+  /* ------------------------------------------------------------------ tiles */
+  var LANES = {}, laneKeys = [];
+  for (i = 0; i < G.sources.length; i++) {
+    var s = G.sources[i], all = [s.lane].concat(s.secondary || []);
+    for (j = 0; j < all.length; j++) if (!LANES[all[j]]) { LANES[all[j]] = 1; laneKeys.push(all[j]); }
+  }
+  laneKeys.sort();
+
+  function tiles() {
+    var winKeys = Object.keys(D.INC);
+    var t = [
+      { l: 'Journeys instrumented', v: G.journeys.length,
+        s: G.routes.length + ' routes &middot; ' + G.groups.length + ' groups' },
+      { l: 'Objects on the map', v: D.NODES.length,
+        s: D.LINKS.length + ' links &middot; client to core' },
+      { l: 'Health checks', v: CHECKS.length,
+        s: 'each with a warn and a crit band' },
+      { l: 'Collection lanes', v: laneKeys.length,
+        s: laneKeys.join(' &middot; ') },
+      { l: 'Fault fingerprints', v: winKeys.length,
+        s: 'each routed to a case' }
+    ], h = '';
+    for (var q = 0; q < t.length; q++) {
+      h += '<div class="tile plain"><div class="label"><span>' + t[q].l + '</span></div>' +
+           '<div class="value">' + t[q].v + '</div><div class="sub">' + t[q].s + '</div></div>';
+    }
+    $('tiles').innerHTML = h;
+  }
+
+  /* ------------------------------------------------------- 01 · the journey */
+  var JOURNEYS = SY.journeys('7d');
+  var CARD = {};
+  for (i = 0; i < JOURNEYS.cards.length; i++) CARD[JOURNEYS.cards[i].key] = JOURNEYS.cards[i];
+  var jkey = G.journeys[0].key;
+
+  function jchips() {
+    var h = '';
+    for (var q = 0; q < G.journeys.length; q++) {
+      var jj = G.journeys[q];
+      h += '<button class="chip' + (jj.key === jkey ? ' on' : '') + '" type="button" role="tab" ' +
+           'data-j="' + esc(jj.key) + '" aria-selected="' + (jj.key === jkey) + '">' +
+           esc(jj.name) + '<span class="n">' + jj.steps.length + '</span></button>';
+    }
+    $('jchips').innerHTML = h;
+  }
+
+  /* which object serves a step: the route's service, else the journey's own */
+  function stepNode(jr, st) {
+    if (st.api) {
+      var r = G.byRoute && G.byRoute[st.api];
+      if (r && SVC[r.svc]) return { node: SVC[r.svc].node, svc: r.svc };
+    }
+    if (st.kind === 'sms') return { node: 'smsgw', svc: null };
+    if (st.kind === 'screen') return { node: 'client', svc: null };
+    return { node: jr.node, svc: jr.svc };
+  }
+
+  function renderJourney() {
+    var jr = G.byJourney[jkey], c = CARD[jkey];
+    $('jtitle').innerHTML = esc(jr.name);
+    $('jch').innerHTML = jr.steps.length + ' steps &middot; figures over the whole week (Aug 23&ndash;29)';
+
+    var band = SY.journeyBand ? SY.journeyBand(c.customerPerceived, c.delta) : 'ok';
+    $('jhead').innerHTML =
+      '<div class="jid"><div class="jn">' + esc(jr.name) + '</div>' +
+        '<div class="jd">' + esc(jr.deploy) + ' &middot; object ' + esc(jr.node) +
+        ' &middot; SLA ' + esc(SY.fmtPct(jr.sla)) + ' &middot; threshold ' + esc(SY.fmtMs(jr.T_ms)) + '</div>' +
+        '<div class="fpchips" style="margin-top:6px">' +
+          '<span class="pill ' + (jr.critical ? 'plain' : 'plain') + '">' +
+            (jr.critical ? 'critical service' : 'standard service') + '</span>' +
+          '<span class="badge lens">' + c.lensCount + ' of ' + c.lensTotal + ' lenses</span>' +
+        '</div>' +
+      '</div>' +
+      '<div class="jstats">' +
+        '<div class="jstat"><div class="sl">Customer perceived</div>' +
+          '<div class="sv ' + esc(band) + '">' + esc(SY.fmtPct(c.customerPerceived, 1)) + '</div></div>' +
+        '<div class="jstat"><div class="sl">p95</div><div class="sv">' + esc(SY.fmtMs(c.p95)) + '</div></div>' +
+        '<div class="jstat"><div class="sl">Failed requests</div>' +
+          '<div class="sv">' + esc(SY.fmtCompact(c.failedRequests)) + '</div></div>' +
+      '</div>';
+
+    var st, sn, src, h = '', base = c.funnel.steps.length ? c.funnel.steps[0].sessions : 0;
+    for (var q = 0; q < jr.steps.length; q++) {
+      st = jr.steps[q];
+      var fs = c.funnel.steps[q] || null;
+      sn = stepNode(jr, st);
+      src = SRC[sn.node] || {};
+      var obsLane = src.lane || 'L1';
+      var obs = (st.kind === 'api')
+        ? 'one line per hop in the ' + (NODE[sn.node] ? NODE[sn.node].name : sn.node) + ' access log'
+        : (st.kind === 'sms' ? 'SMPP bind probe + DLR receipts — no app code'
+                             : 'synthetic journey step on a seeded account');
+      var kind = (st.kind === 'api') ? st.api
+               : (st.kind === 'sms' ? 'off-app step · screen ' + st.screen
+                                    : 'screen ' + st.screen);
+      h += '<div class="jstep">' +
+             '<div>' +
+               '<div class="sn"><span class="fidx">' + (q + 1) + '</span>' +
+                 '<span class="t">' + esc(st.label) + '</span>' +
+                 '<span class="mpill">' + esc(st.kind) + '</span></div>' +
+               '<div class="sk">' + esc(kind) + '</div>' +
+             '</div>' +
+             '<div class="so"><span class="lane">' + esc(obsLane) + '</span>' +
+               '<span>' + esc(obs) + '</span></div>' +
+             '<div class="sv">' + (fs ? '<b>' + esc(SY.fmtCompact(fs.sessions)) + '</b> sessions' +
+               (fs.dropPct ? ' &minus;' + esc(SY.fmtPct(fs.dropPct, 1)) : '') : '&mdash;') + '</div>' +
+           '</div>';
+    }
+    $('jsteps').innerHTML = h;
+    if (base) { /* base is the funnel entry count; kept for readability of the figures */ }
+
+    renderHops();
+  }
+
+  /* -------------------------------------------------- 02 · what it crosses */
+  function pathTo(target) {
+    var from = 'client', seen = {}, q = [[from]], cur, last, next, x;
+    seen[from] = 1;
+    while (q.length) {
+      cur = q.shift(); last = cur[cur.length - 1];
+      if (last === target) return cur;
+      next = ADJ[last] || [];
+      for (x = 0; x < next.length; x++) {
+        if (seen[next[x]]) continue;
+        seen[next[x]] = 1;
+        q.push(cur.concat([next[x]]));
+      }
+    }
+    return [from];
+  }
+
+  function renderHops() {
+    var jr = G.byJourney[jkey];
+    var chain = pathTo(jr.node), seen = {}, rows = [], q, r;
+    for (q = 0; q < chain.length; q++) { seen[chain[q]] = 1; rows.push({ node: chain[q], stage: 'ingress' }); }
+
+    /* the objects that serve this journey's own routes */
+    var svcs = {};
+    for (q = 0; q < G.routes.length; q++) {
+      r = G.routes[q];
+      if (r.journey !== jr.key) continue;
+      svcs[r.svc] = 1;
+      var nd = SVC[r.svc] ? SVC[r.svc].node : null;
+      if (nd && !seen[nd]) { seen[nd] = 1; rows.push({ node: nd, stage: 'serves' }); }
+    }
+    /* and what those services call outward */
+    for (q = 0; q < G.downstreams.length; q++) {
+      var dn = G.downstreams[q], hit = false;
+      for (var w = 0; w < (dn.callers || []).length; w++) if (svcs[dn.callers[w]]) hit = true;
+      if (!hit || !dn.node || seen[dn.node]) continue;
+      seen[dn.node] = 1; rows.push({ node: dn.node, stage: 'depends on' });
+    }
+
+    var h = '';
+    for (q = 0; q < rows.length; q++) {
+      var nd2 = NODE[rows[q].node]; if (!nd2) continue;
+      var sc = SRC[rows[q].node] || {}, rc = R.nodes[rows[q].node] || {};
+      var owner = (rc.owner && rc.owner.team) ? rc.owner.team : '&mdash;';
+      var lanes = [sc.lane].concat(sc.secondary || []).filter(Boolean);
+      h += '<tr>' +
+        '<td><span class="mpill">' + esc(rows[q].stage) + '</span></td>' +
+        '<td class="nm">' + esc(nd2.name) + '<div class="mono muted">' + esc(nd2.id) + ' &middot; ' + esc(nd2.type) + '</div></td>' +
+        '<td class="wrap c-soft">' + esc(nd2.ip) + '</td>' +
+        '<td>' + lanes.map(function (L) { return '<span class="lane">' + esc(L) + '</span>'; }).join(' ') + '</td>' +
+        '<td class="wrap c-soft">' + esc(sc.method || nd2.pm) + '</td>' +
+        '<td class="num">' + nd2.objs.length + '</td>' +
+        '<td>' + esc(owner) + '</td>' +
+      '</tr>';
+    }
+    $('hops').innerHTML = h;
+  }
+
+  /* ------------------------------------------------- 03 · check register */
+  var ofilter = 'all', cq = '';
+
+  function objChips() {
+    var h = '<button class="chip on" type="button" data-o="all">All<span class="n">' + CHECKS.length + '</span></button>';
+    for (var q = 0; q < D.NODES.length; q++) {
+      var n2 = D.NODES[q];
+      h += '<button class="chip sm" type="button" data-o="' + esc(n2.id) + '" title="' + esc(n2.name) + '">' +
+           esc(n2.id) + '<span class="n">' + n2.objs.length + '</span></button>';
+    }
+    $('ofilter').innerHTML = h;
+  }
+
+  function watchesFor(c) {
+    var d = (c.dir === 'lo') ? 'a fall below' : 'a rise above';
+    return d + ' ' + plain(c.warn, c.unit) + ' (warn) / ' + plain(c.crit, c.unit) + ' (crit)';
+  }
+
+  function renderChecks() {
+    var h = '', shown = 0, q, kk;
+    for (q = 0; q < CHECKS.length; q++) {
+      var c = CHECKS[q];
+      if (ofilter !== 'all' && c.node !== ofilter) continue;
+      if (cq) {
+        var hay = (c.node + ' ' + c.nodeName + ' ' + c.label + ' ' + c.unit).toLowerCase();
+        if (hay.indexOf(cq) < 0) continue;
+      }
+      shown++;
+      var id = 'ck-' + c.node + '-' + c.idx;
+      var wins = Object.keys(c.inc).sort(), wch = '';
+      for (kk = 0; kk < wins.length; kk++) {
+        var wr = worstAt(c, wins[kk]);
+        /* v2.0.1: this chip cell is genuinely tight - several chips inline in
+           one register row - so it carries the compact display "W34·B" and puts
+           the full "WK34 · Incident B - storage creep" in the tooltip. The KEY
+           (wins[kk]) is unchanged and still drives worstAt(). */
+        wch += '<span class="pill ' + esc(wr ? wr.band : 'unk') + '" title="' +
+               esc(incLabel(wins[kk])) + '">' + esc(incShort(wins[kk])) + '</span> ';
+      }
+      if (!wins.length) wch = '<span class="muted">baseline only</span>';
+
+      h += '<tr class="row-toggle" data-ck="' + esc(id) + '" tabindex="0" role="button" ' +
+             'aria-expanded="false" aria-controls="' + esc(id) + '">' +
+        '<td class="nm"><span class="rt-c">&#9656;</span>' + esc(c.node) + '</td>' +
+        '<td class="nm">' + esc(c.label) + '</td>' +
+        '<td class="num">' + num(c.base, c.unit) + '</td>' +
+        '<td class="num c-soft">' + num(c.warn, c.unit) + '</td>' +
+        '<td class="num c-soft">' + num(c.crit, c.unit) + '</td>' +
+        '<td class="wrap">' + esc(watchesFor(c)) + '</td>' +
+        '<td><span class="fpchips">' + wch + '</span></td>' +
+      '</tr>';
+
+      var meta = R.indicators[c.node + '.' + c.label] || {};
+      var rc2 = R.nodes[c.node] || {};
+      var det = '<div class="detwrap">';
+      det += '<div class="fpg">';
+      det += '<div class="fpsec"><h4>First checks</h4><div class="ckq"><ol>' +
+             (meta.checks || ['No first-check copy for this objective.'])
+               .map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ol></div></div>';
+      det += '<div class="fpsec"><h4>Questions it answers</h4><div class="ckq"><ul>' +
+             (meta.questions || ['&mdash;']).map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') +
+             '</ul></div></div>';
+      det += '</div>';
+      det += '<div class="owner">Owner: <b>' + esc((rc2.owner && rc2.owner.team) || 'unassigned') + '</b>' +
+             ((rc2.owner && rc2.owner.name) ? ' &middot; ' + esc(rc2.owner.name) : '') +
+             ((rc2.page) ? ' &middot; customer surface: ' + esc(rc2.page) : '') + '</div>';
+      det += '</div>';
+      h += '<tr class="row-detail" id="' + esc(id) + '"><td colspan="7">' + det + '</td></tr>';
+    }
+    $('checks').innerHTML = h;
+    $('cempty').hidden = shown > 0;
+  }
+
+  /* ------------------------------------------------ 04 · fault fingerprints */
+  /* where each window is legible in the menus — the story table of DEMO_SPEC §2 */
+  var WHERE = {
+    C: [['menus/journey.html', 'journey funnel'], ['menus/downstream.html', 'SMS DLR rate'], ['menus/errors.html', 'OtpDeliveryTimeout']],
+    A: [['menus/errors.html', 'business errors'], ['menus/journey.html', 'Pay Bill business-fail'], ['menus/sla-weekly.html', 'success vs outcome']],
+    E: [['menus/synthetic.html', 'carrier-A vantage'], ['menus/kpi-live.html', 'p95 rise'], ['menus/downstream.html', 'SMS latency']],
+    B: [['menus/service-health.html', 'read-route p95 ramp'], ['menus/sla-drilldown.html', 'time % by day'], ['menus/dependencies.html', 'db-replica']],
+    F: [['menus/service-health.html', '5xx storm'], ['menus/errors.html', 'SocketTimeoutException'], ['menus/ops-issues.html', 'P1 raised'], ['menus/synthetic.html', 'all down']],
+    G: [['menus/synthetic.html', 'availability dips'], ['menus/service-health.html', 'gateway 502s']],
+    I: [['menus/kpi-live.html', 'posting p95'], ['menus/journey.html', 'completion lag']],
+    H: [['menus/downstream.html', 'biller-hub 5xx'], ['menus/dependencies.html', 'biller-adapter'], ['menus/error-tracking.html', 'T-COR / B-PAY rows']],
+    D: [['menus/errors.html', 'recovered group'], ['menus/ops-issues.html', 'WoW evidence'], ['menus/sla-drilldown.html', '/v2/ routes']]
+  };
+
+  function renderFps() {
+    var keys = Object.keys(D.INC).sort(function (x, y) { return D.INC[x][0] - D.INC[y][0]; });
+    var h = '', q, kk;
+    for (q = 0; q < keys.length; q++) {
+      var K = keys[q], win = D.INC[K], meta = D.INCMETA[K] || [K, 'warn'];
+      var peak = (win.length === 3) ? win[1] : win[win.length - 1];
+      var movers = [], quietNodes = {}, hitNodes = {};
+      for (kk = 0; kk < CHECKS.length; kk++) {
+        var c = CHECKS[kk], wr = worstAt(c, K);
+        if (!wr) { quietNodes[c.node] = 1; continue; }
+        hitNodes[c.node] = 1;
+        movers.push({ c: c, w: wr });
+      }
+      movers.sort(function (x, y) {
+        var rank = { crit: 0, warn: 1, ok: 2 };
+        if (rank[x.w.band] !== rank[y.w.band]) return rank[x.w.band] - rank[y.w.band];
+        return y.w.amp - x.w.amp;
+      });
+      var quiet = [];
+      for (var nq in quietNodes) if (quietNodes.hasOwnProperty(nq) && !hitNodes[nq]) quiet.push(nq);
+      var crits = movers.filter(function (m) { return m.w.band === 'crit'; }).length;
+
+      var tkey = (TK && TK.byWindow) ? TK.byWindow[K] : null;
+      var tick = tkey ? TICKET[tkey] : null;
+      var id = 'fp-' + K;
+
+      h += '<tr class="row-toggle" data-fp="' + esc(id) + '" tabindex="0" role="button" ' +
+             'aria-expanded="false" aria-controls="' + esc(id) + '">' +
+        '<td class="nm"><span class="rt-c">&#9656;</span><span class="pill ' + esc(meta[1]) + '" title="' +
+          esc(incLabel(K)) + '">' + esc(incShort(K)) + '</span></td>' +
+        '<td class="nm">' + esc(meta[0]) + '</td>' +
+        '<td class="mono">' + esc(SY.dstamp(peak)) + '</td>' +
+        '<td class="num">' + movers.length + (crits ? ' <span class="muted">(' + crits + ' crit)</span>' : '') + '</td>' +
+        '<td class="num c-soft">' + quiet.length + ' objects</td>' +
+        '<td>' + (tick ? '<a class="tlink" href="incident-trace.html#' + esc(tick.key) + '">' + esc(tick.key) + '</a>'
+                       : '<span class="muted">no case</span>') + '</td>' +
+        '<td><a class="tlink" href="index.html#t=' + peak + '">open at ' + esc(SY.dstamp(peak)) + '</a></td>' +
+      '</tr>';
+
+      var top = movers.slice(0, 8).map(function (m) {
+        return '<div class="fr"><span class="fo">' + esc(m.c.node) + '</span>' +
+               '<span class="fc">' + esc(m.c.label) + '</span>' +
+               '<span class="fv"><span class="pill ' + esc(m.w.band) + '">' + esc(m.w.band) + '</span> ' +
+               esc(plain(m.c.base, '')) + ' &rarr; ' + esc(plain(m.w.v, m.c.unit)) + '</span></div>';
+      }).join('');
+
+      var quietTxt = quiet.length
+        ? quiet.map(function (x) { return '<span class="mpill">' + esc(x) + '</span>'; }).join(' ')
+        : '<span class="muted">nothing stays quiet &mdash; this window touches every object</span>';
+
+      var wh = (WHERE[K] || []).map(function (p) {
+        return '<a class="tlink" href="' + esc(p[0]) + '">' + esc(p[1]) + '</a>';
+      }).join(' ');
+
+      var shape = (win.length === 3) ? 'triangular ' + SY.dstamp(win[0]) + ' &rarr; ' + SY.dstamp(win[1]) +
+                                       ' &rarr; ' + SY.dstamp(win[2])
+                                     : 'ramp ' + SY.dstamp(win[0]) + ' &rarr; ' + SY.dstamp(win[1]);
+
+      var det = '<div class="detwrap">' +
+        '<div class="fmove"><span class="mono">' + esc(incLabel(K)) + '</span>' +
+          '<span class="mono muted">' + shape + '</span>' +
+          '<span class="muted">&middot; window index ' + win.join(', ') + '</span></div>' +
+        '<div class="fpg">' +
+          '<div class="fpsec"><h4>Checks that move together</h4><div class="fplist">' + top +
+            (movers.length > 8 ? '<div class="fr"><span class="fo"></span><span class="fc muted">and ' +
+              (movers.length - 8) + ' more</span></div>' : '') + '</div></div>' +
+          '<div class="fpsec"><h4>Quiet at the same minutes &mdash; what it rules out</h4>' +
+            '<div class="fpchips">' + quietTxt + '</div>' +
+            '<div class="owner">A red set this size with those objects calm is the fingerprint: ' +
+            'the fault is upstream of the quiet ones, not inside them.</div></div>' +
+        '</div>' +
+        (tick ? '<div class="fpsec"><h4>Routed to</h4><div class="fplist"><div class="fr">' +
+                  '<span class="fo">' + esc(tick.key) + '</span><span class="fc">' + esc(tick.summary) + '</span>' +
+                  '<span class="fv">' + esc(tick.assignee ? tick.assignee.team : 'unassigned') + '</span>' +
+                '</div></div></div>' : '') +
+        '<div class="dlinks">' +
+          '<a class="tlink" href="index.html#t=' + peak + '">Open on the flow map at ' + esc(SY.dstamp(peak)) + '</a>' +
+          (tick ? '<a class="tlink" href="incident-trace.html#' + esc(tick.key) + '">Open case ' + esc(tick.key) + '</a>' : '') +
+          (wh ? '<span class="muted">where it shows:</span> ' + wh : '') +
+        '</div>' +
+      '</div>';
+      h += '<tr class="row-detail" id="' + esc(id) + '"><td colspan="7">' + det + '</td></tr>';
+    }
+    $('fps').innerHTML = h;
+    $('fpnote').innerHTML = 'Amplitudes and window shapes are read from <span class="mono">data/manifest.js</span>: ' +
+      'a three-index window is triangular (rise, peak, decay), a two-index window is a ramp. ' +
+      'The band shown per check is where that objective lands at the peak &mdash; the same arithmetic the front-page ' +
+      'engine uses to colour the object. ' + esc(SY.disclaimer) + '.';
+  }
+
+  /* ------------------------------------------------------------ interaction */
+  function toggleRow(tr) {
+    if (!tr) return;
+    var id = tr.getAttribute('data-ck') || tr.getAttribute('data-fp');
+    if (!id) return;
+    var det = document.getElementById(id), open = tr.className.indexOf('open') > -1;
+    tr.className = open ? 'row-toggle' : 'row-toggle open';
+    tr.setAttribute('aria-expanded', open ? 'false' : 'true');
+    if (det) det.className = open ? 'row-detail' : 'row-detail open';
+  }
+  function rowOf(node) {
+    while (node && node !== document.body) {
+      if (node.className && String(node.className).indexOf('row-toggle') === 0) return node;
+      node = node.parentNode;
+    }
+    return null;
+  }
+  function wireTable(tbodyId) {
+    var body = $(tbodyId);
+    body.addEventListener('click', function (ev) {
+      if (ev.target && ev.target.tagName === 'A') return;         /* let deep links through */
+      toggleRow(rowOf(ev.target));
+    });
+    body.addEventListener('keydown', function (ev) {
+      if (ev.key !== 'Enter' && ev.key !== ' ') return;
+      var tr = rowOf(ev.target);
+      if (tr && tr === ev.target) { ev.preventDefault(); toggleRow(tr); }
+    });
+  }
+
+  S.ready(function () {
+    tiles();
+    jchips();
+    renderJourney();
+    objChips();
+    renderChecks();
+    renderFps();
+    wireTable('checks');
+    wireTable('fps');
+
+    $('jchips').addEventListener('click', function (ev) {
+      var t = ev.target;
+      while (t && t !== this && !t.getAttribute('data-j')) t = t.parentNode;
+      if (!t || t === this) return;
+      jkey = t.getAttribute('data-j');
+      jchips();
+      renderJourney();
+    });
+
+    $('ofilter').addEventListener('click', function (ev) {
+      var t = ev.target;
+      while (t && t !== this && !t.getAttribute('data-o')) t = t.parentNode;
+      if (!t || t === this) return;
+      ofilter = t.getAttribute('data-o');
+      var b = this.querySelectorAll('.chip');
+      for (var q = 0; q < b.length; q++) {
+        var on = b[q].getAttribute('data-o') === ofilter;
+        b[q].className = 'chip' + (b[q].getAttribute('data-o') === 'all' ? '' : ' sm') + (on ? ' on' : '');
+      }
+      renderChecks();
+    });
+
+    var box = $('csearch'), tid = null;
+    box.addEventListener('input', function () {
+      if (tid) clearTimeout(tid);
+      tid = setTimeout(function () { cq = box.value.trim().toLowerCase(); renderChecks(); }, 120);
+    });
+
+    S.setLineage(SY.lineage('front'));
+  });
+})();
+</script>
+</body>
+</html>
