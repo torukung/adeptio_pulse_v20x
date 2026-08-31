@@ -1,0 +1,284 @@
+/* ============================================================================
+ * ADEPTIO Pulse — Spin 2.0.4 · ADDITIVE stylesheet
+ * Linked AFTER assets/styles.css, which stays byte-identical. Everything here
+ * is new surface: the six zone bands on the map (R1 §4.2/§4.3), the line-
+ * condition balloons (R2 §4), the Line Conditions reference window (R2 §5) and
+ * Timeframe D (R2 §6).
+ *
+ * SCOPING RULE: every rule below is scoped to a Spin-2.0.4 id/class —
+ * #zones / .zband / .zlabel / .zchip / .zdim / .zhot / .zchip-inline ·
+ * #lcballoons / .lcballoon · #lcConditions · #tblD / .btables-d · .sevchip.grey.
+ * Timeframe A / B / C (#tblA #tblB #tblC, #btables) are never selected, so
+ * their look and behaviour are untouched.
+ *
+ * Theme convention matches styles.css exactly: html[data-theme="dark"] /
+ * html[data-theme="light"] (never a bare media query for colour).
+ * ==========================================================================*/
+
+/* ---------------------------------------------------------------- TOKENS ---
+ * --tfd  — Timeframe-D accent (R2 §6). Violet: clear of --ok/--warn/--crit/
+ *          --unk, of --maint (#7aa2ff) and of the brand --coral. It marks
+ *          "there is a table for this", NEVER a severity.
+ * --zband-a/-b/-line — zone band inks (R1 §4.2). One neutral ink, two alphas. */
+:root{ --tfd:#a78bfa; }                     /* dark  — violet, clear of --maint #7aa2ff */
+html[data-theme="light"]{ --tfd:#6d28d9; }  /* light — 8.0:1 on --panel2, AA at 9.5px */
+html[data-theme="dark"]{ --tfd:#a78bfa; }
+
+/* ============================================================ ZONE BANDS ===
+ * R1 §4.2 — chrome, never status. One ink, alternating alpha. */
+.zband      { fill: var(--zband-a); stroke: var(--zband-line); stroke-width: 1;
+              vector-effect: non-scaling-stroke; rx: 14; }
+.zband.alt  { fill: var(--zband-b); }
+html[data-theme="dark"]  { --zband-a: rgba(174,182,194,.030);   /* --ink2 @ 3%  */
+                           --zband-b: rgba(174,182,194,.055);   /* --ink2 @ 5.5%*/
+                           --zband-line: rgba(174,182,194,.10); }
+html[data-theme="light"] { --zband-a: rgba(59,68,82,.022);
+                           --zband-b: rgba(59,68,82,.042);
+                           --zband-line: rgba(59,68,82,.09); }
+
+:root{ --bh:340px } /* v2.0.4: A/B/C + Line Conditions + Timeframe D need more default height (drag to resize as before) */
+
+/* R1 §4.3 — zone label + owner chip */
+.zlabel { fill: var(--muted); font-size: 12.5px; font-weight: 700;
+          letter-spacing: .10em; text-transform: uppercase;
+          font-family: var(--font); }
+.zchip  { fill: var(--chipbg); stroke: var(--chipline); stroke-width: 1;
+          vector-effect: non-scaling-stroke; }
+.zchipt { fill: var(--chipink); font-size: 12.5px; font-weight: 700;
+          letter-spacing: .06em; font-family: var(--mono); }
+
+/* bands never steal a drag from the canvas pan handler; only the label group
+   takes pointer events (R1 §4.1/§4.4). The label-group class is W2's to name —
+   all four plausible hooks are enabled here so the hover/click affordance works
+   whichever it ships as. */
+#zones{ pointer-events:none }
+#zones .zlbl, #zones .zlabelg, #zones .zlabel, #zones .zchip, #zones .zchipt{
+  pointer-events:auto; cursor:pointer }
+#zones .zband{ pointer-events:none }
+
+/* hover a zone label → members forward, everything else back (R1 §4.4) */
+.zdim{ opacity:.28; transition:opacity .18s }
+.node.zhot .body, .zhot > .body{ stroke:var(--chipink); stroke-width:2.4 }
+.link.zhot{ opacity:1 }
+
+/* zone + owner echoed in the dock pane header, on the pm line (R1 §4.4 COULD).
+   Plain inline span — same object family as .navchip / .zchipt, text only. */
+.zchip-inline{ display:inline-block; margin-left:6px; padding:1px 6px; border-radius:999px;
+  font-family:var(--mono); font-size:9px; font-weight:700; letter-spacing:.06em;
+  color:var(--chipink); background:var(--chipbg); border:1px solid var(--chipline);
+  white-space:nowrap; vertical-align:baseline }
+
+/* ======================================================= LINE BALLOONS =====
+ * R2 §4 — HTML overlay above the SVG, inside .stage. z-22: above the canvas,
+ * the scenario card and the bottom tables; below the dock (25), the RCA panel
+ * (26) and the hover card (30). Container is click-through; each balloon and
+ * chip takes its own pointer events so panning through the gaps still works. */
+#lcballoons, .lcballoons{ position:absolute; inset:0; z-index:22; pointer-events:none; overflow:hidden }
+
+/* Glass card — the same tokens .hovercard uses, so it reads as one family.
+   POSITIONING IS THE ENGINE'S: positionBalloons() writes left/top against the
+   balloon's own box (and drives opacity/transform inline for the 140ms appear
+   and 500ms fade), so nothing here may add a transform of its own — a CSS
+   translate would displace every balloon on the reduced-motion path, where the
+   engine sets no inline transform to override it. */
+.lcballoon{ position:absolute; pointer-events:auto; min-width:184px; max-width:268px;
+  background:var(--glass); backdrop-filter:blur(14px) saturate(140%);
+  border:1px solid var(--line); border-radius:12px; box-shadow:var(--shadow);
+  padding:9px 11px; font-size:12px; color:var(--ink2) }
+
+/* tail — CSS triangle, 7px fill over an 8px border triangle. data-flip="1" is
+   the engine's top-clamp flag: the balloon sits below its node, tail on top. */
+.lcballoon::before, .lcballoon::after{ content:""; position:absolute; left:50%; width:0; height:0 }
+.lcballoon::before{ bottom:-8px; transform:translateX(-50%);
+  border-left:8px solid transparent; border-right:8px solid transparent; border-top:8px solid var(--line) }
+.lcballoon::after{ bottom:-6px; transform:translateX(-50%);
+  border-left:7px solid transparent; border-right:7px solid transparent; border-top:7px solid var(--panel2) }
+.lcballoon[data-flip="1"]::before{ bottom:auto; top:-8px;
+  border-top:none; border-bottom:8px solid var(--line) }
+.lcballoon[data-flip="1"]::after{ bottom:auto; top:-6px;
+  border-top:none; border-bottom:7px solid var(--panel2) }
+
+/* header — the engine reuses the hover card's .hc-h / .sd / .nm / .sevchip
+   grammar, so only the sticky-set dismiss button needs sizing down here */
+.lcballoon .hc-h{ margin-bottom:6px }
+.lcballoon .lcb-x{ width:20px; height:20px; flex:0 0 auto; margin-left:6px; font-size:11px }
+/* evidence row — the engine writes "lcb-row hc-row", so .hc-row carries the
+   layout; these are the balloon-only additions (long manifest labels wrap) */
+.lcb-row .k{ overflow-wrap:anywhere }
+.lcb-row .v{ white-space:nowrap }
+
+/* MIDPOINT CLUSTER — the engine builds it as .lcballoon.lcb-mid holding two
+   inline chips, so the panel treatment is stripped back to a chip frame and the
+   tail is suppressed: this one points at nothing, it sits ON the segment. */
+.lcballoon.lcb-mid{ min-width:0; max-width:none; padding:3px 5px; border-radius:8px;
+  display:flex; align-items:center; gap:5px; line-height:1 }
+.lcballoon.lcb-mid::before, .lcballoon.lcb-mid::after{ display:none }
+/* rule id + CONN state. The engine tints each chip inline with the state colour
+   (R2 §4), so the frame follows currentColor and adds no hue of its own. */
+.lcb-rule, .lcb-conn{ display:inline-block; white-space:nowrap;
+  font-family:var(--mono); font-size:9.5px; font-weight:800; letter-spacing:.04em;
+  border:1px solid currentColor; border-radius:5px; padding:2px 6px }
+.lcb-conn{ font-weight:700; letter-spacing:.03em }
+.lcb-conn[data-sev="none"]{ border-color:var(--line) }
+
+/* "+N more lines changed" — the collapse badge. --tfd, so it reads as "there is
+   a table for this", not as a fourth status colour. The engine positions it
+   (under the relocated .mapctrl cluster) and drives its fade inline. */
+.lcb-badge{ position:absolute; top:58px; right:14px; z-index:23; pointer-events:auto;
+  cursor:pointer; font-family:var(--font); font-size:11px; font-weight:700; letter-spacing:.01em;
+  color:var(--tfd); background:color-mix(in srgb, var(--tfd) 14%, var(--panel));
+  border:1px solid var(--tfd); border-radius:9px; padding:5px 10px; box-shadow:var(--shadow) }
+.lcb-badge:hover{ background:color-mix(in srgb, var(--tfd) 26%, var(--panel)) }
+
+/* ================================================== BOTTOM DOCK LAYOUT =====
+ * #bottom is a fixed-height (--bh) flex column resized by #bhandle. Spin 2.0.4
+ * adds two full-width sections under the A/B/C row. Sizing rules, in order:
+ *   .bhead        never shrinks (its content is one line)
+ *   #btables      grows, floor 96px  — A/B/C stay usable at every --bh
+ *   #lcConditions natural height while collapsed; expanded, its body scrolls
+ *                 and the section gives way before the tables do
+ *   .btables-d    #dWrap capped at 220px, scrolling, and free to shrink
+ * Every section header is pinned (flex:0 0 auto) and every body is allowed to
+ * shrink to zero and scroll, so the column total can never exceed --bh: nothing
+ * spills over the timeline and #bhandle keeps working exactly as before. */
+#bottom > .bhead{ flex:0 0 auto }
+#bottom > #btables{ flex:1 1 0; min-height:96px }
+#bottom > #lcConditions{ flex:0 1 auto; min-height:0; border-right:none;
+  border-top:1px solid var(--line) }
+#bottom > .btables-d{ flex:0 1 auto; min-height:0; display:flex; min-width:0 }
+#bottom > .btables-d > #tblD{ flex:1 1 auto; min-width:0; min-height:0; border-right:none }
+#lcConditions > .btbl-h, #tblD > .btbl-h{ flex:0 0 auto }
+
+/* ============================================== LINE CONDITIONS WINDOW =====
+ * R2 §5 — documentation, not live data. Collapsed by default. */
+#lcConditions{ display:flex; flex-direction:column }
+#lcConditions .btbl-h{ flex-wrap:wrap }
+#lcConditions .lcw-claim{ flex:0 0 100%; margin-top:2px; color:var(--muted);
+  font-size:11px; font-weight:400; line-height:1.45; white-space:normal }
+/* the .rtoggle caret pattern, reused from the Incident Trace row */
+#lcConditions .lcw-toggle{ width:auto; padding:2px 6px; border-radius:7px }
+#lcConditions .lcw-toggle:hover{ background:var(--panel); color:var(--ink) }
+#lcConditions .lcw-body{ display:none; flex:0 1 auto; min-height:0; max-height:300px; overflow:auto }
+#lcConditions .lcw-body.open{ display:block }
+
+/* evidence-class vocabulary strip */
+#lcConditions .lcw-vocab{ padding:8px 11px 2px; display:flex; flex-direction:column; gap:5px }
+#lcConditions .evchip{ display:flex; align-items:baseline; gap:9px; font-size:11.5px; color:var(--ink2) }
+#lcConditions .evchip > b{ flex:0 0 44px; font-family:var(--mono); font-size:9.5px; font-weight:800;
+  letter-spacing:.06em; text-align:center; color:var(--chipink); background:var(--chipbg);
+  border:1px solid var(--chipline); border-radius:5px; padding:2px 0 }
+#lcConditions .lcw-note{ padding:6px 11px 9px; font-size:11px; color:var(--muted); line-height:1.5 }
+#lcConditions .lcw-foot{ padding:8px 11px 11px; border-top:1px solid var(--line2);
+  font-size:11px; color:var(--muted); line-height:1.55 }
+#lcConditions .lcw-foot div{ margin-bottom:3px }
+
+/* the inner .tblwrap must NOT scroll — .lcw-body is the one scroller, so the
+   sticky thead sticks to the window rather than to a box that never moves */
+#lcConditions .lcw-body .tblwrap{ overflow:visible; flex:none }
+/* table — CONDITION wraps; every other column keeps the .dt nowrap rhythm */
+#lcConditions table.dt thead th{ cursor:default }
+#lcConditions table.dt tbody td{ vertical-align:top; white-space:nowrap }
+#lcConditions table.dt tbody td.cond{ white-space:normal; line-height:1.5; color:var(--ink2) }
+#lcConditions table.dt tbody td.rule{ font-family:var(--mono); font-size:11px;
+  font-weight:700; color:var(--ink); width:62px; user-select:text; cursor:text }
+#lcConditions table.dt tbody td.ev{ width:150px }
+#lcConditions table.dt tbody td.st{ width:78px }
+#lcConditions table.dt tbody tr{ cursor:default }
+#lcConditions table.dt tbody tr.hit{ background:color-mix(in srgb, var(--tfd) 16%, transparent) }
+
+/* class tags — shared by the LC window's EVIDENCE cell and Timeframe D's CLASS */
+.evtag{ display:inline-block; font-family:var(--mono); font-size:9px; font-weight:800;
+  letter-spacing:.05em; border-radius:4px; padding:1px 5px; margin-right:3px;
+  color:var(--chipink); background:var(--chipbg); border:1px solid var(--chipline) }
+.evtag.off{ color:var(--muted); background:transparent; border-color:var(--line); opacity:.55 }
+.evdash{ color:var(--muted) }
+
+/* grey is a first-class line state — .sevchip's fourth member, on --unk */
+.sevchip.grey{ background:color-mix(in srgb, var(--unk) 20%, transparent); color:var(--unk) }
+
+/* ==================================================== TIMEFRAME D =========
+ * R2 §6 — same grammar as A/B/C, differentiated only by the --tfd accent. */
+#tblD{ border-top:2px solid var(--tfd) }
+#tblD .tfd-tag{ color:var(--tfd); border-color:color-mix(in srgb, var(--tfd) 55%, transparent) }
+#tblD #dWrap{ max-height:240px; overflow:auto; min-height:132px }
+#tblD #dWrap table.dt{ margin-bottom:26px } /* keep the last row clear of the sticky not-covered note */
+
+/* two-row thead: col-group headers on row 1 (with a 1px --tfd rule under each),
+   column headers on row 2, both sticky. */
+#tblD table.dt thead th{ vertical-align:bottom }
+#tblD table.dt thead tr.grp th{ top:0; height:22px; padding:3px 9px; font-size:9px;
+  letter-spacing:.08em; color:var(--tfd); border-bottom:none; cursor:default }
+#tblD table.dt thead tr.grp th.g{ border-bottom:1px solid var(--tfd) }
+#tblD table.dt thead tr.cols th{ top:22px }
+/* the seam between two col-groups */
+#tblD table.dt thead tr.grp th.g + th.g,
+#tblD table.dt thead tr.cols th.grpl,
+#tblD table.dt tbody td.grpl{ border-left:1px solid var(--line) }
+#tblD table.dt thead tr.cols th.st{ cursor:pointer }
+#tblD table.dt thead tr.cols th.fix{ cursor:default }
+
+/* rows are tall (2–5 evidence lines), so cells wrap, top-align, and episode
+   boundaries are drawn in --line rather than --line2 */
+#tblD table.dt tbody td{ white-space:normal; vertical-align:top;
+  border-bottom:1px solid var(--line); line-height:18px }
+#tblD table.dt tbody td.glyph{ width:104px; padding-top:8px }
+#tblD table.dt tbody td.when{ white-space:nowrap; font-variant-numeric:tabular-nums }
+#tblD table.dt tbody td.num{ white-space:nowrap }
+#tblD .objname{ color:var(--ink); font-weight:600; display:block; height:18px;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+#tblD .ev-l{ display:block; height:18px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+#tblD .ev-l .sd{ display:inline-block; width:7px; height:7px; margin-right:6px; vertical-align:middle }
+#tblD .ev-l.mut{ color:var(--muted) }
+#tblD .ev-gap{ display:block; height:18px }
+#tblD .ev-more{ display:block; height:18px; color:var(--tfd); font-weight:700; cursor:pointer }
+#tblD .ev-more:hover{ text-decoration:underline }
+#tblD .case{ color:var(--ink2) }
+#tblD .case.hit{ color:var(--tfd); cursor:pointer; font-weight:600 }
+#tblD .case.hit:hover{ text-decoration:underline }
+#tblD .dclip{ color:var(--muted) }
+
+/* LC-xx rule chip in the RULE column — --tfd, click opens the reference window */
+#tblD .lcchip{ display:inline-block; font-family:var(--mono); font-size:9.5px; font-weight:800;
+  letter-spacing:.03em; border-radius:5px; padding:2px 6px; cursor:pointer;
+  color:var(--tfd); border:1px solid color-mix(in srgb, var(--tfd) 55%, transparent);
+  background:color-mix(in srgb, var(--tfd) 12%, transparent) }
+#tblD .lcchip:hover{ background:color-mix(in srgb, var(--tfd) 24%, transparent) }
+
+/* the o—o relationship glyph (96 × 22) */
+#tblD .oo-glyph{ width:96px; height:22px; display:block; overflow:visible }
+#tblD .oo-glyph .oo-c{ fill:var(--node); stroke:var(--nodeStroke); stroke-width:1.4 }
+#tblD .oo-glyph .oo-t{ fill:var(--muted); font-family:var(--mono); font-size:8.5px;
+  text-anchor:middle; letter-spacing:.02em }
+
+/* The grey-notice line under every Timeframe D render (R2 §6). Sticky to the
+   bottom of #dWrap: the point of the line is that "no rows" can never be read
+   as "everything is fine everywhere", so it must not scroll out of sight. */
+#tblD .tbl-empty.dnote{ position:sticky; bottom:0; z-index:2;
+  padding:7px 11px 8px; font-size:10.5px; text-align:left; line-height:1.5;
+  background:var(--panel2); border-top:1px solid var(--line) }
+
+/* ============================================== REDUCED MOTION (R2 §4) ====
+ * html[data-motion="reduce"] is the explicit switch; the media query is the
+ * implicit source that sets it. No appear/fade transition, no row flash. */
+html[data-motion="reduce"] .lcballoon,
+html[data-motion="reduce"] .lcb-badge{ transition:none !important }
+html[data-motion="reduce"] .zdim{ transition:none }
+html[data-motion="reduce"] #tblD table.dt tbody tr.flash{ animation:none }
+html[data-motion="reduce"] #lcConditions .lcw-toggle .car{ transition:none }
+@media (prefers-reduced-motion: reduce){
+  .lcballoon, .lcb-badge{ transition:none !important }
+  .zdim{ transition:none }
+  #tblD table.dt tbody tr.flash{ animation:none }
+  #lcConditions .lcw-toggle .car{ transition:none }
+}
+
+/* Narrow desktops keep every column: #dWrap is the .tblwrap idiom (overflow:auto),
+   so col-group 3 scrolls into view rather than being hidden — a column that is
+   silently dropped is exactly the kind of blind spot this window exists to
+   declare. Minimum sensible width for the eleven columns: */
+#tblD table.dt{ min-width:940px }
+
+/* v2.0.4 · legend minimise — the − button borrows .sc-min, which is absolutely
+   positioned, so the legend card becomes its positioning context and clears it. */
+.legend{ position:relative; padding-right:32px }
+.legend[hidden]{ display:none }

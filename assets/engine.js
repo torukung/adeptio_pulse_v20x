@@ -118,6 +118,35 @@ const DATA_TAG = DATA_MODE==='seeded replay'
 const ALLOBJ=[]; NODES.forEach(n=>n.objs.forEach(o=>ALLOBJ.push({n,o})));
 const ORIG=NODES.map(n=>({x:n.x,y:n.y}));
 
+/* ---------- v2.0.4 · INC WINDOW PICK (shared helper) -------------------------
+ * Lifted out of traceTicket() so the line-condition precompute, Timeframe D and
+ * the RCA incident-trace row all resolve an objective's incident window the same
+ * way: the window that contains t, else the most recent one that opened before
+ * it. traceTicket() now calls this instead of carrying its own copy. */
+function incKeyAt(o,t){
+  const keys=(!o||!o.inc)?[]:(typeof o.inc==='string'?[o.inc]:Object.keys(o.inc));
+  if(!keys.length) return null;
+  let pick=keys.find(k=>{ const w=INC[k]; return w && t>=w[0] && t<=w[w.length-1]; });
+  if(!pick){ let bs=-1; keys.forEach(k=>{ const w=INC[k]; if(w&&w[0]<=t&&w[0]>bs){ bs=w[0]; pick=k; } }); }
+  return pick||null;
+}
+
+/* ---------- v2.0.4 · LINE CONDITION PRECOMPUTE -------------------------------
+ * assets/linelogic.js attaches L.bind / L.lineStat[] / L.lineRule[] / L.eps[] to
+ * every link, once, here at boot (R2 §3). Everything downstream is an O(1) array
+ * index. GUARDED both ways: with no linelogic.js and/or no LINE_BIND in the
+ * manifest no link ever gets a lineStat, every line paints GREY — the honest
+ * "not covered" state — and the map still boots with nothing thrown.
+ * ZONES is read the same way: absent means the band layer simply is not built. */
+const ZONES = (D_.ZONES && D_.ZONES.length) ? D_.ZONES : [];
+const LINE_BIND = D_.LINE_BIND || null;
+(function(){
+  if(!LINE_BIND || !window.PULSE_LINELOGIC || typeof PULSE_LINELOGIC.computeAll!=='function') return;
+  try{ PULSE_LINELOGIC.computeAll({NODES,LINKS,LINE_BIND,N,worse,byId,incKeyAt}); }
+  catch(err){ LINKS.forEach(L=>{ L.bind=null; L.lineStat=null; L.lineRule=null; L.eps=[]; });
+    console.warn('Pulse: line-condition precompute unavailable — every line renders not-covered.',err&&err.message); }
+})();
+
 function episodes(stat){ const r=[]; let s=null; for(let i=0;i<stat.length;i++){ if(stat[i]!=='ok'){ if(!s)s={start:i,worst:stat[i],end:i}; else {s.worst=worse(s.worst,stat[i]);s.end=i;} } else if(s){r.push(s);s=null;} } if(s)r.push(s); return r; }
 function nodeStatus(n,t){ let s='ok'; n.objs.forEach(o=>s=worse(s,o.stat[t])); return s; }
 function statusColor(s){ return getComputedStyle(document.documentElement).getPropertyValue(s==='ok'?'--ok':s==='warn'?'--warn':s==='crit'?'--crit':'--unk').trim(); }
@@ -147,15 +176,101 @@ function buildNodes(){ gNodes.innerHTML=''; NODES.forEach(n=>{ const g=mk('g',{c
   g.appendChild(mk('circle',{class:'notebadge',r:4,cx:NR-3,cy:-NR+3,style:'display:none'}));
   g.appendChild(mk('circle',{class:'pin',r:4,cx:-NR+3,cy:-NR+3,style:'display:none'}));
   gNodes.appendChild(g); n.el=g; }); }
-function buildLinks(){ gLinks.innerHTML=''; LINKS.forEach(L=>{ const p=mk('path',{class:'link'}); gLinks.appendChild(p); L.el=p; }); }
-function linkStatus(L,t){ return worse(nodeStatus(byId(L[0]),t),nodeStatus(byId(L[1]),t)); }
-function paintLinksOnly(){ LINKS.forEach(L=>{ const a=byId(L[0]),b=byId(L[1]); L.el.setAttribute('d',`M${a.x} ${a.y} L${b.x} ${b.y}`); }); }
+/* v2.0.4: a second, invisible 14u-wide stroke per relationship, laid over the
+   visible ones, so "click a line to see its evidence" has a real hit area at any
+   zoom. It carries no paint of its own (stroke:transparent) — the visible line is
+   still the only mark on the canvas. All 17 are appended AFTER all 17 visible
+   paths so hit-testing is uniform regardless of draw order. */
+function buildLinks(){ gLinks.innerHTML='';
+  LINKS.forEach(L=>{ const p=mk('path',{class:'link'}); gLinks.appendChild(p); L.el=p; });
+  LINKS.forEach((L,i)=>{ const hp=mk('path',{class:'linkhit','data-lk':i,fill:'none',stroke:'transparent',
+    'stroke-width':14,'stroke-linecap':'round','pointer-events':'stroke',style:'cursor:pointer'});
+    gLinks.appendChild(hp); L.hit=hp; }); }
+/* v2.0.4 · R2 §2 replaces worst-of-path wholesale: a line's state is the rule
+   verdict precomputed from the evidence BOUND to that adjacency. No lineStat
+   (linelogic absent) means nothing is bound, which is exactly LC-01 → grey. */
+function lcbState(L,t){ const s=L.lineStat&&L.lineStat[t]; return (s==='ok'||s==='warn'||s==='crit')?s:'grey'; }
+const LC_WIDTH={ok:2.4,warn:3.2,crit:3.6};
+function paintLinksOnly(){ LINKS.forEach(L=>{ const a=byId(L[0]),b=byId(L[1]),d=`M${a.x} ${a.y} L${b.x} ${b.y}`;
+  L.el.setAttribute('d',d); if(L.hit)L.hit.setAttribute('d',d); }); }
+
+/* ---------- v2.0.4 · ZONE BANDS (R1 §4) --------------------------------------
+ * One <g id="zones"> inserted as the FIRST child of #viewport, so the bands pan
+ * and zoom with everything else and sit behind links and nodes with no z-index
+ * work. pointer-events are off for the whole group and re-enabled only on each
+ * label block (name + owner chip), so a band can never steal a canvas pan. */
+let gZones=null;
+function buildZones(){
+  if(!gZones){ gZones=mk('g',{id:'zones'}); gZones.style.pointerEvents='none'; vp.insertBefore(gZones,vp.firstChild); }
+  gZones.innerHTML='';
+  if(!ZONES.length) return;
+  /* geometry comes from the manifest when it ships it (it does — R1 §3.1/§4.3
+     precomputed), and falls back to the same formulas otherwise */
+  ZONES.forEach((z,i)=>{ const b=z.band; if(!b)return;
+    const alt=(typeof z.alt==='boolean')?z.alt:!!(i%2);
+    gZones.appendChild(mk('rect',{class:'zband'+(alt?' alt':''),x:b.x,y:b.y,width:b.w,height:b.h,rx:14})); });
+  ZONES.forEach(z=>{ const b=z.band; if(!b)return;
+    const g=mk('g',{class:'zlabelg','data-zone':z.id});
+    g.style.pointerEvents='auto'; g.style.cursor='pointer';
+    const chipTxt=String(z.chip||'');
+    const lb=z.label||{x:b.x+14,y:b.y+30};
+    /* v2.0.4 fit renders around k≈0.45, so the 9.5px chip spec was unreadable on
+       screen. Chip geometry is recomputed here at the 12.5px type size the CSS
+       now uses (w = 15 + 8.6/char, h 24) — manifest x anchors are kept, the
+       precomputed w/h are deliberately ignored. Block stays inside y ≤ 80. */
+    const cx=(z.chipRect&&z.chipRect.x!=null)?z.chipRect.x:b.x+13;
+    const cy=(z.chipRect&&z.chipRect.y!=null)?z.chipRect.y:b.y+40;
+    const cr={x:cx,y:cy,w:+(15+8.6*chipTxt.length).toFixed(1),h:24,rx:12};
+    const ctp={x:cx+9,y:cy+16.5};
+    const nm=mk('text',{class:'zlabel',x:lb.x,y:lb.y}); nm.textContent=z.name; g.appendChild(nm);
+    g.appendChild(mk('rect',{class:'zchip',x:cr.x,y:cr.y,width:cr.w,height:cr.h==null?19:cr.h,rx:cr.rx==null?9.5:cr.rx}));
+    const ct=mk('text',{class:'zchipt',x:ctp.x,y:ctp.y}); ct.textContent=chipTxt; g.appendChild(ct);
+    const ttl=mk('title'); ttl.textContent=z.id+' '+z.name+' · '+chipTxt+' — click to filter Timeframe C to this zone'; g.appendChild(ttl);
+    g.addEventListener('mouseenter',()=>znHover(z.id));
+    g.addEventListener('mouseleave',()=>znHover(null));
+    g.addEventListener('click',ev=>{ ev.stopPropagation(); znFilterC(z.id); });
+    gZones.appendChild(g); });
+}
+function znMembers(zid){ const z=ZONES.find(x=>x.id===zid); return new Set(z?(z.members||[]):[]); }
+function znOf(n){ if(!ZONES.length) return null;
+  return ZONES.find(z=>(z.members&&z.members.indexOf(n.id)>=0)) || ZONES.find(z=>z.id===n.zone) || null; }
+/* dock pane header echo — the zone this object sits in and the team whose chip
+   the band carries, appended to the line that already shows the pm string */
+function znEcho(n){ const z=znOf(n); if(!z) return '';
+  return ' · '+esc(z.id)+' '+esc(z.name)+' <span class="zchip-inline">'+esc(String(z.chip||''))+'</span>'; }
+/* hover a zone label → members go .zhot, everything whose endpoints are outside
+   the zone goes .zdim. Pure class work; the transition lives in spin204.css and
+   is dropped there under reduced motion. */
+function znHover(zid){
+  if(!zid){ NODES.forEach(n=>{ if(n.el){ n.el.classList.remove('zdim'); n.el.classList.remove('zhot'); } });
+            LINKS.forEach(L=>{ if(L.el){ L.el.classList.remove('zdim'); L.el.classList.remove('zhot'); } }); return; }
+  const mem=znMembers(zid);
+  NODES.forEach(n=>{ if(!n.el)return; const on=mem.has(n.id); n.el.classList.toggle('zhot',on); n.el.classList.toggle('zdim',!on); });
+  LINKS.forEach(L=>{ if(!L.el)return; const on=(mem.has(L[0])||mem.has(L[1]));
+    L.el.classList.toggle('zhot',on); L.el.classList.toggle('zdim',!on); });
+}
+/* click a zone label → Timeframe C filters to that zone's member objects. The
+   six zone:Zn options are added to #cNode at boot; Reset restores the default. */
+function znFilterC(zid){
+  const cn=document.getElementById('cNode'); if(!cn) return;
+  const v='zone:'+zid;
+  if(!Array.prototype.some.call(cn.options,o=>o.value===v)) return;
+  cn.value=v; toggleTables(true); renderTables();
+}
 
 function paint(){
   const t=cur;
-  LINKS.forEach(L=>{ const a=byId(L[0]),b=byId(L[1]); L.el.setAttribute('d',`M${a.x} ${a.y} L${b.x} ${b.y}`);
-    const s=linkStatus(L,t),col=statusColor(s); L.el.setAttribute('stroke',col);
-    L.el.setAttribute('stroke-width',s==='ok'?2+L[2]/28:s==='warn'?3.5:4.5); L.el.setAttribute('opacity',s==='ok'?0.5:0.95); L.el.classList.toggle('flow',s!=='ok'); });
+  /* v2.0.4 · lines are monitored relationships: uniform weight per state, never
+     a volume term. 2.4 ok / 3.2 warn / 3.6 crit, and 2px --unk dashed for grey,
+     which is the ONLY dashed stroke on the map — it means "not covered". */
+  LINKS.forEach(L=>{ const a=byId(L[0]),b=byId(L[1]),d=`M${a.x} ${a.y} L${b.x} ${b.y}`;
+    L.el.setAttribute('d',d); if(L.hit)L.hit.setAttribute('d',d);
+    const s=lcbState(L,t), grey=(s==='grey'), col=statusColor(grey?'unk':s);
+    L.el.setAttribute('stroke',col);
+    L.el.setAttribute('stroke-width',grey?2:LC_WIDTH[s]);
+    if(grey) L.el.setAttribute('stroke-dasharray','4 5'); else L.el.removeAttribute('stroke-dasharray');
+    L.el.setAttribute('opacity',s==='ok'?0.5:grey?0.55:0.95);
+    L.el.classList.toggle('lc-live',s==='warn'||s==='crit'); });
   NODES.forEach(n=>{ const arcs=n.el.querySelector('.arcs'); arcs.innerHTML='';
     const k=n.objs.length,gap=k>1?10:0,seg=360/k;
     n.objs.forEach((o,i)=>{ arcs.appendChild(mk('path',{class:'arc',d:arcPath(0,0,RING,i*seg+gap/2,(i+1)*seg-gap/2),stroke:statusColor(o.stat[t])})); });
@@ -189,7 +304,7 @@ function paintSummary(){ const t=cur; let ok=0,w=0,c=0; NODES.forEach(n=>{ const
     `<span style="color:${statusColor(c>0?'crit':w>0?'warn':'ok')}">${c} crit / ${w} deg</span>`+
     (active?` · <b style="color:${statusColor(INCMETA[active][1])}">${incName(active)}</b>`:` · <b style="color:var(--ok)">nominal</b>`)+
     `<br><span style="color:var(--muted);font-size:11px">Success = attempt → debit posted → biller credit confirmed in SLA — business + technical declines both count. Read beside volume: ~7.8k attempts/hr daytime (mock).</span>`+
-    `<br><span style="color:var(--muted);font-size:11px">7-day replay · Aug 23 OTP dip · Aug 24 silent false-declines (replica lag) · Aug 25 one carrier, two symptoms · Aug 26–27 storage creep → Aug 27 19:00 CORE OUTAGE, full path red · Aug 28 LB pool loss + EOD overrun · Aug 29 aggregator brownout + deploy regression.</span>`;
+    `<br><span style="color:var(--muted);font-size:11px">7-day replay · Aug 23 OTP dip · Aug 24 silent false-declines (replica lag) · Aug 25 one carrier, two symptoms · Aug 26–27 storage creep → Aug 27 19:00 CORE OUTAGE — six relationships critical behind the gateway, perimeter clean · Aug 28 LB pool loss + EOD overrun · Aug 29 aggregator brownout + deploy regression.</span>`;
   scheduleScFit();   // the copy above changes height at incident boundaries
 }
 function updateClock(){ document.getElementById('tlcur').textContent=dstamp(cur)+(cur===N-1?' · live':'');
@@ -251,7 +366,7 @@ function autoGrow(ta){ ta.style.height='auto'; ta.style.height=(ta.scrollHeight+
    every objective with its full-week graph and threshold caption, then the note.
    Nothing is capped here: the DOCK BODY scrolls (see .dock-body in styles.css). */
 function buildPane(n){ const t=cur,ns=nodeStatus(n,t); const pane=document.createElement('div'); pane.className='pane'; pane.dataset.id=n.id;
-  pane.innerHTML=`<div class="pane-h"><span class="ic">${svgIcon(n.type)}</span><div><div class="nm">${n.name}</div><div class="meta">${n.type} · ${n.ip}${n.pm?' — '+n.pm:''}</div></div>
+  pane.innerHTML=`<div class="pane-h"><span class="ic">${svgIcon(n.type)}</span><div><div class="nm">${n.name}</div><div class="meta">${n.type} · ${n.ip}${n.pm?' — '+n.pm:''}${znEcho(n)}</div></div>
     <span class="pill" style="margin-left:8px;background:${statusColor(ns)}22;color:${statusColor(ns)}" data-role="ns">${ns}</span>
     <div class="acts"><button class="iconbtn ${n.pinned?'act':''}" data-act="pin" title="Pin">${n.pinned?'★':'☆'}</button><button class="iconbtn" data-act="close" title="Close">✕</button></div></div>
     <div class="pane-body">
@@ -375,7 +490,11 @@ function renderTableC(){
   const W=WSTEPS[document.getElementById('cWin').value], sev=document.getElementById('cSev').value, node=document.getElementById('cNode').value;
   let rows=windowRows(cur,W);
   if(sev==='crit') rows=rows.filter(r=>r.worst==='crit'); else if(sev==='warn') rows=rows.filter(r=>r.worst!=='ok');
-  if(node!=='all') rows=rows.filter(r=>r.n.id===node);
+  /* v2.0.4: #cNode also carries six zone:Zn options (clicking a zone label on the
+     map sets one). A zone value filters to that zone's member objects. */
+  if(node.indexOf('zone:')===0){ const zid=node.slice(5), mem=znMembers(zid);
+    rows=rows.filter(r=> mem.size ? mem.has(r.n.id) : r.n.zone===zid); }
+  else if(node!=='all') rows=rows.filter(r=>r.n.id===node);
   const g=(r,k)=>({obj:r.n.name,ind:r.o.label,sev:sevW(r.worst),val:r.o.vals[cur],thr:0,events:r.ev,down:r.down,last:r.last,since:r.first}[k]);
   rows.sort((a,b)=>{ const va=g(a,cSort.key),vb=g(b,cSort.key); return (va<vb?-1:va>vb?1:0)*cSort.dir; });
   rows=rows.slice(0,40);
@@ -393,7 +512,11 @@ function renderTableC(){
   wrap.innerHTML=h+'</tbody></table>';
 }
 window.cSortBy=function(k){ if(cSort.key===k)cSort.dir*=-1; else {cSort.key=k;cSort.dir=-1;} renderTableC(); };
-function renderTables(){ if(document.getElementById('bottom').classList.contains('closed'))return; renderTableA(); renderTableB(); renderTableC(); }
+function renderTables(){ if(document.getElementById('bottom').classList.contains('closed'))return; renderTableA(); renderTableB(); renderTableC();
+  /* v2.0.4: Timeframe D + the Line Conditions window live in assets/tframes.js.
+     renderTables() is already the one place every cursor move and every control
+     change funnels through, so one guarded call keeps D in step for free. */
+  if(window.PULSE_TFD && typeof PULSE_TFD.refresh==='function') PULSE_TFD.refresh(); }
 
 /* ===================== F3 · INCIDENT / RCA PANEL =====================
  * Left slide-in mirroring the right dock. Clicking a table row focuses the node
@@ -470,10 +593,9 @@ const SLZ={todo:'To Do',inprog:'In Progress',done:'Done'};
 let traceExpanded=false;
 function traceTicket(o,t){
   const T=window.ADEPTIO_TICKETS; if(!T||!T.tickets) return null;
-  const keys=!o.inc?[]:(typeof o.inc==='string'?[o.inc]:Object.keys(o.inc));
-  if(!keys.length) return null;
-  let pick=keys.find(k=>{ const w=INC[k]; return w && t>=w[0] && t<=w[w.length-1]; });
-  if(!pick){ let bs=-1; keys.forEach(k=>{ const w=INC[k]; if(w&&w[0]<=t&&w[0]>bs){ bs=w[0]; pick=k; } }); }
+  /* v2.0.4: the window pick moved out to the shared incKeyAt() at the top of this
+     file — the line-condition precompute needs the identical choice. */
+  const pick=incKeyAt(o,t);
   if(!pick) return null;
   const key=T.byWindow&&T.byWindow[pick];
   const tk=key&&T.tickets.find(x=>x.key===key);
@@ -516,11 +638,36 @@ document.getElementById('btables').addEventListener('click',e=>{
 /* ===================== PAN / ZOOM / DRAG (grid snap) ===================== */
 const canvas=document.getElementById('canvas'),stage=document.getElementById('stage'); const SNAP=20;
 let view={x:0,y:0,k:1};
-function applyView(){ vp.setAttribute('transform',`translate(${view.x},${view.y}) scale(${view.k})`); }
+/* the balloon overlay is HTML above the SVG, so pan/zoom repaints its anchors in
+   JS rather than riding the viewport transform — coalesced through one rAF */
+function applyView(){ vp.setAttribute('transform',`translate(${view.x},${view.y}) scale(${view.k})`); lcbPositionSoon(); }
 function dockW(){ return dock.classList.contains('open')?parseInt(getComputedStyle(document.documentElement).getPropertyValue('--dockW')):0; }
 function fit(){ const pad=90; let minx=1e9,miny=1e9,maxx=-1e9,maxy=-1e9; NODES.forEach(n=>{ minx=Math.min(minx,n.x);miny=Math.min(miny,n.y);maxx=Math.max(maxx,n.x);maxy=Math.max(maxy,n.y); });
-  const w=stage.clientWidth-dockW(),h=stage.clientHeight,bw=maxx-minx+pad*2,bh=maxy-miny+pad*2; const k=clamp(Math.min(w/bw,h/bh),0.4,1.6);
-  view.k=k; view.x=(w-(minx+maxx)*k)/2; view.y=(h-(miny+maxy)*k)/2; applyView(); balance(); scheduleScFit(); }
+  /* v2.0.4 (R1 §3.4): the bands overhang the node centres by L10/R25/T50 — the
+     whole zone-label row lives above the highest node — so union the band rects
+     into the bbox or fit-to-screen clips the labels off-canvas. */
+  ZONES.forEach(z=>{ const b=z.band; if(!b)return;
+    minx=Math.min(minx,b.x); miny=Math.min(miny,b.y); maxx=Math.max(maxx,b.x+b.w); maxy=Math.max(maxy,b.y+b.h); });
+  const w=stage.clientWidth-dockW(),h=stage.clientHeight,bw=maxx-minx+pad*2,bh=maxy-miny+60;
+  /* vertical pad is 30/side, not 90: the band rects already carry the label row,
+     and the slack lets the field centre BELOW the search pill instead of
+     top-aligning the zone labels underneath it. */
+  /* v2.0.4: the hint/scenario/legend overlays own the stage's left column, and the
+     zone field is full-height, so fitting across the whole width buries Z1–Z2
+     under the cards. On stages wide enough, reserve that column and centre the
+     field in the space right of it; on narrow stages pin the field to the
+     reserve edge and let the overflow pan. */
+  const reserve=(w>=1150)?Math.min(560,Math.round(w*0.34)):0, uw=w-reserve;
+  const k=clamp(Math.min(uw/bw,h/bh),0.4,1.6);
+  view.k=k; view.x=reserve+(uw-(minx+maxx)*k)/2; view.y=(h-(miny+maxy)*k)/2;
+  if((maxx-minx)*k>uw-16) view.x=reserve+8-minx*k;
+  /* v2.0.4: the field is now 1010 units tall and k has a legibility floor of 0.4,
+     so on a short stage (1280×720 with the tables open leaves ~287px) the scaled
+     map cannot fit. Centring would then cut BOTH ends; top-aligning instead keeps
+     the zone-label row — the thing that says who owns each band — always on
+     screen, and pushes the overflow to the settlement floor, which pans to. */
+  if((maxy-miny)*k > h-16) view.y = 8 - miny*k;
+  applyView(); balance(); scheduleScFit(); }
 /* fit() centres the node CENTRES, but a rendered node hangs well below its centre
    (disc + three label lines), so the map sat top-heavy — ~54px of dead canvas
    above and ~16px below at 1600×900. balance() re-centres on the true rendered
@@ -533,12 +680,37 @@ function balance(){
     gs.push({x1:b.left-st.left,x2:b.right-st.left,y1:b.top-st.top,y2:b.bottom-st.top}); });
   if(!gs.length)return;
   const top=Math.min(...gs.map(g=>g.y1)), bot=st.height-Math.max(...gs.map(g=>g.y2));
-  let dy=(top-bot)/2; if(dy<=1)return;
-  const hb=hintBox();   // 8px of margin, so a node column that merely abuts the
-                        // hint is still treated as sharing its lane
-  if(hb) gs.forEach(g=>{ if(g.x2>hb.x1-8&&g.x1<hb.x2+8) dy=Math.min(dy,g.y1-(hb.y2+6)); });
-  dy=Math.min(dy,top-10);
-  if(dy>1){ view.y-=dy; applyView(); }
+  let dy=(top-bot)/2;
+  /* v2.0.4: balance() exists to reclaim dead canvas above the map. When the map
+     is TALLER than the stage there is none — bot is negative and would inflate
+     dy into a nudge that drags the zone-label row off the top. */
+  if(dy>1 && bot>0){
+    const hb=hintBox();   // 8px of margin, so a node column that merely abuts the
+                          // hint is still treated as sharing its lane
+    if(hb) gs.forEach(g=>{ if(g.x2>hb.x1-8&&g.x1<hb.x2+8) dy=Math.min(dy,g.y1-(hb.y2+6)); });
+    dy=Math.min(dy,top-10);
+    if(dy>1){ view.y-=dy; applyView(); }
+  }
+  znClearHint(gs,st);
+}
+/* v2.0.4: the zone-label row is new content in the map's top-left, which is also
+   where the dismissible hint card sits. balance() only ever nudges UP, so this
+   adds the one nudge DOWN that can clear the labels out from under the hint —
+   bounded by the slack actually available below the lowest node, so it can never
+   push rendered content off the bottom. No-op with no zones, no hint, or no room. */
+function znClearHint(gs,st){
+  if(!ZONES.length||!gZones) return;
+  const hb=hintBox(); if(!hb) return;
+  let need=0;
+  gZones.querySelectorAll('.zlabelg').forEach(g=>{ const b=g.getBoundingClientRect();
+    const x1=b.left-st.left,x2=b.right-st.left,y1=b.top-st.top;
+    if(x2>hb.x1-8 && x1<hb.x2+8 && y1<hb.y2+8) need=Math.max(need,(hb.y2+8)-y1); });
+  if(need<=1) return;
+  const bot=st.height-Math.max(...gs.map(g=>g.y2));
+  // when the map already overflows the stage the bottom pans either way, so the
+  // nudge is free; otherwise it may only spend the slack that is actually there
+  const d=Math.min(need,bot>0?bot-10:need);
+  if(d>1){ view.y+=d; applyView(); }
 }
 canvas.addEventListener('wheel',e=>{ e.preventDefault(); const r=canvas.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top,f=e.deltaY<0?1.12:1/1.12,nk=clamp(view.k*f,0.3,4);
   view.x=mx-(mx-view.x)*(nk/view.k); view.y=my-(my-view.y)*(nk/view.k); view.k=nk; applyView(); },{passive:false});
@@ -547,11 +719,17 @@ function zoomBtn(f){ const r=canvas.getBoundingClientRect(),mx=r.width/2,my=r.he
 document.getElementById('fit').onclick=fit;
 let drag=null;
 canvas.addEventListener('mousedown',e=>{ const g=e.target.closest('.node'); if(g){ const n=byId(g.dataset.id); drag={type:'node',n,sx:e.clientX,sy:e.clientY,ox:n.x,oy:n.y,moved:false}; }
-  else { drag={type:'pan',sx:e.clientX,sy:e.clientY,ox:view.x,oy:view.y,moved:false}; canvas.classList.add('panning'); hideHover(); } });
+  else { /* v2.0.4: a press that starts on a relationship still pans; if it never
+            moves it is a line CLICK and opens that line's evidence, sticky. */
+    const lp=e.target.closest?e.target.closest('[data-lk]'):null;
+    drag={type:'pan',sx:e.clientX,sy:e.clientY,ox:view.x,oy:view.y,moved:false,lk:lp?parseInt(lp.getAttribute('data-lk'),10):null};
+    canvas.classList.add('panning'); hideHover(); } });
 window.addEventListener('mousemove',e=>{ if(!drag)return; const dx=e.clientX-drag.sx,dy=e.clientY-drag.sy; if(Math.abs(dx)+Math.abs(dy)>3)drag.moved=true;
-  if(drag.type==='node'){ let nx=drag.ox+dx/view.k, ny=drag.oy+dy/view.k; nx=Math.round(nx/SNAP)*SNAP; ny=Math.round(ny/SNAP)*SNAP; drag.n.x=nx; drag.n.y=ny; drag.n.el.setAttribute('transform',`translate(${nx},${ny})`); paintLinksOnly(); }
+  if(drag.type==='node'){ let nx=drag.ox+dx/view.k, ny=drag.oy+dy/view.k; nx=Math.round(nx/SNAP)*SNAP; ny=Math.round(ny/SNAP)*SNAP; drag.n.x=nx; drag.n.y=ny; drag.n.el.setAttribute('transform',`translate(${nx},${ny})`); paintLinksOnly(); lcbPositionSoon(); }
   else { view.x=drag.ox+dx; view.y=drag.oy+dy; applyView(); } });
-window.addEventListener('mouseup',()=>{ if(drag&&drag.type==='node'&&!drag.moved)openPane(drag.n.id); if(drag&&drag.type==='pan'&&!drag.moved){ sel=null; markSelection(); } canvas.classList.remove('panning'); drag=null; });
+window.addEventListener('mouseup',()=>{ if(drag&&drag.type==='node'&&!drag.moved)openPane(drag.n.id);
+  if(drag&&drag.type==='pan'&&!drag.moved){ if(drag.lk!=null&&!isNaN(drag.lk)) openLineBalloons(drag.lk,true); else { sel=null; markSelection(); } }
+  canvas.classList.remove('panning'); drag=null; });
 gNodes.addEventListener('mouseover',e=>{ const g=e.target.closest('.node'); if(g&&!drag)showHover(byId(g.dataset.id),e); });
 gNodes.addEventListener('mousemove',e=>{ if(hc.classList.contains('on')&&!drag)positionHover(e); });
 gNodes.addEventListener('mouseout',e=>{ if(e.target.closest('.node'))hideHover(); });
@@ -590,7 +768,9 @@ function hintBox(){ const e=document.getElementById('hint');
 function scheduleScFit(){ if(scRaf)return; scRaf=requestAnimationFrame(()=>{ scRaf=0; fitScenario(); }); }
 function fitScenario(){
   if(!scEl||scMin||scEl.hidden||getComputedStyle(scEl).display==='none')return;
-  const st=stage.getBoundingClientRect(), lg=document.getElementById('legend').getBoundingClientRect();
+  const lgEl=document.getElementById('legend');
+  const lgFloor=(!lgEl.hidden&&getComputedStyle(lgEl).display!=='none')?lgEl:(document.getElementById('lgchip')||lgEl);
+  const st=stage.getBoundingClientRect(), lg=lgFloor.getBoundingClientRect();
   scBody.style.maxHeight='';                                   // measure natural first
   const chrome=scEl.getBoundingClientRect().height-scBody.getBoundingClientRect().height;
   const nat=scBody.scrollHeight;
@@ -665,11 +845,19 @@ document.getElementById('brefreshbtn').onclick=()=>{ const b=document.getElement
 /* timeline */
 let playing=false,speeds=[1,4,8,16,32,64],si=0,raf=null,acc=0,last=0;   // E6: +64x for the 7-day replay
 const playBtn=document.getElementById('playbtn'),playIcon=document.getElementById('playicon');
-function setCur(i){ cur=clamp(Math.round(i),0,N-1); paint(); }
+/* v2.0.4: setCur() is the manual-seek path (scrub, Now, deep link, Timeframe D
+   row, PULSE_ENGINE.seek). A seek CLEARS every live balloon — they belong to a
+   moment, not to a session — and then re-fires for whatever changed state into
+   warn/crit at the step just landed on. While the timeline head is being dragged
+   only the clear runs; the fire happens once, on release. */
+function setCur(i){ const p=cur; cur=clamp(Math.round(i),0,N-1); paint();
+  if(cur!==p){ lcbClear(); if(!scrub) lcbFire(); } }
 function tick(ts){ if(!playing)return; if(!last)last=ts; const dt=ts-last; last=ts; acc+=dt*speeds[si];
-  if(acc>150){ const adv=Math.floor(acc/150); acc=acc%150; cur+=adv; if(cur>=N-1){ cur=N-1; paint(); stop(); return; } paint(); } raf=requestAnimationFrame(tick); }
-function play(){ if(cur>=N-1)cur=0; playing=true; last=0; acc=0; playIcon.innerHTML='<rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/>'; raf=requestAnimationFrame(tick); }
-function stop(){ playing=false; cancelAnimationFrame(raf); playIcon.innerHTML='<path d="M8 5v14l11-7z"/>'; }
+  if(acc>150){ const adv=Math.floor(acc/150); acc=acc%150; cur+=adv; if(cur>=N-1){ cur=N-1; paint(); stop(); lcbFire(); return; } paint(); lcbFire(); } raf=requestAnimationFrame(tick); }
+function play(){ if(cur>=N-1)cur=0; playing=true; last=0; acc=0; playIcon.innerHTML='<rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/>'; lcbThaw(); raf=requestAnimationFrame(tick); }
+/* pause freezes every hold timer — balloons are evidence, and a paused operator
+   is reading them; play() hands back whatever hold time each one had left */
+function stop(){ playing=false; cancelAnimationFrame(raf); playIcon.innerHTML='<path d="M8 5v14l11-7z"/>'; lcbFreeze(); }
 playBtn.onclick=()=>{ playing?stop():play(); };
 document.getElementById('speed').onclick=e=>{ si=(si+1)%speeds.length; e.target.textContent=speeds[si]+'×'; };
 document.getElementById('nowbtn').onclick=()=>{ stop(); setCur(N-1); };
@@ -678,7 +866,7 @@ function trackIdx(e){ const r=track.getBoundingClientRect(); return clamp(Math.r
 let scrub=false;
 track.addEventListener('mousedown',e=>{ scrub=true; stop(); setCur(trackIdx(e)); });
 window.addEventListener('mousemove',e=>{ if(scrub)setCur(trackIdx(e)); });
-window.addEventListener('mouseup',()=>{ scrub=false; });
+window.addEventListener('mouseup',()=>{ if(scrub){ scrub=false; lcbFire(); } });
 track.addEventListener('mousemove',e=>{ const i=trackIdx(e),r=track.getBoundingClientRect(); ghost.style.left=(e.clientX-r.left)+'px'; ghost.textContent=dstamp(i); ghost.classList.add('on'); });
 track.addEventListener('mouseleave',()=>ghost.classList.remove('on'));
 function drawBands(){ const bands=document.getElementById('bands'); bands.innerHTML='';
@@ -693,13 +881,323 @@ function drawBands(){ const bands=document.getElementById('bands'); bands.innerH
     const lb=document.createElement('div'); lb.className='dlbl'; lb.style.left=pc; lb.textContent=DAY_LBL[d0]; ht.appendChild(lb); }
 }
 
+/* ============================================================================
+ * v2.0.4 · LINE-CONDITION BALLOONS  (R2 §4)
+ * A balloon SET is three HTML elements over the SVG: one panel above each
+ * endpoint carrying that end's contributing evidence, and a chip cluster at the
+ * segment midpoint carrying the rule that fired plus the CONN class. Sets pop
+ * when a line changes state INTO warn/crit at the live cursor — during playback
+ * and on manual seek, never on the boot paint, never on recovery — hold, then
+ * fade. A line click re-opens one sticky.
+ *
+ * HTML, not SVG: the zoom range is 0.3…4, so an 11px label inside #viewport
+ * would render between 3px and 44px; and these carry variable-length manifest
+ * labels that need real text wrapping. Positioned by inverting applyView()'s
+ * translate/scale, so pan, zoom, fit and node drag all repaint through one
+ * rAF-coalesced positionBalloons().
+ * ==========================================================================*/
+const LCB_HOLD=6000, LCB_HOLD_RM=10000, LCB_REHOLD=2500, LCB_FADE=500, LCB_CAP=3;
+const LCB_CLAIM='Lines are monitored relationships — Pulse correlates evidence at each end. It does not trace transactions.';
+const LCB_CLSNAME={conn:'CONN',appA:'APP',appB:'APP',logA:'LOG',logB:'LOG'};
+const LCB_CLSORD ={conn:0,appA:1,appB:1,logA:2,logB:2};
+const LCB_CELLS=['conn','appA','appB','logA','logB'];
+let lcbWrap=null, lcbBadge=null, lcbSets=[], lcbRaf=0, lcbArmed=false;
+
+function lcbReduced(){
+  if(document.documentElement.getAttribute('data-motion')==='reduce') return true;
+  return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); }
+function lcbHost(){
+  if(!lcbWrap){ lcbWrap=document.createElement('div'); lcbWrap.id='lcballoons';
+    /* structural fallback only, identical to spin204.css's own #lcballoons rule —
+       every visual token (glass, tail, chips, badge) comes from that file */
+    lcbWrap.style.cssText='position:absolute;left:0;top:0;right:0;bottom:0;overflow:hidden;pointer-events:none;z-index:22';
+    stage.appendChild(lcbWrap); }
+  return lcbWrap; }
+/* the map's rule chip opens the Line Conditions window at that rule, the same
+   landing Timeframe D's LC-xx chips use — driven through the public DOM the
+   window already exposes (#lcToggle / #lcrow-LC-xx), not through tframes state */
+function lcbOpenRule(id){
+  const t=document.getElementById('lcToggle'); if(!t) return;
+  toggleTables(true);
+  if(t.getAttribute('aria-expanded')!=='true') t.click();
+  const row=id&&document.getElementById('lcrow-'+id);
+  if(row&&row.scrollIntoView) row.scrollIntoView({block:'nearest'}); }
+function lcbObj(nid,lab){ const n=byId(nid); return n?n.objs.find(x=>x.label===lab):null; }
+function lcbEvWorst(refs,t){ if(!refs||!refs.length) return 'none'; let s='ok';
+  for(let i=0;i<refs.length;i++){ const o=lcbObj(refs[i][0],refs[i][1]); if(o) s=worse(s,o.stat[t]); } return s; }
+function lcbLinkId(i){ const L=LINKS[i]; return (L&&L.bind&&L.bind.id)||('E'+String(i+1).padStart(2,'0')); }
+/* the NOC copy for a rule id, straight out of PULSE_LINELOGIC.RULES — tolerant
+   of either an array of rule objects or an object keyed by rule id */
+function lcbRuleText(id){
+  const R=window.PULSE_LINELOGIC&&PULSE_LINELOGIC.RULES; if(!R||!id) return '';
+  const r=Array.isArray(R)?R.find(x=>x&&x.id===id):R[id]; if(!r) return '';
+  if(typeof r==='string') return r;
+  return r.text||r.copy||r.condition||r.plain||r.desc||''; }
+/* one endpoint's evidence at t: every objective the manifest binds to THIS node
+   on THIS link, whatever cell it sits in. Contributing (non-ok) rows first, crit
+   before warn, then class order CONN → APP → LOG; capped at 3. A bound-but-clean
+   end shows its clean evidence rather than an empty panel. */
+function lcbEvidence(i,endIdx,t){
+  const L=LINKS[i], B=L&&L.bind, nid=L[endIdx], all=[], seen={};
+  if(B) LCB_CELLS.forEach(cls=>{ (B[cls]||[]).forEach(ref=>{
+    if(ref[0]!==nid) return; const o=lcbObj(ref[0],ref[1]); if(!o) return;
+    const k=cls+'|'+ref[1]; if(seen[k]) return; seen[k]=1;
+    all.push({cls:LCB_CLSNAME[cls],ord:LCB_CLSORD[cls],o,label:ref[1],sev:o.stat[t]}); }); });
+  const bad=all.filter(r=>r.sev!=='ok'), use=(bad.length?bad:all).slice();
+  use.sort((a,b)=>(rank[b.sev]-rank[a.sev])||(a.ord-b.ord)||(a.label<b.label?-1:a.label>b.label?1:0));
+  return {bound:all.length, rows:use.slice(0,3)}; }
+/* how many objectives are non-ok on this link right now — the cap's second
+   ranking key (R2 §4: crit first, then contributing evidence count, then id) */
+function lcbWeight(i,t){ const B=LINKS[i]&&LINKS[i].bind; if(!B) return 0; let w=0;
+  LCB_CELLS.forEach(c=>{ (B[c]||[]).forEach(ref=>{ const o=lcbObj(ref[0],ref[1]); if(o&&o.stat[t]!=='ok') w++; }); }); return w; }
+
+/* Element contract with assets/spin204.css: the stylesheet paints the glass panel,
+   the ::after/::before tail (flipped by data-flip) and the chip frames; POSITION,
+   opacity and the 140ms/500ms transitions are the engine's, written inline here,
+   so nothing in the stylesheet can displace a balloon on the reduced-motion path.
+   Row and header grammar is the hover card's — .hc-h / .sd / .nm / .hc-row. */
+function lcbBuildSet(i,state,sticky){
+  const L=LINKS[i]; if(!L) return null;
+  const t=cur, host=lcbHost(), a=byId(L[0]), b=byId(L[1]), rm=lcbReduced();
+  const set={i,sticky:!!sticky,els:[],ends:[],mid:null,hover:false,timer:null,t0:0,remain:0,dead:false};
+  [0,1].forEach(endIdx=>{
+    const n=byId(L[endIdx]); if(!n) return;
+    const ev=lcbEvidence(i,endIdx,t), ns=nodeStatus(n,t);
+    let rows='';
+    if(!ev.bound) rows='<div class="lcb-row hc-row"><span class="k" style="color:var(--muted)">No evidence bound at this end.</span></div>';
+    else ev.rows.forEach(r=>{ rows+='<div class="lcb-row hc-row"><span class="sd" style="background:'+statusColor(r.sev)+'"></span>'
+      +'<span class="k" title="'+r.cls+' evidence — '+esc(r.label)+'">'+esc(r.label)+'</span>'
+      +'<span class="v">'+esc(fmtVal(r.o,r.o.vals[t]))+'</span></div>'; });
+    const el=document.createElement('div');
+    el.className='lcballoon'; el.setAttribute('data-flip','0'); el.setAttribute('data-end',String(endIdx));
+    el.innerHTML='<div class="hc-h"><span class="sd" style="background:'+statusColor(ns)+'"></span>'
+      +'<span class="nm">'+esc(n.name)+'</span>'
+      +'<span class="sevchip '+state+'" style="margin-left:auto">'+state+'</span>'
+      +(sticky?'<button class="lcb-x iconbtn" type="button" title="Dismiss (Esc)" aria-label="Dismiss">✕</button>':'')
+      +'</div>'+rows;
+    host.appendChild(el); set.els.push(el); set.ends.push({el,n}); });
+  if(a&&b){
+    const ruleId=(L.lineRule&&L.lineRule[t])||'', rtxt=lcbRuleText(ruleId);
+    const connSev=L.bind?lcbEvWorst(L.bind.conn,t):'none';
+    const col=statusColor(state==='grey'?'unk':state);
+    const el=document.createElement('div');
+    el.className='lcballoon lcb-mid'; el.setAttribute('data-flip','0');
+    /* one of the three places the product's central claim appears on this surface */
+    el.innerHTML='<span class="lcb-rule" data-rule="'+esc(ruleId)+'" style="color:'+col+';cursor:pointer" title="'
+        +esc((ruleId?ruleId+' — ':'')+(rtxt||'line condition'))+'\n'+esc(LCB_CLAIM)+'">'+esc(ruleId||'LC-01')+'</span>'
+      +'<span class="lcb-conn" data-sev="'+connSev+'" style="color:'
+        +(connSev==='none'?'var(--muted)':statusColor(connSev))+'" title="'
+        +esc(connSev==='none'?'No connectivity evidence is bound to this pair.':('Connectivity evidence bound to this pair: '+connSev+'.'))
+        +'">CONN '+(connSev==='none'?'—':connSev)+'</span>';
+    el.style.zIndex='23';
+    const rc=el.querySelector('.lcb-rule');
+    if(rc) rc.addEventListener('click',ev=>{ ev.stopPropagation(); lcbOpenRule(ruleId); });
+    host.appendChild(el); set.els.push(el); set.mid={el,a,b}; }
+  set.els.forEach(el=>{
+    el.style.opacity='0'; if(!rm) el.style.transform='translateY(4px)';
+    el.addEventListener('mouseenter',()=>{ set.hover=true; lcbDisarm(set); });
+    el.addEventListener('mouseleave',()=>{ set.hover=false; if(!set.sticky){ set.remain=LCB_REHOLD; lcbArm(set); } });
+    const x=el.querySelector('.lcb-x'); if(x) x.addEventListener('click',ev=>{ ev.stopPropagation(); lcbRemove(set); }); });
+  lcbSets.push(set);
+  positionBalloons();
+  if(rm) set.els.forEach(el=>{ el.style.transition='none'; el.style.opacity='1'; });
+  else requestAnimationFrame(()=>{ set.els.forEach(el=>{
+    el.style.transition='opacity 140ms ease-out, transform 140ms ease-out';
+    el.style.transform='translateY(0)'; el.style.opacity='1'; }); });
+  if(!set.sticky){ set.remain=rm?LCB_HOLD_RM:LCB_HOLD; lcbArm(set); }
+  return set; }
+
+function lcbArm(set){ if(!set||set.sticky||set.hover||set.dead||set.timer) return;
+  if(set.remain<=0) set.remain=lcbReduced()?LCB_HOLD_RM:LCB_HOLD;
+  set.t0=Date.now(); set.timer=setTimeout(()=>{ set.timer=null; lcbFade(set); },set.remain); }
+function lcbDisarm(set){ if(set&&set.timer){ clearTimeout(set.timer); set.timer=null;
+  set.remain=Math.max(300,set.remain-(Date.now()-set.t0)); } }
+function lcbFade(set){ if(!set||set.dead) return; set.dead=true;
+  if(lcbReduced()){ lcbRemove(set); return; }
+  set.els.forEach(el=>{ el.style.transition='opacity '+LCB_FADE+'ms ease-in'; el.style.opacity='0'; });
+  setTimeout(()=>lcbRemove(set),LCB_FADE); }
+function lcbRemove(set){ if(!set) return; if(set.timer){ clearTimeout(set.timer); set.timer=null; } set.dead=true;
+  set.els.forEach(el=>{ if(el.parentNode) el.parentNode.removeChild(el); });
+  lcbSets=lcbSets.filter(s=>s!==set);
+  if(!lcbSets.length) lcbBadgeHide(); }
+function lcbClear(){ lcbSets.slice().forEach(lcbRemove); lcbSets=[]; lcbBadgeHide(); }
+function lcbFreeze(){ lcbSets.forEach(lcbDisarm); }
+function lcbThaw(){ lcbSets.forEach(lcbArm); }
+function lcbSticky(){ return lcbSets.some(s=>s.sticky); }
+
+/* the overflow badge: everything above the 3-set cap collapses into one count in
+   the map's top-right, tinted --tfd so it reads as "there is a table for this" */
+function lcbBadgeHide(){ if(lcbBadge) lcbBadge.style.display='none'; }
+function lcbBadgeShow(nMore){
+  if(nMore<=0){ lcbBadgeHide(); return; }
+  const host=lcbHost(), rm=lcbReduced();
+  if(!lcbBadge){ lcbBadge=document.createElement('button'); lcbBadge.type='button'; lcbBadge.className='lcb-badge';
+    lcbBadge.title='Open Timeframe D at the newest line episodes';
+    lcbBadge.addEventListener('click',ev=>{ ev.stopPropagation();
+      if(window.PULSE_TFD && PULSE_TFD.focusNewest) PULSE_TFD.focusNewest(); });
+    host.appendChild(lcbBadge); }
+  // sit under the relocated map utility cluster when the shell has mounted one
+  const mc=document.getElementById('mapctrl'), st=stage.getBoundingClientRect();
+  if(mc) lcbBadge.style.top=Math.round(mc.getBoundingClientRect().bottom-st.top+10)+'px';
+  lcbBadge.textContent='+'+nMore+' more lines changed';
+  lcbBadge.style.display='';
+  if(rm){ lcbBadge.style.transition='none'; lcbBadge.style.opacity='1'; }
+  else { lcbBadge.style.transition='opacity 140ms ease-out'; lcbBadge.style.opacity='0';
+    requestAnimationFrame(()=>{ if(lcbBadge) lcbBadge.style.opacity='1'; }); } }
+
+/* R2 §4 trigger: state at cur is warn/crit AND differs from the state at cur-1.
+   warn→crit re-fires; recovery never fires; the boot paint never fires because
+   nothing calls this until lcbArmed is set at the end of boot. */
+function lcbFire(){
+  if(!lcbArmed) return;
+  const t=cur; if(t<=0) return;
+  const cands=[];
+  LINKS.forEach((L,i)=>{ if(!L.lineStat) return; const s=L.lineStat[t];
+    if(s!=='warn'&&s!=='crit') return; if(L.lineStat[t-1]===s) return;
+    cands.push({i,state:s,w:lcbWeight(i,t)}); });
+  if(!cands.length){ lcbBadgeHide(); return; }
+  cands.sort((x,y)=>(rank[y.state]-rank[x.state])||(y.w-x.w)||(lcbLinkId(x.i)<lcbLinkId(y.i)?-1:1));
+  const show=cands.slice(0,LCB_CAP);
+  show.forEach(c=>{ const ex=lcbSets.find(s=>s.i===c.i&&!s.sticky); if(ex) lcbRemove(ex);
+    lcbBuildSet(c.i,c.state,false); });
+  let live=lcbSets.filter(s=>!s.sticky);
+  while(live.length>LCB_CAP){ lcbRemove(live.shift()); }
+  lcbBadgeShow(cands.length-show.length); }
+
+/* re-open affordances — a line click and Timeframe D both land here */
+function openLineBalloons(i,sticky){
+  const L=LINKS[i]; if(!L) return;
+  if(sticky) lcbClear(); else lcbSets.filter(s=>!s.sticky).forEach(lcbRemove);
+  lcbBuildSet(i,lcbState(L,cur),!!sticky); }
+function focusLinkMid(i){
+  const L=LINKS[i]; if(!L) return; const a=byId(L[0]),b=byId(L[1]); if(!a||!b) return;
+  const w=stage.clientWidth-dockW(), h=stage.clientHeight;
+  view.k=Math.max(view.k,1.1);
+  view.x=w/2-((a.x+b.x)/2)*view.k; view.y=h/2-((a.y+b.y)/2)*view.k; applyView(); }
+
+/* anchors: tail tip at model (n.x, n.y−40) — 4px clear of the selection ring, box
+   growing UP, so a balloon can never cover the three node label lines. Sibling
+   nudge along the horizontal when the two panels of one set would overlap, then a
+   stage-top clamp that flips a panel below its node at (n.x, n.y+82), data-flip=1
+   (spin204.css moves the CSS tail to the top edge on that flag). The engine owns
+   left/top outright: they are written as the panel's own top-left corner. */
+function lcbPositionSoon(){ if(lcbRaf) return; lcbRaf=requestAnimationFrame(()=>{ lcbRaf=0; positionBalloons(); }); }
+function lcbBox(p){ const t=p.flip?p.ay:p.ay-p.h; return {l:p.cx-p.w/2,r:p.cx+p.w/2,t,b:t+p.h}; }
+function lcbHits(a,b){ return !(a.r<=b.l||a.l>=b.r||a.b<=b.t||a.t>=b.b); }
+/* push a panel further from its node until it clears every box in `boxes`, or
+   until it has travelled `cap` px. Motion is always AWAY from the node, so a
+   panel can only ever move into empty canvas — never back across its own labels. */
+function lcbAvoid(p,boxes,cap,revert){
+  const start=p.ay;
+  for(let guard=0;guard<10;guard++){
+    const box=lcbBox(p), hit=boxes.find(q=>lcbHits(box,q)); if(!hit) return true;
+    const shift=(p.flip?(hit.b-box.t):(box.b-hit.t))+8;
+    if(shift<=0 || Math.abs((p.ay+(p.flip?shift:-shift))-start)>cap){ if(revert)p.ay=start; return false; }
+    p.ay+=p.flip?shift:-shift; }
+  if(revert)p.ay=start; return false; }
+/* the three label lines of every node, in model units, measured once per node —
+   they never change, only the view transform does */
+function lcbLabelBoxes(){
+  const out=[];
+  NODES.forEach(n=>{ if(!n.el) return;
+    if(n._lb===undefined){ let x1=1e9,x2=-1e9,y1=1e9,y2=-1e9;
+      n.el.querySelectorAll('text').forEach(tx=>{ let b=null; try{ b=tx.getBBox(); }catch(err){ b=null; }
+        if(b&&b.width){ x1=Math.min(x1,b.x); x2=Math.max(x2,b.x+b.width); y1=Math.min(y1,b.y); y2=Math.max(y2,b.y+b.height); } });
+      n._lb=(x2>x1)?{x1,x2,y1,y2}:null; }
+    if(n._lb) out.push({l:view.x+(n.x+n._lb.x1)*view.k, r:view.x+(n.x+n._lb.x2)*view.k,
+                        t:view.y+(n.y+n._lb.y1)*view.k, b:view.y+(n.y+n._lb.y2)*view.k}); });
+  return out; }
+function positionBalloons(){
+  if(!lcbSets.length) return;
+  const sw=stage.clientWidth, sh=stage.clientHeight, placed=[], labels=lcbLabelBoxes();
+  lcbSets.forEach(set=>{
+    const pts=[];
+    set.ends.forEach(e=>{ const el=e.el,n=e.n,w=el.offsetWidth,h=el.offsetHeight;
+      const ayUp=view.y+(n.y-40)*view.k, ayDn=view.y+(n.y+82)*view.k;
+      let flip=(ayUp<150||ayUp-h<6)?1:0;
+      // flip only when below is genuinely the more visible side of a short stage
+      if(flip){ const visUp=Math.min(ayUp,sh)-Math.max(ayUp-h,0), visDn=Math.min(ayDn+h,sh)-Math.max(ayDn,0);
+        if(visDn<visUp) flip=0; }
+      pts.push({el,cx:view.x+n.x*view.k,ay:flip?ayDn:ayUp,up:ayUp,dn:ayDn,w,h,flip}); });
+    if(pts.length===2){
+      const A=pts[0],B=pts[1];
+      const at=A.flip?A.ay:A.ay-A.h, ab=at+A.h, bt=B.flip?B.ay:B.ay-B.h, bb=bt+B.h;
+      const need=(A.w+B.w)/2, d=Math.abs(A.cx-B.cx);
+      if(at<bb && bt<ab && d<need){ const push=(need-d)/2+8, dir=Math.sign(A.cx-B.cx)||-1;
+        A.cx+=push*dir; B.cx-=push*dir; } }
+    pts.forEach(p=>{
+      const half=p.w/2+6; if(sw>p.w+12) p.cx=clamp(p.cx,half,sw-half);
+      /* Panels are never clamped back across their own node — that is the whole
+         point of anchoring above it. Two passes, both moving AWAY from the node:
+         first the hard one, another live panel (three sets can share an endpoint —
+         the Aug 29 aggregator brownout puts five escalations through bhub at
+         once); then the soft one, a neighbouring node's label block, which is
+         given up as soon as it would carry the panel off the stage. */
+      const trial=f=>{ p.flip=f; p.ay=f?p.dn:p.up;
+        lcbAvoid(p,placed,1e9,false);
+        const keep=p.ay;
+        if(labels.length && lcbAvoid(p,labels,200,true)){
+          lcbAvoid(p,placed,1e9,false);
+          const bx=lcbBox(p); if(bx.t<2||bx.b>sh-2) p.ay=keep; }
+        lcbAvoid(p,placed,1e9,false);
+        const box=lcbBox(p); return {ay:p.ay,flip:f,box,vis:Math.max(0,Math.min(box.b,sh)-Math.max(box.t,0))}; };
+      let best=trial(p.flip);
+      // stacking must never bury a panel off-stage: if it did, the other side wins
+      if(best.vis<p.h*0.6){ const alt=trial(p.flip?0:1); if(alt.vis>best.vis) best=alt; }
+      p.flip=best.flip; p.ay=best.ay;
+      const box=lcbBox(p); placed.push(box);
+      p.el.style.left=Math.round(box.l)+'px'; p.el.style.top=Math.round(box.t)+'px';
+      p.el.setAttribute('data-flip',p.flip?'1':'0'); });
+    if(set.mid){ const el=set.mid.el, w=el.offsetWidth, h=el.offsetHeight;
+      // the chip cluster sits ON the segment midpoint, tail suppressed
+      const mx=view.x+((set.mid.a.x+set.mid.b.x)/2)*view.k, my=view.y+((set.mid.a.y+set.mid.b.y)/2)*view.k;
+      el.style.left=Math.round(clamp(mx-w/2,4,Math.max(4,sw-w-4)))+'px';
+      el.style.top =Math.round(clamp(my-h/2,4,Math.max(4,sh-h-4)))+'px'; } }); }
+
+/* Esc dismisses sticky balloons FIRST and stops there — registered above the
+   existing RCA-close / deselect chain, and consumed with
+   stopImmediatePropagation() so one Esc never does two things. */
+window.addEventListener('keydown',e=>{
+  if(e.key!=='Escape'||!lcbSticky()) return;
+  lcbClear(); e.preventDefault(); e.stopImmediatePropagation(); });
+/* "clicking elsewhere" means elsewhere ON THE MAP — a click that lands in the
+   dock, the RCA panel or a Timeframe D row is what OPENED a sticky set in the
+   first place, so it must never be the thing that closes it again. */
+document.addEventListener('click',e=>{
+  if(!lcbSticky()) return;
+  const t=e.target; if(!t||!t.closest) return;
+  if(!t.closest('#canvas')) return;
+  if(t.closest('[data-lk]')||t.closest('.lcballoon')) return;
+  lcbClear(); });
+
 /* legend / theme / misc */
 function buildLegend(){ const L=document.getElementById('legend'); const items=[['ok','OK'],['warn','Degraded'],['crit','Critical'],['unk','No data']];
-  let h='<div class="li" style="font-weight:650;color:var(--ink)">Status</div>'; items.forEach(([k,l])=>h+=`<div class="li"><span class="sw" style="background:${statusColor(k)}"></span>${l}</div>`);
-  h+='<div class="sep"></div><div class="li">◑ ring = per-objective</div><div class="li">— link = worst-of-path</div><div class="li">● note</div><div class="li">★ pinned</div>';
+  let h='<button class="sc-min" id="lgmin" type="button" title="Minimise to icon" aria-label="Minimise the legend">−</button>';
+  h+='<div class="li" style="font-weight:650;color:var(--ink)">Status</div>'; items.forEach(([k,l])=>h+=`<div class="li"><span class="sw" style="background:${statusColor(k)}"></span>${l}</div>`);
+  /* v2.0.4 (R2 §7): worst-of-path is gone from the model, so it goes from the
+     legend too. Two lines replace it — what a line's colour is made of, and what
+     grey means — with a dashed --unk sample so grey is learnable from the card. */
+  const unk=statusColor('unk');
+  h+='<div class="sep"></div><div class="li">◑ ring = per-objective</div>'
+    +'<div class="li">— line = correlated evidence · CONN + APP + LOG</div>'
+    +'<div class="li"><svg width="22" height="6" aria-hidden="true"><line x1="1" y1="3" x2="21" y2="3" stroke="'+unk+'" stroke-width="2" stroke-dasharray="4 5"/></svg>'
+    +'grey = not covered — nothing bound. Grey is not OK.</div>'
+    +'<div class="li">● note</div><div class="li">★ pinned</div>';
+  // R1 §4.5 — the zone key, one wrapped row in the .lgfoot idiom
+  if(ZONES.length) h+='<div class="li lgfoot">Zones ▸ Z1 Customer · Z2 Access net · Z3 API &amp; apps · '
+    +'Z4 Data &amp; core · Z5 Partner net · Z6 Billers &amp; settlement · chip = first-command owner</div>';
+  // the product's central claim, one of the three places it appears on this surface
+  h+='<div class="li lgfoot lgclaim">'+LCB_CLAIM+'</div>';
   // build + provenance remarks — moved here out of the top bar (v1.2.1 chrome pass)
-  h+='<div class="li lgfoot">v2.0.2 · Myanmar commercial-bank template · 7-day mock data</div>';
-  L.innerHTML=h; }
+  h+='<div class="li lgfoot">v2.0.4 · Myanmar commercial-bank template · 7-day mock data</div>';
+  L.innerHTML=h;
+  const lm=document.getElementById('lgmin'); if(lm)lm.onclick=()=>lgSetMin(true); }
+/* v2.0.4: the legend minimises to #lgchip exactly like the scenario card —
+   and STARTS minimised (ToR 2026-08-30): the key is reference material, the
+   map is the point. el.hidden survives buildLegend's innerHTML rebuilds. */
+function lgSetMin(v){ const L=document.getElementById('legend'),c=document.getElementById('lgchip');
+  if(!L||!c)return; L.hidden=v; c.hidden=!v; c.setAttribute('aria-expanded',v?'false':'true'); scheduleScFit(); }
+(function(){ const c=document.getElementById('lgchip'); if(c)c.onclick=()=>lgSetMin(false); })();
 document.getElementById('theme').onclick=()=>{ const c=document.documentElement.getAttribute('data-theme'),nx=c==='dark'?'light':'dark'; document.documentElement.setAttribute('data-theme',nx);
   document.getElementById('themeicon').innerHTML=nx==='dark'?'<path d="M21 12.8A9 9 0 1111.2 3 7 7 0 0021 12.8z"/>':'<circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M4 12H2M22 12h-2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/>';
   buildLegend(); drawBands(); paint(); };
@@ -709,10 +1207,13 @@ document.getElementById('closeall').onclick=()=>{ [...openPanes].forEach(closePa
 window.addEventListener('keydown',e=>{ if(e.code==='Space'&&e.target.tagName!=='TEXTAREA'&&e.target.tagName!=='INPUT'){ e.preventDefault(); playing?stop():play(); }
   if(e.key==='Escape'){ if(rcaOpen){ closeRCA(); return; } sel=null; markSelection(); } });
 function resetAll(){ stop();
+  // v2.0.4: balloons belong to a moment and the zone highlight to a hover — both
+  // go. The zone filter on #cNode is cleared by the C_DEFAULT_NODE line below.
+  lcbClear(); znHover(null);
   // Reset restores the seeded "About" text as well as clearing notes (F2c)
   NODES.forEach((n,i)=>{ n.x=ORIG[i].x; n.y=ORIG[i].y; n.note=''; n.pinned=false; n.about=aboutDefault(n.id); if(n.el)n.el.setAttribute('transform',`translate(${n.x},${n.y})`); });
   openPanes=[]; sel=null; dock.classList.remove('open'); closeRCA(); renderDock(); markSelection();
-  document.documentElement.style.setProperty('--dockW','390px'); document.documentElement.style.setProperty('--bh','252px');
+  document.documentElement.style.setProperty('--dockW','390px'); document.documentElement.style.setProperty('--bh','340px');
   document.getElementById('aWin').value=A_DEFAULT_WIN; document.getElementById('aRank').value='sev'; document.getElementById('bWinSel').value='5m'; document.getElementById('cWin').value=C_DEFAULT_WIN; document.getElementById('cSev').value='all'; document.getElementById('cNode').value=C_DEFAULT_NODE;
   cShow={obj:1,ind:1,sev:1,val:1,thr:1,events:0,down:1,last:1,since:0}; cSort={key:'sev',dir:-1};
   document.getElementById('tblA').style.width='34%'; document.getElementById('tblA').style.flex=''; document.getElementById('tblB').style.width='34%'; document.getElementById('tblB').style.flex='';
@@ -725,8 +1226,38 @@ function resetAll(){ stop();
 document.getElementById('resetbtn').onclick=resetAll;
 
 /* boot */
-(function(){ const cn=document.getElementById('cNode'); cn.innerHTML='<option value="all">All nodes</option>'+NODES.map(n=>`<option value="${n.id}">${n.name}</option>`).join(''); cn.value=C_DEFAULT_NODE; })();
-buildLinks(); buildNodes(); buildLegend(); drawBands(); paint(); fit();
+(function(){ const cn=document.getElementById('cNode');
+  /* v2.0.4: the six zone:Zn options go on the end of the object list — clicking a
+     zone label on the map selects one, and Reset puts it back to C_DEFAULT_NODE */
+  let h='<option value="all">All nodes</option>'+NODES.map(n=>`<option value="${n.id}">${n.name}</option>`).join('');
+  h+=ZONES.map(z=>`<option value="zone:${esc(z.id)}">Zone ${esc(z.id)} — ${esc(z.name)}</option>`).join('');
+  cn.innerHTML=h; cn.value=C_DEFAULT_NODE; })();
+buildZones(); buildLinks(); buildNodes(); buildLegend(); lgSetMin(true); drawBands(); paint(); fit();
+
+/* ---------- v2.0.4 · ENGINE API ---------------------------------------------
+ * The contract assets/tframes.js codes against (SPEC shared registry). Read-only
+ * apart from seek()/openLineBalloons()/focusLinkMid()/openRCA(), which are the
+ * four things Timeframe D and the Line Conditions window need to drive the map. */
+window.PULSE_ENGINE = {
+  NODES, LINKS, N,
+  cur:()=>cur,
+  seek(step){ stop(); setCur(step); },
+  openLineBalloons, focusLinkMid, openRCA,
+  dstamp, fmtDur, fmtVal, chip, esc, statusColor, incName, worse,
+  WIN: WSTEPS
+};
+/* assets/tframes.js loads AFTER this file, so the guarded call below is normally
+   a no-op on the first pass — the deferred retries are what actually land it,
+   exactly once, whichever order the two scripts finish in. */
+let lcbTfdDone=false;
+function lcbTfdInit(){ if(lcbTfdDone) return;
+  if(!window.PULSE_TFD||typeof PULSE_TFD.init!=='function') return;
+  lcbTfdDone=true;
+  try{ PULSE_TFD.init(window.PULSE_ENGINE); }
+  catch(err){ console.warn('Pulse: Timeframe D init failed —',err&&err.message); } }
+lcbTfdInit();
+if(!lcbTfdDone){ setTimeout(lcbTfdInit,0);
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',lcbTfdInit); }
 
 /* deep link — index.html#t=<step> lands the timeline on one moment, paused.
    Used by the fault-fingerprint matrix on flow-instrumentation.html. Also honoured
@@ -735,3 +1266,6 @@ function seekHash(){ const m=/^#t=(\d+)$/.exec(location.hash||''); if(!m)return;
   stop(); setCur(clamp(parseInt(m[1],10),0,N-1)); }
 window.addEventListener('hashchange',seekHash);
 seekHash();
+/* v2.0.4: balloons arm only once boot is complete, so neither the first paint nor
+   a #t= deep link on load pops a set — a later #t= (hashchange) is a seek and does. */
+lcbArmed=true;
