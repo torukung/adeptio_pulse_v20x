@@ -404,3 +404,25 @@ measurement of any real bank. `{BANK}` is a placeholder, every person named is f
 tagged `(mock)`, and every threshold is illustrative. Treat cadences and thresholds as
 calibration seeds for a real engagement, not as recommendations. The footer of every page
 says so, in those words.
+
+---
+
+## v2.0.4 — Spin: team zones + line-condition engine (front page)
+
+Base: v2.0.2 (all other pages byte-identical; seeded week unchanged).
+
+* **Six session zones** on the map — Z1 CUSTOMER FRONT-END · Z2 ACCESS NETWORK · Z3 API & APP SERVICES ·
+  Z4 DATA & CORE BACK-END · Z5 PARTNER DELIVERY NET · Z6 BILLERS & SETTLEMENT — each banded with an
+  owner chip (DEV TEAM / NETWORK TEAM / DEV + DBA / PARTNER). The chip routes the first collection
+  command; hover a zone label to highlight members, click to filter Timeframe C. Registers in
+  `docs/dev/R1_ZONES.md`.
+* **Line-condition engine** replaces worst-of-path: each line's colour comes from evidence bound to that
+  adjacency (CONN / APP / LOG classes, rules LC-01…LC-10, first match wins; grey = not covered — see
+  `assets/linelogic.js`, bindings in `data/manifest.js` LINE_BIND, model in `docs/dev/R2_LINES.md`).
+  One deliberately grey line: core — recon.
+* **Balloons**: when a line changes into warn/crit at the cursor, evidence balloons pop at both endpoints
+  with the fired rule chip; fade after 6 s; click a line for a sticky set; capped at 3 sets + "+N more".
+* **Line Conditions window** (collapsible reference) and **full-width Timeframe D** (line episodes,
+  newest first: o—o glyph → related errors by node → log detail → case) sit under Timeframe A/B/C.
+* New files: `assets/linelogic.js`, `assets/tframes.js`, `assets/spin204.css`. Contract:
+  `docs/SPEC-Spin-2.0.4.md`.

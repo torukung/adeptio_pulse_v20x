@@ -20,6 +20,13 @@
      the mount call it styles — that build ships alone, with no shell to
      mount, and keeps its own standalone .topbar exactly as v1.2.1 shipped. -->
 <!--SF-STRIP-START--><link rel="stylesheet" href="assets/shell.css"/><!--SF-STRIP-END-->
+<!-- v2.0.4: ADDITIVE stylesheet, linked AFTER assets/styles.css (which stays
+     byte-identical) and after shell.css, so the new surface always wins on
+     equal specificity. Carries only Spin-2.0.4 material: the six zone bands on
+     the map, the line-condition balloons, the Line Conditions reference window
+     and Timeframe D. Every selector in it is scoped to a 2.0.4 id/class, so
+     Timeframe A/B/C and the rest of the v2.0.2 chrome are untouched. -->
+<link rel="stylesheet" href="assets/spin204.css"/>
 <!-- v2.0.1: the Timeframe A/B/C descriptors reuse .bsub, but styles.css scopes
      the muted look to .bhead .bsub and .btbl-h is a sibling of .bhead — this
      one page-local rule extends the same muted style to the frame headers,
@@ -124,7 +131,7 @@ html[data-motion="reduce"] .frontpage.pshell-page .mapctrl{transition:none}
   <div class="stage" id="stage">
     <div class="grid-bg"></div>
     <svg class="canvas" id="canvas"><g id="viewport"><g id="links"></g><g id="nodes"></g></g></svg>
-    <div class="hint" id="hint"><span class="x" id="hintx">✕</span><b>v2.0.2:</b> nodes snap to grid · drag canvas to pan · scroll to zoom · hover for status · click to open a pane · resize the right dock &amp; the bottom tables · ▶ replays a full week.</div>
+    <div class="hint" id="hint"><span class="x" id="hintx">✕</span><b>v2.0.4:</b> nodes snap to grid · drag canvas to pan · scroll to zoom · hover for status · click to open a pane · resize the right dock &amp; the bottom tables · ▶ replays a full week · zones group nodes by owning team · line colour = correlated evidence.</div>
     <div class="hovercard" id="hovercard"></div>
     <!-- BOTTOM-LEFT STACK — the scenario card sits directly on top of the status
          legend (legend keeps its anchor; the card grows upward from it). The whole
@@ -146,6 +153,14 @@ html[data-motion="reduce"] .frontpage.pshell-page .mapctrl{transition:none}
         <span class="sc-rzc" id="scrzc" title="Drag to resize width &amp; height"></span>
       </div>
       <div class="legend" id="legend"></div>
+      <!-- v2.0.4: minimised form of the legend — same chip grammar as #scchip.
+           The legend starts minimised; the − inside the card returns it here. -->
+      <button class="scchip" id="lgchip" type="button" aria-expanded="false" hidden>
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="5" cy="6" r="1.6"/><path d="M10 6h9"/><circle cx="5" cy="12" r="1.6"/><path d="M10 12h9"/><circle cx="5" cy="18" r="1.6"/><path d="M10 18h9"/>
+        </svg>
+        <span>Legend</span>
+      </button>
     </div>
     <!-- F3 · incident / RCA panel — left slide-in, mirrors the right dock.
          Opened by clicking a row in the bottom tables; ✕ or Esc closes it. -->
@@ -205,6 +220,44 @@ html[data-motion="reduce"] .frontpage.pshell-page .mapctrl{transition:none}
         <div class="colmenu" id="colmenu"></div>
       </section>
     </div>
+
+    <!-- ============ v2.0.4 · LINE CONDITIONS (reference window, R2 §5) ======
+         Sits below the Timeframe A/B/C row and above Timeframe D, full width.
+         Documentation, not live data: it never re-renders on cursor moves.
+         Collapsed by default; assets/tframes.js fills #lcBody once at load and
+         owns the caret, so the reference content is present even if the engine
+         never boots. Reuses .btbl + .btbl-h + .tblwrap + table.dt, so it
+         inherits the sticky header, zebra rows and type scale for free. -->
+    <section class="btbl lcwin" id="lcConditions">
+      <div class="btbl-h">
+        <span class="tt">Line Conditions <span class="bsub">how a line gets its colour</span> <span class="tag">REFERENCE</span></span>
+        <div class="ctrls">
+          <button class="rtoggle lcw-toggle" id="lcToggle" type="button" aria-expanded="false" aria-controls="lcBody"><span class="car">&#9654;</span>Rules</button>
+        </div>
+        <span class="bsub lcw-claim">Lines are monitored relationships &mdash; Pulse correlates evidence at each end. It does not trace transactions.</span>
+      </div>
+      <div class="lcw-body" id="lcBody"></div>
+    </section>
+
+    <!-- ============ v2.0.4 · TIMEFRAME D — line episodes (R2 §6) ===========
+         Full width, below the Line Conditions window. Same visual grammar as
+         A/B/C (section.btbl, .btbl-h, .tblwrap, table.dt, .mini selects,
+         .sevchip), differentiated only by the --tfd accent. Rows are rendered
+         by assets/tframes.js from the per-link episode model; #dWin defaults to
+         1 hour, matching Timeframe C. -->
+    <div class="btables btables-d">
+      <section class="btbl tfd" id="tblD">
+        <div class="btbl-h">
+          <span class="tt">Timeframe D <span class="bsub">line episodes · newest first</span> <span class="tag tfd-tag" id="dTag">1 hour</span></span>
+          <div class="ctrls">
+            <select class="mini" id="dWin" title="Time frame"><option value="5m">5 min</option><option value="15m">15 min</option><option value="1h" selected>1 hour</option><option value="3h">3 hours</option><option value="6h">6 hours</option><option value="12h">12 hours</option><option value="24h">24 hours</option><option value="2d">2 days</option><option value="7d">7 days</option></select>
+            <select class="mini" id="dSev" title="Severity"><option value="all">All sev</option><option value="crit">Critical</option><option value="warn">Warn+</option></select>
+            <select class="mini" id="dNode" title="Object"><option value="all">All objects</option></select>
+          </div>
+        </div>
+        <div class="tblwrap" id="dWrap"></div>
+      </section>
+    </div>
   </div>
 
   <!-- TIMELINE -->
@@ -220,6 +273,13 @@ html[data-motion="reduce"] .frontpage.pshell-page .mapctrl{transition:none}
 
 <!-- 1 · topology + objective definitions (no series) -->
 <script src="data/manifest.js"></script>
+<!-- 1a · v2.0.4 line-condition ruleset (LC-01…LC-10) + the per-link episode
+     precompute. Pure JS, no DOM and no engine globals: it publishes
+     window.PULSE_LINELOGIC and is called by engine.js at boot. Loaded
+     IMMEDIATELY AFTER data/manifest.js because it reads the LINE_BIND table
+     that file publishes; every caller is guarded, so a missing or throwing
+     linelogic still boots the page (lines simply fall back to grey). -->
+<script src="assets/linelogic.js"></script>
 <!-- 1b · RCA metadata: per-object description / page / systems / owner, and the
      first-checks + questions behind every "<nodeId>.<objective label>" key. -->
 <script src="data/rcameta.js"></script>
@@ -250,6 +310,14 @@ html[data-motion="reduce"] .frontpage.pshell-page .mapctrl{transition:none}
 ADEPTIO-LOGS-END-->
 <!-- 3 · engine: hydrate → render → interact -->
 <script src="assets/engine.js"></script>
+<!-- 3b · v2.0.4 dock layer: the Line Conditions reference window and Timeframe
+     D. Loaded IMMEDIATELY AFTER assets/engine.js — it publishes
+     window.PULSE_TFD, which the engine calls once after its boot precompute
+     (PULSE_TFD.init) and again from renderTables() (PULSE_TFD.refresh). Every
+     call in both directions is guarded: if the engine never calls init, this
+     file still renders the static Line Conditions reference on
+     DOMContentLoaded. -->
+<script src="assets/tframes.js"></script>
 <!-- v2.0.2: mount the platform shell. Runs LAST, after engine.js has already
      built the map and called its own first fit() — that first fit() used
      .app's pre-mount, full-viewport size, so this block asks the engine to
